@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.3">
+  <link rel="stylesheet" href="/static/style.css?v=2.4">
 </head>
 <body class="dark-theme">
 
@@ -99,7 +99,7 @@
             <div class="section-header-title">Today's Market Intelligence</div>
             <div class="metrics-kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
               
-              <div class="kpi-card">
+              <div class="kpi-card" id="kpi-card-stories" data-kpi="stories" title="Click to view all curated stories today">
                 <div class="kpi-top">
                   <span class="kpi-label">Stories Curated</span>
                   <span class="kpi-icon-badge">📰</span>
@@ -107,11 +107,11 @@
                 <div class="kpi-value" id="stat-stories">0 Stories</div>
                 <div class="kpi-footer">
                   <span class="kpi-pill kpi-pill-green">● Live Ingestion</span>
-                  <span class="kpi-sub">Curated today</span>
+                  <span class="kpi-sub">Click to inspect ↗</span>
                 </div>
               </div>
 
-              <div class="kpi-card">
+              <div class="kpi-card" id="kpi-card-filings" data-kpi="filings" title="Click to view all exchange filings today">
                 <div class="kpi-top">
                   <span class="kpi-label">Exchange Filings</span>
                   <span class="kpi-icon-badge">🏛️</span>
@@ -119,11 +119,11 @@
                 <div class="kpi-value" id="stat-filings">0 Filings</div>
                 <div class="kpi-footer">
                   <span class="kpi-pill kpi-pill-blue">● BSE &amp; NSE</span>
-                  <span class="kpi-sub">Disclosures</span>
+                  <span class="kpi-sub">Click to inspect ↗</span>
                 </div>
               </div>
 
-              <div class="kpi-card">
+              <div class="kpi-card" id="kpi-card-clients" data-kpi="clients" title="Click to view registered clients & subscribers">
                 <div class="kpi-top">
                   <span class="kpi-label">Active Clients</span>
                   <span class="kpi-icon-badge">👥</span>
@@ -131,11 +131,11 @@
                 <div class="kpi-value" id="stat-analysts">0 Clients</div>
                 <div class="kpi-footer">
                   <span class="kpi-pill kpi-pill-purple">● Morning Briefs</span>
-                  <span class="kpi-sub">Subscribers</span>
+                  <span class="kpi-sub">Click to inspect ↗</span>
                 </div>
               </div>
 
-              <div class="kpi-card">
+              <div class="kpi-card" id="kpi-card-companies" data-kpi="companies" title="Click to view monitored watchlist stocks">
                 <div class="kpi-top">
                   <span class="kpi-label">Active Companies</span>
                   <span class="kpi-icon-badge">🏢</span>
@@ -143,11 +143,11 @@
                 <div class="kpi-value" id="stat-companies">0 Stocks</div>
                 <div class="kpi-footer">
                   <span class="kpi-pill kpi-pill-blue">● Watchlist</span>
-                  <span class="kpi-sub">Monitored</span>
+                  <span class="kpi-sub">Click to inspect ↗</span>
                 </div>
               </div>
 
-              <div class="kpi-card">
+              <div class="kpi-card" id="kpi-card-health" data-kpi="health" title="Click to inspect live feed health status">
                 <div class="kpi-top">
                   <span class="kpi-label">Stream Health</span>
                   <span class="kpi-icon-badge">⚡</span>
@@ -155,7 +155,7 @@
                 <div class="kpi-value" id="stat-health">100% Health</div>
                 <div class="kpi-footer">
                   <span class="kpi-pill kpi-pill-green">● 11 Feeds OK</span>
-                  <span class="kpi-sub">Live</span>
+                  <span class="kpi-sub">Click to inspect ↗</span>
                 </div>
               </div>
 
@@ -546,11 +546,37 @@
       </div>
     </div>
 
+    <!-- KPI Drilldown Quick-View Modal -->
+    <div id="modal-kpi-drilldown" class="terminal-modal">
+      <div class="modal-content" style="max-width: 820px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-top">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="drilldown-modal-icon" style="font-size: 1.4rem;">📊</span>
+            <div>
+              <h3 id="drilldown-modal-title" style="font-size: 1.1rem; color: #fff;">Drilldown Details</h3>
+              <span id="drilldown-modal-subtitle" style="font-size: 0.76rem; color: var(--text-muted);">Real-time inspection</span>
+            </div>
+          </div>
+          <button id="btn-close-drilldown-modal" class="modal-x">&times;</button>
+        </div>
+        <div style="padding: 12px 20px; border-bottom: 1px solid var(--border-subtle); background: rgba(0,0,0,0.25);">
+          <input type="text" id="drilldown-search-input" placeholder="🔍 Search in this list..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 9px 14px; color: #fff; font-size: 0.85rem; outline: none;">
+        </div>
+        <div id="drilldown-modal-body" style="padding: 18px 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px;">
+          <!-- Dynamically populated via JS -->
+        </div>
+        <div class="modal-bottom" style="padding: 12px 20px; background: rgba(16, 23, 40, 0.7); display: flex; justify-content: space-between; align-items: center;">
+          <span id="drilldown-count-badge" style="font-size: 0.78rem; color: var(--text-secondary); font-weight: 600;">0 items</span>
+          <button type="button" id="btn-dismiss-drilldown" class="btn-secondary-micro" style="padding: 6px 16px; border-radius: 6px; cursor: pointer;">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification Banner -->
     <div id="toast-banner" class="toast-banner"></div>
 
   </div>
 
-  <script src="/static/app.js?v=2.3"></script>
+  <script src="/static/app.js?v=2.4"></script>
 </body>
 </html>

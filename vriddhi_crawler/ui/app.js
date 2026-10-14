@@ -1324,6 +1324,256 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // 13. Interactive KPI Drilldown Quick-View Modal
+  function initKpiDrilldowns() {
+    const modal = document.getElementById("modal-kpi-drilldown");
+    if (!modal) return;
+
+    const btnClose = document.getElementById("btn-close-drilldown-modal");
+    const btnDismiss = document.getElementById("btn-dismiss-drilldown");
+    const modalIcon = document.getElementById("drilldown-modal-icon");
+    const modalTitle = document.getElementById("drilldown-modal-title");
+    const modalSubtitle = document.getElementById("drilldown-modal-subtitle");
+    const modalBody = document.getElementById("drilldown-modal-body");
+    const searchInput = document.getElementById("drilldown-search-input");
+    const countBadge = document.getElementById("drilldown-count-badge");
+
+    let currentItems = [];
+    let currentRenderFn = null;
+
+    function closeModal() {
+      modal.classList.remove("open");
+      if (searchInput) searchInput.value = "";
+    }
+
+    if (btnClose) btnClose.addEventListener("click", closeModal);
+    if (btnDismiss) btnDismiss.addEventListener("click", closeModal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        if (!currentRenderFn) return;
+        if (!q) {
+          currentRenderFn(currentItems);
+          return;
+        }
+        const filtered = currentItems.filter(item => {
+          const str = JSON.stringify(item).toLowerCase();
+          return str.includes(q);
+        });
+        currentRenderFn(filtered);
+      });
+    }
+
+    function openModalWithConfig(icon, title, subtitle) {
+      modalIcon.textContent = icon;
+      modalTitle.textContent = title;
+      modalSubtitle.textContent = subtitle;
+      if (searchInput) searchInput.value = "";
+      modalBody.innerHTML = `<div class="loading-line">&#9696; Loading details...</div>`;
+      modal.classList.add("open");
+    }
+
+    // 1. Stories Curated Drilldown
+    const cardStories = document.getElementById("kpi-card-stories");
+    if (cardStories) {
+      cardStories.addEventListener("click", async () => {
+        openModalWithConfig("📰", "Curated Stories Today", "All live news stories curated across tracked watchlist companies");
+        try {
+          const res = await fetch("/api/stories?limit=300");
+          const stories = await res.json();
+          currentItems = stories;
+          
+          currentRenderFn = (items) => {
+            countBadge.textContent = `${items.length} stories found`;
+            if (!items.length) {
+              modalBody.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted);">No stories matching your search.</div>`;
+              return;
+            }
+            modalBody.innerHTML = items.slice(0, 100).map(s => {
+              const isFiling = s.source_type === "filing";
+              const cname = s.company_name || s.company_id || "Company";
+              const sources = (s.sources || []).map(x => x.name).join(" • ") || s.source_name || "News";
+              return `
+                <div class="drilldown-item-card">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <span class="ticker-badge ${isFiling ? 'badge-filing' : ''}">${isFiling ? '🏛️ ' : ''}${cname.toUpperCase()}</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">${sources}</span>
+                  </div>
+                  <a href="${s.url || '#'}" target="_blank" rel="noopener" style="color: #f1f5f9; font-size: 0.88rem; font-weight: 600; text-decoration: none; line-height: 1.4;">
+                    ${s.title}
+                  </a>
+                </div>
+              `;
+            }).join("");
+          };
+
+          currentRenderFn(currentItems);
+        } catch (e) {
+          modalBody.innerHTML = `<div style="color: var(--rose);">Failed to load stories details.</div>`;
+        }
+      });
+    }
+
+    // 2. Exchange Filings Drilldown
+    const cardFilings = document.getElementById("kpi-card-filings");
+    if (cardFilings) {
+      cardFilings.addEventListener("click", async () => {
+        openModalWithConfig("🏛️", "Exchange Filings (BSE & NSE)", "Official disclosures, financial results & regulatory announcements");
+        try {
+          const res = await fetch("/api/stories?source_type=filing&limit=150");
+          const filings = await res.json();
+          currentItems = filings;
+
+          currentRenderFn = (items) => {
+            countBadge.textContent = `${items.length} filings found`;
+            if (!items.length) {
+              modalBody.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted);">No exchange filings found.</div>`;
+              return;
+            }
+            modalBody.innerHTML = items.map(f => {
+              const cname = f.company_name || f.company_id || "Disclosure";
+              return `
+                <div class="drilldown-item-card" style="border-left: 3px solid #f59e0b;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <span class="ticker-badge badge-filing">🏛️ ${cname.toUpperCase()}</span>
+                    <span style="font-size: 0.72rem; color: #fbbf24; font-family: var(--font-mono); font-weight: 600;">Official Filing</span>
+                  </div>
+                  <a href="${f.url || '#'}" target="_blank" rel="noopener" style="color: #f1f5f9; font-size: 0.88rem; font-weight: 600; text-decoration: none; line-height: 1.4;">
+                    ${f.title}
+                  </a>
+                  <div style="font-size: 0.74rem; color: var(--text-muted); display: flex; gap: 12px; margin-top: 2px;">
+                    <span>Source: ${f.source_name || 'Stock Exchange'}</span>
+                    <span>•</span>
+                    <a href="${f.url || '#'}" target="_blank" rel="noopener" style="color: var(--sky); text-decoration: underline;">View Announcement PDF ↗</a>
+                  </div>
+                </div>
+              `;
+            }).join("");
+          };
+
+          currentRenderFn(currentItems);
+        } catch (e) {
+          modalBody.innerHTML = `<div style="color: var(--rose);">Failed to load filings details.</div>`;
+        }
+      });
+    }
+
+    // 3. Active Clients Drilldown
+    const cardClients = document.getElementById("kpi-card-clients");
+    if (cardClients) {
+      cardClients.addEventListener("click", () => {
+        openModalWithConfig("👥", "Active Clients & Subscribers", "Investors receiving customized morning market intelligence briefings");
+        currentItems = analystsList;
+
+        currentRenderFn = (items) => {
+          countBadge.textContent = `${items.length} clients registered`;
+          if (!items.length) {
+            modalBody.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted);">No clients registered.</div>`;
+            return;
+          }
+          modalBody.innerHTML = items.map(a => {
+            const stockCount = getAnalystCoveredStockCount(a);
+            const folders = (a.assigned_folders || []).map(f => `<span class="folder-tag folder-tag-custom" style="font-size: 0.7rem;">${f}</span>`).join(" ");
+            return `
+              <div class="drilldown-item-card" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div class="analyst-avatar-badge" style="background: linear-gradient(135deg, #6366f1, #4338ca);">${a.name.slice(0, 2).toUpperCase()}</div>
+                  <div>
+                    <div style="font-size: 0.92rem; font-weight: 700; color: #fff;">${a.name}</div>
+                    <div style="font-size: 0.76rem; color: var(--text-secondary); font-family: var(--font-mono);">📱 +91 ${a.phone} ${a.email ? '&bull; ' + a.email : ''}</div>
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="display: flex; gap: 4px; justify-content: flex-end; margin-bottom: 4px;">${folders || '<span style="font-size: 0.72rem; color: var(--text-muted);">All Baskets</span>'}</div>
+                  <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 600;">${stockCount} Covered Stocks</span>
+                </div>
+              </div>
+            `;
+          }).join("");
+        };
+
+        currentRenderFn(currentItems);
+      });
+    }
+
+    // 4. Active Companies Drilldown
+    const cardCompanies = document.getElementById("kpi-card-companies");
+    if (cardCompanies) {
+      cardCompanies.addEventListener("click", () => {
+        openModalWithConfig("🏢", "Monitored Watchlist Stocks", "All company tickers tracked in your database across BSE & NSE");
+        currentItems = companiesList;
+
+        currentRenderFn = (items) => {
+          countBadge.textContent = `${items.length} stocks tracked`;
+          if (!items.length) {
+            modalBody.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted);">No stocks currently in watchlist.</div>`;
+            return;
+          }
+          modalBody.innerHTML = items.map(c => {
+            const flds = getCompanyFolders(c).map(f => `<span class="folder-tag folder-tag-custom" style="font-size: 0.68rem;">${f}</span>`).join(" ");
+            return `
+              <div class="drilldown-item-card" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span class="ticker-badge" style="font-size: 0.78rem;">${(c.nse_symbol || c.id).toUpperCase()}</span>
+                  <div>
+                    <div style="font-size: 0.9rem; font-weight: 600; color: #fff;">${c.name}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">BSE: ${c.bse_code || '—'}</div>
+                  </div>
+                </div>
+                <div>${flds || '<span style="font-size: 0.7rem; color: var(--text-muted);">General</span>'}</div>
+              </div>
+            `;
+          }).join("");
+        };
+
+        currentRenderFn(currentItems);
+      });
+    }
+
+    // 5. Stream Health Drilldown
+    const cardHealth = document.getElementById("kpi-card-health");
+    if (cardHealth) {
+      cardHealth.addEventListener("click", async () => {
+        openModalWithConfig("⚡", "Ingestion Stream Feeds", "Live status of all news sources, stock exchanges, and crawlers");
+        try {
+          const res = await fetch("/api/sources");
+          const sources = await res.json();
+          currentItems = sources;
+
+          currentRenderFn = (items) => {
+            countBadge.textContent = `${items.length} active feeds`;
+            if (!items.length) {
+              modalBody.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted);">No feeds found.</div>`;
+              return;
+            }
+            modalBody.innerHTML = items.map(s => {
+              return `
+                <div class="drilldown-item-card" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div style="font-size: 0.9rem; font-weight: 700; color: #fff;">${s.name}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono); max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${s.url}</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <span class="status-badge-ok" style="font-size: 0.72rem;">● ${s.status || 'ACTIVE'}</span>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">${s.items_count || 0} items ingested</div>
+                  </div>
+                </div>
+              `;
+            }).join("");
+          };
+
+          currentRenderFn(currentItems);
+        } catch (e) {
+          modalBody.innerHTML = `<div style="color: var(--rose);">Failed to load stream feeds status.</div>`;
+        }
+      });
+    }
+  }
+
   // Initial Load
   async function initDashboard() {
     loadStats();
@@ -1333,6 +1583,7 @@ document.addEventListener("DOMContentLoaded", () => {
     await loadAnalysts();
     loadSources();
     loadLogs();
+    initKpiDrilldowns();
   }
   initDashboard();
 });

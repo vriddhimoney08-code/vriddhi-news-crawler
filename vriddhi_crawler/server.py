@@ -37,7 +37,7 @@ from .db import (
     toggle_source_status,
 )
 from .http import Fetcher
-from .pdf import generate_analyst_digest, render_digest_html
+from .pdf import generate_analyst_digest, get_clean_digest_filename, render_digest_html
 from .pipeline import Pipeline
 from .whatsapp import send_whatsapp_digest
 
@@ -369,7 +369,13 @@ def preview_digest(analyst_id: str):
         raise HTTPException(status_code=404, detail="Analyst not found")
 
     stories = get_unsent_stories_for_analyst(analyst_id)
-    html_output = render_digest_html(analyst.name, stories)
+    html_output = render_digest_html(
+        analyst.name,
+        stories,
+        analyst_id=analyst.id,
+        assigned_folders=getattr(analyst, "assigned_folders", []),
+        assigned_companies=getattr(analyst, "assigned_companies", []),
+    )
     return HTMLResponse(
         content=html_output,
         status_code=200,
@@ -416,7 +422,7 @@ def serve_digest_file(filename: str):
 
 @app.get("/api/digest/download/{analyst_id}")
 def download_digest_pdf(analyst_id: str):
-    """Generate on demand and return high-definition PDF download for requested analyst."""
+    """Generate on demand and return high-definition PDF download for requested analyst named [Client_Name]_[Date].pdf."""
     analysts = {a.id: a for a in get_analysts()}
     analyst = analysts.get(analyst_id)
     if not analyst:
@@ -426,9 +432,7 @@ def download_digest_pdf(analyst_id: str):
     file_path, _ = generate_analyst_digest(analyst.id, analyst.name, stories)
 
     media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "text/html"
-    today_str = datetime.now().strftime("%Y%m%d")
-    clean_name = "".join(c for c in analyst.name if c.isalnum() or c in (" ", "_")).replace(" ", "_")
-    download_filename = f"Vriddhi_Market_Digest_{clean_name}_{today_str}{file_path.suffix}"
+    download_filename = file_path.name
 
     return FileResponse(
         path=str(file_path),
@@ -452,6 +456,7 @@ def get_digest_meta(analyst_id: str):
     stories = get_unsent_stories_for_analyst(analyst_id)
     filings = sum(1 for s in stories if s.get("filing_id") or (s.get("source_type") or "").lower() == "filing")
     grade_a = sum(1 for s in stories if (s.get("grade") or "").upper().startswith("GRADE A"))
+    pdf_filename = get_clean_digest_filename(analyst.name, ext=".pdf")
 
     return {
         "analyst_id": analyst.id,
@@ -463,6 +468,7 @@ def get_digest_meta(analyst_id: str):
         "total_stories": len(stories),
         "total_filings": filings,
         "grade_a_count": grade_a,
+        "pdf_name": pdf_filename,
     }
 
 

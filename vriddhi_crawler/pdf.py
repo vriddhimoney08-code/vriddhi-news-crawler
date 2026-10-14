@@ -1,11 +1,13 @@
 """Executive PDF and HTML Digest Generator for Vriddhi Research Desk."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
 
 from .config import DIGESTS_DIR, IST
+from .db import get_analysts, get_companies
 
 log = logging.getLogger(__name__)
 
@@ -14,11 +16,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
   @page {
     size: A4;
-    margin: 14mm 14mm 14mm 14mm;
+    margin: 12mm 12mm 12mm 12mm;
     @bottom-right {
       content: "Page " counter(page) " of " counter(pages);
       font-size: 8pt;
@@ -102,10 +104,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .meta-pills {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 20px;
     font-size: 8pt;
     color: #cbd5e1;
@@ -113,42 +116,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   .meta-pills strong { color: #ffffff; }
 
-  /* 2. Executive Highlights Box */
-  .highlights-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #10b981;
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 18px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-  }
-
-  .highlights-title {
-    font-size: 9.5pt;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: #0f172a;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-
-  .highlights-list {
-    margin: 0;
-    padding-left: 18px;
-    font-size: 8.8pt;
-    color: #334155;
-    line-height: 1.55;
-  }
-
-  .highlights-list li {
-    margin-bottom: 4px;
-  }
-
-  /* 3. Section Titles */
+  /* 2. Section Titles */
   .section-heading {
     font-size: 10.5pt;
     font-weight: 800;
@@ -169,7 +137,177 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     margin-left: 8px;
   }
 
-  /* 4. Company & Story Cards */
+  /* 3. Basket Pill Badges in Matrix Scorecard */
+  .basket-pill-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    display: inline-block;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+
+  .basket-pill-game {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+  }
+
+  .basket-pill-set {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  .basket-pill-match {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1px solid #e9d5ff;
+  }
+
+  .basket-pill-custom {
+    background: #f0fdf4;
+    color: #065f46;
+    border: 1px solid #bbf7d0;
+  }
+
+  .basket-pill-watchlist {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+  }
+
+  /* 4. Portfolio Basket Wrappers */
+  .portfolio-basket-wrapper {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 22px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    page-break-inside: avoid;
+  }
+
+  .portfolio-banner {
+    padding: 12px 18px;
+    color: #ffffff;
+  }
+
+  .portfolio-banner-game {
+    background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%);
+  }
+
+  .portfolio-banner-set {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+  }
+
+  .portfolio-banner-match {
+    background: linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7c3aed 100%);
+  }
+
+  .portfolio-banner-custom {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+  }
+
+  .portfolio-banner-watchlist {
+    background: linear-gradient(135deg, #18181b 0%, #27272a 50%, #3f3f46 100%);
+  }
+
+  .portfolio-banner-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .portfolio-banner-title {
+    font-size: 11pt;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+  }
+
+  .portfolio-icon {
+    font-size: 13pt;
+  }
+
+  .portfolio-banner-count {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .portfolio-companies-bar {
+    background: rgba(0, 0, 0, 0.18);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin: 10px -18px -12px -18px;
+    padding: 8px 18px;
+    font-size: 8pt;
+    color: #f1f5f9;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .portfolio-bar-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 7.5pt;
+    letter-spacing: 0.4px;
+    color: #e2e8f0;
+  }
+
+  .comp-pill {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+  }
+
+  .basket-body {
+    padding: 16px 18px;
+  }
+
+  .basket-subheading {
+    font-size: 8.8pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #334155;
+    margin: 10px 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .basket-empty {
+    text-align: center;
+    color: #64748b;
+    font-size: 8.5pt;
+    font-style: italic;
+    padding: 16px 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px dashed #cbd5e1;
+  }
+
+  /* 5. Company & Story Cards */
   .company-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -198,6 +336,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     gap: 8px;
   }
 
+  .basket-mini-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+  }
+
+  .basket-mini-game { background: #d1fae5; color: #065f46; }
+  .basket-mini-set { background: #dbeafe; color: #1e40af; }
+  .basket-mini-match { background: #ede9fe; color: #6b21a8; }
+  .basket-mini-custom { background: #e0f2fe; color: #0369a1; }
+  .basket-mini-watchlist { background: #f1f5f9; color: #475569; }
+
   .ticker-pill {
     font-family: 'JetBrains Mono', monospace;
     font-size: 7.5pt;
@@ -209,7 +362,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     letter-spacing: 0.2px;
   }
 
-  /* 5. Modern Story Items */
+  /* 6. Story Items */
   .story-item {
     padding: 8px 0;
     border-bottom: 1px dashed #f1f5f9;
@@ -238,7 +391,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .story-headline a {
     color: #0f172a;
     text-decoration: none;
-    transition: color 0.15s;
   }
 
   .story-headline a:hover {
@@ -246,7 +398,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     text-decoration: underline;
   }
 
-  /* Materiality & Filing Badges */
   .badge {
     font-family: 'JetBrains Mono', monospace;
     display: inline-block;
@@ -315,7 +466,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     text-decoration: underline;
   }
 
-  /* 6. Footer */
+  /* 7. Footer */
   .doc-footer {
     margin-top: 24px;
     border-top: 1px solid #e2e8f0;
@@ -340,7 +491,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
     <div class="meta-pills">
-      <span><strong>Analyst:</strong> {{ analyst_name }}</span>
+      <span><strong>Client:</strong> {{ analyst_name }}</span>
+      <span>&bull;</span>
+      <span><strong>Portfolios:</strong> {{ assigned_folders_str }}</span>
       <span>&bull;</span>
       <span>{{ date_str }}</span>
       <span>&bull;</span>
@@ -356,29 +509,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt;">
     <thead>
       <tr style="background: #0f172a; color: #f8fafc; text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.5px;">
-        <th style="padding: 10px 14px; width: 22%;">Company</th>
-        <th style="padding: 10px 14px; width: 45%;">Key Catalyst / Corporate Event</th>
-        <th style="padding: 10px 14px; width: 18%;">Materiality</th>
-        <th style="padding: 10px 14px; width: 15%; text-align: right;">Action</th>
+        <th style="padding: 10px 12px; width: 22%;">Company</th>
+        <th style="padding: 10px 10px; width: 14%;">Portfolio</th>
+        <th style="padding: 10px 12px; width: 38%;">Key Catalyst / Corporate Event</th>
+        <th style="padding: 10px 10px; width: 16%;">Materiality</th>
+        <th style="padding: 10px 12px; width: 10%; text-align: right;">Action</th>
       </tr>
     </thead>
     <tbody>
       {% for row in scorecard %}
       <tr style="border-bottom: 1px solid #f1f5f9; background: {{ '#ffffff' if loop.index % 2 == 1 else '#f8fafc' }};">
-        <td style="padding: 10px 14px; font-weight: 800; color: #0f172a;">
+        <td style="padding: 10px 12px; font-weight: 800; color: #0f172a;">
           {{ row.company }}
         </td>
-        <td style="padding: 10px 14px; color: #334155; line-height: 1.4;">
+        <td style="padding: 10px 10px;">
+          <span class="basket-pill-badge basket-pill-{{ row.theme }}">{{ row.portfolio }}</span>
+        </td>
+        <td style="padding: 10px 12px; color: #334155; line-height: 1.4;">
           <a href="{{ row.url }}" target="_blank" style="color: #0f172a; text-decoration: none; font-weight: 600;">{{ row.catalyst }}</a>
         </td>
-        <td style="padding: 10px 14px;">
+        <td style="padding: 10px 10px;">
           {% if row.grade == 'Grade A' %}
           <span class="badge badge-grade-a">&#128293; Grade A &bull; Material</span>
           {% else %}
           <span class="badge badge-grade-b">Grade B &bull; Research</span>
           {% endif %}
         </td>
-        <td style="padding: 10px 14px; text-align: right;">
+        <td style="padding: 10px 12px; text-align: right;">
           <a class="source-link-action" href="{{ row.url }}" target="_blank">Track &rarr;</a>
         </td>
       </tr>
@@ -388,84 +545,121 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 {% endif %}
 
-<!-- 2. Official Exchange Filings -->
-{% if filings %}
-<div class="section-heading">&#127963; Exchange Filings & Regulatory Disclosures</div>
-<div class="company-card" style="border-left: 3px solid #7c3aed;">
-  {% for item in filings %}
-  <div class="story-item">
-    <div class="story-top-row">
-      <span class="badge badge-filing">&#127963; SEBI / Exchange Filing</span>
-      <div class="story-headline">
-        <strong>{{ item.company_name }}</strong>: 
-        <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
-      </div>
-    </div>
-    {% if item.summary %}
-    <div class="story-summary-box">{{ item.summary }}</div>
-    {% endif %}
-    <div class="story-footer-row">
-      <div>
-        <span class="publisher-pill">{{ item.source_name }}</span>
-        {% if item.published_formatted %} &bull; {{ item.published_formatted }}{% endif %}
-      </div>
-      {% if item.url %}
-      <a class="source-link-action" href="{{ item.url }}" target="_blank">&rarr; View Official Document</a>
-      {% endif %}
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+<!-- 2. Portfolio Baskets News & Filings -->
+<div class="section-heading">&#128202; Portfolio Baskets & Corporate Intelligence</div>
 
-<!-- 2. Watchlist News By Company -->
-<div class="section-heading">&#128202; Watchlist Corporate & Market Intelligence</div>
-{% if not news_by_company %}
+{% if not baskets %}
 <div class="company-card" style="text-align: center; color: #64748b; font-style: italic; padding: 24px;">
-  No new unsent news items for today. Sent ledger is clean!
+  No portfolio baskets assigned or no stories found for today. Sent ledger is clean!
 </div>
 {% endif %}
 
-{% for company_name, items in news_by_company.items() %}
-<div class="company-card">
-  <div class="company-header">
-    <div class="company-name">
-      <span>{{ company_name }}</span>
-    </div>
-    <span class="ticker-pill">{{ items|length }} Updates</span>
-  </div>
-  {% for item in items %}
-  <div class="story-item">
-    <div class="story-top-row">
-      {% if item.grade == 'Grade A' %}
-      <span class="badge badge-grade-a">&#128293; Grade A &bull; Material</span>
-      {% else %}
-      <span class="badge badge-grade-b">Grade B &bull; Research</span>
-      {% endif %}
-      <div class="story-headline">
-        <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
+{% for basket in baskets %}
+<div class="portfolio-basket-wrapper">
+  <!-- Portfolio Basket Header Banner -->
+  <div class="portfolio-banner portfolio-banner-{{ basket.theme }}">
+    <div class="portfolio-banner-top">
+      <div class="portfolio-banner-title">
+        <span class="portfolio-icon">{{ basket.icon }}</span>
+        <span>PORTFOLIO BASKET: <strong>{{ basket.name }}</strong></span>
       </div>
+      <span class="portfolio-banner-count">{{ basket.companies_count }} Companies &bull; {{ basket.total_updates }} Updates</span>
     </div>
-    {% if item.summary %}
-    <div class="story-summary-box">{{ item.summary }}</div>
-    {% endif %}
-    <div class="story-footer-row">
-      <div>
-        <span class="publisher-pill">{{ item.source_name }}</span>
-        {% if item.published_formatted %} &bull; {{ item.published_formatted }}{% endif %}
-      </div>
-      {% if item.sources %}
-      <div>
-        {% for src in item.sources %}
-        <a class="source-link-action" href="{{ src.url }}" target="_blank" style="margin-left: 6px;">[{{ src.name }}]</a>
+    <div class="portfolio-companies-bar">
+      <span class="portfolio-bar-label">COMPANIES IN {{ basket.name }}:</span>
+      {% if basket.all_companies %}
+        {% for c in basket.all_companies %}
+        <span class="comp-pill">{{ c }}</span>
         {% endfor %}
-      </div>
-      {% elif item.url %}
-      <a class="source-link-action" href="{{ item.url }}" target="_blank">&rarr; Read Article</a>
+      {% else %}
+        <span style="opacity:0.8; font-style:italic;">No companies mapped</span>
       {% endif %}
     </div>
   </div>
-  {% endfor %}
+
+  <div class="basket-body">
+    <!-- Filings for this basket -->
+    {% if basket.filings %}
+    <div class="basket-subheading">&#127963; Exchange Filings & Regulatory Disclosures</div>
+    <div class="company-card" style="border-left: 3px solid #7c3aed; margin-bottom: 14px;">
+      {% for item in basket.filings %}
+      <div class="story-item">
+        <div class="story-top-row">
+          <span class="badge badge-filing">&#127963; SEBI / Exchange Filing</span>
+          <div class="story-headline">
+            <strong>{{ item.company_name }}</strong>: 
+            <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
+          </div>
+        </div>
+        {% if item.summary %}
+        <div class="story-summary-box">{{ item.summary }}</div>
+        {% endif %}
+        <div class="story-footer-row">
+          <div>
+            <span class="publisher-pill">{{ item.source_name }}</span>
+            {% if item.published_formatted %} &bull; {{ item.published_formatted }}{% endif %}
+          </div>
+          {% if item.url %}
+          <a class="source-link-action" href="{{ item.url }}" target="_blank">&rarr; View Official Document</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- News by Company for this basket -->
+    {% if basket.news_by_company %}
+    <div class="basket-subheading">&#128202; Corporate & Market Intelligence</div>
+    {% for company_name, items in basket.news_by_company.items() %}
+    <div class="company-card">
+      <div class="company-header">
+        <div class="company-name">
+          <span>{{ company_name }}</span>
+          <span class="basket-mini-tag basket-mini-{{ basket.theme }}">{{ basket.name }}</span>
+        </div>
+        <span class="ticker-pill">{{ items|length }} Updates</span>
+      </div>
+      {% for item in items %}
+      <div class="story-item">
+        <div class="story-top-row">
+          {% if item.grade == 'Grade A' %}
+          <span class="badge badge-grade-a">&#128293; Grade A &bull; Material</span>
+          {% else %}
+          <span class="badge badge-grade-b">Grade B &bull; Research</span>
+          {% endif %}
+          <div class="story-headline">
+            <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
+          </div>
+        </div>
+        {% if item.summary %}
+        <div class="story-summary-box">{{ item.summary }}</div>
+        {% endif %}
+        <div class="story-footer-row">
+          <div>
+            <span class="publisher-pill">{{ item.source_name }}</span>
+            {% if item.published_formatted %} &bull; {{ item.published_formatted }}{% endif %}
+          </div>
+          {% if item.sources %}
+          <div>
+            {% for src in item.sources %}
+            <a class="source-link-action" href="{{ src.url }}" target="_blank" style="margin-left: 6px;">[{{ src.name }}]</a>
+            {% endfor %}
+          </div>
+          {% elif item.url %}
+          <a class="source-link-action" href="{{ item.url }}" target="_blank">&rarr; Read Article</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    {% elif not basket.filings %}
+    <div class="basket-empty">
+      No new unsent news items or regulatory filings for {{ basket.name }} companies today. Sent ledger is clean!
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endfor %}
 
@@ -478,19 +672,65 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def render_digest_html(analyst_name: str, stories: list[dict], date_str: str | None = None) -> str:
-    """Render the HTML digest for the given analyst and stories."""
+def _get_basket_theme(name: str) -> tuple[str, str]:
+    """Return (theme_key, icon) for a portfolio basket name."""
+    clean = name.strip().upper()
+    if clean == "GAME":
+        return "game", "🏆"
+    if clean == "SET":
+        return "set", "💎"
+    if clean == "MATCH":
+        return "match", "⚡"
+    if "WATCHLIST" in clean or "DIRECT" in clean:
+        return "watchlist", "🎯"
+    return "custom", "📁"
+
+
+def render_digest_html(
+    analyst_name: str,
+    stories: list[dict],
+    date_str: str | None = None,
+    analyst_id: str | None = None,
+    assigned_folders: list[str] | None = None,
+    assigned_companies: list[str] | None = None,
+) -> str:
+    """Render the HTML digest with portfolio-specific groupings for the given analyst and stories."""
     from jinja2 import Template  # type: ignore
 
     if not date_str:
         date_str = datetime.now(IST).strftime("%d %b %Y")
 
-    filings = []
-    news_by_company: dict[str, list[dict]] = {}
+    # 1. Fetch analyst if folders/companies not explicitly supplied
+    if (assigned_folders is None or assigned_companies is None) and analyst_id:
+        try:
+            for a in get_analysts():
+                if a.id == analyst_id:
+                    if assigned_folders is None:
+                        assigned_folders = a.assigned_folders
+                    if assigned_companies is None:
+                        assigned_companies = a.assigned_companies
+                    break
+        except Exception as e:
+            log.warning("Could not load analyst details: %s", e)
+
+    assigned_folders = [f.strip().upper() for f in (assigned_folders or []) if f.strip()]
+    assigned_companies = [c.strip() for c in (assigned_companies or []) if c.strip()]
+
+    # 2. Fetch all companies for portfolio mapping
+    try:
+        all_comps = get_companies()
+    except Exception:
+        all_comps = []
+
+    comp_by_id = {c.id: c for c in all_comps}
+    comp_by_name = {c.name.strip().lower(): c for c in all_comps}
+
+    # 3. Format stories and resolve company meta
+    processed_stories: list[dict] = []
+    total_filings = 0
 
     for s in stories:
         item = dict(s)
-        # Format time
         try:
             raw_pub = str(item.get("published_at") or "")
             dt = datetime.fromisoformat(raw_pub).astimezone(IST)
@@ -498,41 +738,129 @@ def render_digest_html(analyst_name: str, stories: list[dict], date_str: str | N
         except (ValueError, TypeError):
             item["published_formatted"] = ""
 
-        if item.get("source_type") == "filing":
-            filings.append(item)
-        else:
-            cname = item.get("company_name", "General")
-            news_by_company.setdefault(cname, []).append(item)
+        # Map company metadata
+        cid = item.get("company_id")
+        cname_raw = str(item.get("company_name", "")).strip()
+        cobj = comp_by_id.get(cid) or comp_by_name.get(cname_raw.lower())
 
-    # Build Executive Scorecard list for the morning matrix table
-    scorecard = []
-    for f in filings:
-        scorecard.append({
-            "company": f.get("company_name", "Company"),
-            "catalyst": f.get("title", ""),
-            "grade": "Grade A",
-            "url": f.get("url", "#"),
+        if cobj:
+            item["company_name"] = cobj.name
+            item["company_folders"] = [f.upper() for f in (getattr(cobj, "folders", []) or ([cobj.folder] if cobj.folder else []))]
+        else:
+            item["company_folders"] = []
+
+        is_filing = item.get("source_type") == "filing" or bool(item.get("filing_id"))
+        if is_filing:
+            total_filings += 1
+
+        processed_stories.append(item)
+
+    # 4. Build Portfolio Baskets
+    baskets: list[dict] = []
+    handled_story_ids: set[str] = set()
+
+    for folder_name in assigned_folders:
+        theme, icon = _get_basket_theme(folder_name)
+        # Companies belonging to this basket
+        basket_comps = [c for c in all_comps if folder_name in [f.upper() for f in (getattr(c, "folders", []) or ([c.folder] if c.folder else []))]]
+        basket_comp_ids = {c.id for c in basket_comps}
+        basket_comp_names = [c.name for c in basket_comps]
+
+        # Stories matching this basket
+        basket_stories = [
+            s for s in processed_stories
+            if s.get("company_id") in basket_comp_ids
+            or folder_name in s.get("company_folders", [])
+        ]
+
+        b_filings = [s for s in basket_stories if s.get("source_type") == "filing" or bool(s.get("filing_id"))]
+        b_news_by_company: dict[str, list[dict]] = {}
+        for s in basket_stories:
+            handled_story_ids.add(s["id"])
+            if s in b_filings:
+                continue
+            cname = s.get("company_name", "General")
+            b_news_by_company.setdefault(cname, []).append(s)
+
+        baskets.append({
+            "name": folder_name,
+            "icon": icon,
+            "theme": theme,
+            "companies_count": len(basket_comps),
+            "all_companies": basket_comp_names,
+            "total_updates": len(basket_stories),
+            "filings": b_filings,
+            "news_by_company": b_news_by_company,
         })
 
-    for cname, items in news_by_company.items():
-        if items:
-            top = items[0]
+    # 5. Handle any remaining stories (direct company assignments or watchlist)
+    remaining_stories = [s for s in processed_stories if s["id"] not in handled_story_ids]
+    if remaining_stories or (not assigned_folders and processed_stories):
+        basket_name = "DIRECT WATCHLIST" if assigned_companies else "PORTFOLIO WATCHLIST"
+        theme, icon = _get_basket_theme(basket_name)
+
+        r_filings = [s for s in remaining_stories if s.get("source_type") == "filing" or bool(s.get("filing_id"))]
+        r_news_by_company: dict[str, list[dict]] = {}
+        r_comp_names = set()
+
+        for s in remaining_stories:
+            cname = s.get("company_name", "General")
+            r_comp_names.add(cname)
+            if s in r_filings:
+                continue
+            r_news_by_company.setdefault(cname, []).append(s)
+
+        direct_company_names = [comp_by_id[cid].name for cid in assigned_companies if cid in comp_by_id]
+        all_display_comps = direct_company_names or sorted(list(r_comp_names))
+
+        baskets.append({
+            "name": basket_name,
+            "icon": icon,
+            "theme": theme,
+            "companies_count": len(all_display_comps),
+            "all_companies": all_display_comps,
+            "total_updates": len(remaining_stories),
+            "filings": r_filings,
+            "news_by_company": r_news_by_company,
+        })
+
+    # 6. Build Morning Scorecard Matrix Table
+    scorecard = []
+    for b in baskets:
+        # Scorecard entries from filings
+        for f in b["filings"][:3]:
             scorecard.append({
-                "company": cname,
-                "catalyst": top.get("title", ""),
-                "grade": top.get("grade", "Grade B"),
-                "url": top.get("url", "#"),
+                "company": f.get("company_name", "Company"),
+                "portfolio": b["name"],
+                "theme": b["theme"],
+                "catalyst": f.get("title", ""),
+                "grade": "Grade A",
+                "url": f.get("url", "#"),
             })
+        # Top catalyst from news per company
+        for cname, items in b["news_by_company"].items():
+            if items:
+                top = items[0]
+                scorecard.append({
+                    "company": cname,
+                    "portfolio": b["name"],
+                    "theme": b["theme"],
+                    "catalyst": top.get("title", ""),
+                    "grade": top.get("grade", "Grade B"),
+                    "url": top.get("url", "#"),
+                })
+
+    assigned_folders_str = ", ".join(assigned_folders) if assigned_folders else "Direct Watchlist"
 
     template = Template(HTML_TEMPLATE)
     return template.render(
         analyst_name=analyst_name,
+        assigned_folders_str=assigned_folders_str,
         date_str=date_str,
         total_items=len(stories),
-        total_filings=len(filings),
-        filings=filings,
+        total_filings=total_filings,
         scorecard=scorecard,
-        news_by_company=news_by_company,
+        baskets=baskets,
     )
 
 
@@ -574,43 +902,38 @@ def generate_pdf_via_browser(html_path: Path, pdf_path: Path) -> bool:
         return False
 
 
-def generate_analyst_digest(analyst_id: str, analyst_name: str, stories: list[dict]) -> tuple[Path, str]:
-    """Generate both an HTML digest and a high-definition PDF rendering with unique timestamps."""
-    import shutil
+def get_clean_digest_filename(analyst_name: str, ext: str = ".pdf") -> str:
+    """Format PDF filename as [Client_Name]_[Date].pdf."""
     now = datetime.now(IST)
-    today_str = now.strftime("%Y%m%d")
-    ts = now.strftime("%H%M%S")
-    html_content = render_digest_html(analyst_name, stories)
+    date_str = now.strftime("%Y-%m-%d")
+    words = [w for w in analyst_name.strip().split() if w]
+    sanitized_words = ["".join(c for c in w if c.isalnum() or c == "_") for w in words]
+    clean_name = "_".join(w for w in sanitized_words if w) or "Client"
+    return f"{clean_name}_{date_str}{ext}"
 
-    # Unique timestamped filename prevents Meta/WhatsApp media server from caching old documents
-    html_file = DIGESTS_DIR / f"{analyst_id}_{today_str}_{ts}.html"
+
+def generate_analyst_digest(analyst_id: str, analyst_name: str, stories: list[dict]) -> tuple[Path, str]:
+    """Generate both an HTML digest and a high-definition PDF rendering with [Client_Name]_[Date].pdf."""
+    import shutil
+    html_content = render_digest_html(analyst_name, stories, analyst_id=analyst_id)
+
+    html_filename = get_clean_digest_filename(analyst_name, ext=".html")
+    pdf_filename = get_clean_digest_filename(analyst_name, ext=".pdf")
+
+    html_file = DIGESTS_DIR / html_filename
     html_file.write_text(html_content, encoding="utf-8")
 
-    # Also keep standard un-timestamped file updated
-    latest_html = DIGESTS_DIR / f"{analyst_id}_{today_str}.html"
-    latest_html.write_text(html_content, encoding="utf-8")
-
-    pdf_file = DIGESTS_DIR / f"{analyst_id}_{today_str}_{ts}.pdf"
+    pdf_file = DIGESTS_DIR / pdf_filename
 
     # 1. Try native browser headless print-to-pdf (produces clean vector PDF)
     if generate_pdf_via_browser(html_file, pdf_file):
         log.info("Compiled fresh PDF via native browser: %s (size: %s bytes)", pdf_file, pdf_file.stat().st_size)
-        latest_pdf = DIGESTS_DIR / f"{analyst_id}_{today_str}.pdf"
-        try:
-            shutil.copyfile(pdf_file, latest_pdf)
-        except Exception:
-            pass
         return pdf_file, html_content
 
     # 2. Attempt WeasyPrint if available
     try:
         import weasyprint  # type: ignore[import-untyped]
         weasyprint.HTML(string=html_content).write_pdf(str(pdf_file))
-        latest_pdf = DIGESTS_DIR / f"{analyst_id}_{today_str}.pdf"
-        try:
-            shutil.copyfile(pdf_file, latest_pdf)
-        except Exception:
-            pass
         return pdf_file, html_content
     except Exception as e:  # noqa: BLE001
         log.info("WeasyPrint direct compilation not active (%s); using HTML digest fallback", e)

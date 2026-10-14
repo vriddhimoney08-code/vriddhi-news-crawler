@@ -62,6 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const digestClientBaskets = document.getElementById("digest-client-baskets");
   const digestStoriesCount = document.getElementById("digest-stories-count");
   const digestFilingsCount = document.getElementById("digest-filings-count");
+  const digestPdfName = document.getElementById("digest-pdf-name");
   const digestSelectedAvatar = document.getElementById("digest-selected-avatar");
   const digestFrameLoader = document.getElementById("digest-frame-loader");
   const digestFrameContainer = document.getElementById("digest-frame-container");
@@ -964,6 +965,10 @@ document.addEventListener("DOMContentLoaded", () => {
           digestFilingsCount.textContent = `${meta.total_filings || 0} Filings`;
         }
 
+        if (digestPdfName) {
+          digestPdfName.textContent = meta.pdf_name || "Client_Date.pdf";
+        }
+
         if (digestSelectedAvatar) {
           const firstChar = (meta.name || "C").charAt(0).toUpperCase();
           digestSelectedAvatar.textContent = firstChar;
@@ -993,8 +998,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnDownloadDigestPdf) {
     btnDownloadDigestPdf.addEventListener("click", () => {
-      showToast("Generating and downloading high-definition PDF...");
-      triggerSilentDownload(`/api/digest/download/${currentAnalystId}?t=${Date.now()}`);
+      const filename = digestPdfName ? digestPdfName.textContent.trim() : "";
+      showToast(`Generating and downloading ${filename || "PDF"}...`);
+      triggerSilentDownload(`/api/digest/download/${currentAnalystId}?t=${Date.now()}`, filename);
     });
   }
 

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=3.1">
+  <link rel="stylesheet" href="/static/style.css?v=3.2">
 </head>
 <body class="dark-theme">
 
@@ -66,7 +66,7 @@
           </button>
           <button class="nav-item" data-view="view-analysts">
             <span class="nav-icon">&#128101;</span>
-            <span class="nav-label">Clients &amp; Analysts</span>
+            <span class="nav-label">Clients &amp; Subscribers</span>
           </button>
           <button class="nav-item" data-view="view-sources">
             <span class="nav-icon">&#128225;</span>
@@ -373,22 +373,49 @@
           </div>
         </section>
 
-        <!-- VIEW 3: ANALYSTS -->
+        <!-- VIEW 3: CLIENTS & SUBSCRIBERS -->
         <section id="view-analysts" class="workspace-view">
+          
+          <!-- View Header & Actions -->
           <div class="view-header-bar">
-            <h2>Research Desk Analysts</h2>
-            <button id="btn-open-add-analyst" class="terminal-action-btn">+ Add Analyst</button>
+            <div class="view-header-title-wrap">
+              <div class="view-title-row">
+                <h2>Clients &amp; Subscribers Directory</h2>
+                <span id="clients-total-pill" class="header-count-pill">-- Clients</span>
+              </div>
+              <span class="view-header-sub">Manage registered WhatsApp recipients, portfolio coverage, and morning briefings</span>
+            </div>
+            <div class="view-header-actions">
+              <button id="btn-open-add-analyst" class="terminal-action-btn btn-primary-add" title="Register new client">
+                <span class="btn-icon">➕</span>
+                <span>Add Client</span>
+              </button>
+            </div>
           </div>
-          <div class="table-container">
-            <table class="terminal-table">
+
+          <!-- Clients Search & Controls Bar -->
+          <div class="watchlist-controls-panel" style="margin-bottom: 16px;">
+            <div class="watchlist-search-row">
+              <div class="watchlist-search-wrap">
+                <span class="search-input-icon">🔍</span>
+                <input type="text" id="client-search-input" placeholder="Search by client name, WhatsApp number (+91), or email..." autocomplete="off">
+                <button type="button" id="btn-clear-client-search" class="search-clear-btn" style="display: none;" title="Clear search">&times;</button>
+              </div>
+              <div class="watchlist-filter-stats">
+                <span id="clients-visible-count" class="visible-count-badge">Showing -- clients</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modern Consolidated 4-Column Table -->
+          <div class="table-container clients-table-container">
+            <table class="terminal-table modern-clients-table">
               <thead>
                 <tr>
-                  <th>Analyst Name</th>
-                  <th>WhatsApp Phone</th>
-                  <th>Email</th>
-                  <th>Assigned Baskets / Folders</th>
-                  <th>Morning Digest</th>
-                  <th>Action</th>
+                  <th style="width: 35%;">Client / Recipient</th>
+                  <th style="width: 30%;">Portfolio Coverage</th>
+                  <th style="width: 15%;">Morning Dispatch</th>
+                  <th style="width: 20%; text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="analysts-table-body">
@@ -569,38 +596,42 @@
       </div>
     </div>
 
-    <!-- Modal for Adding / Editing Analyst -->
+    <!-- Modal for Adding / Editing Client -->
     <div id="modal-add-analyst" class="terminal-modal">
       <div class="modal-content">
         <div class="modal-top">
-          <h3 id="analyst-modal-title">Add New Analyst</h3>
+          <div>
+            <h3 id="analyst-modal-title">Add New Client</h3>
+            <span id="analyst-modal-subtitle" style="font-size: 0.76rem; color: var(--text-muted);">Configure client profile, WhatsApp number, and portfolio coverage</span>
+          </div>
           <button id="btn-close-analyst-modal" class="modal-x">&times;</button>
         </div>
         <form id="form-add-analyst" class="modal-form">
           <input type="hidden" id="input-analyst-id" value="">
           <div class="input-block">
-            <label>Analyst Name *</label>
+            <label>Client Full Name *</label>
             <input type="text" id="input-analyst-name" required placeholder="e.g. Vikram Sharma">
           </div>
-          <div class="input-row">
-            <div class="input-block">
-              <label>WhatsApp Phone (10 Digits) *</label>
-              <input type="tel" id="input-analyst-phone" required placeholder="e.g. 9820012345">
-            </div>
-            <div class="input-block">
-              <label>Email Address</label>
-              <input type="email" id="input-analyst-email" placeholder="e.g. vikram@vriddhicapital.com">
+          <div class="input-block">
+            <label>WhatsApp Phone (10 Digits) *</label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 10px 14px; font-family: var(--font-mono); font-size: 0.88rem; color: #a5b4fc; font-weight: 600;">+91</span>
+              <input type="tel" id="input-analyst-phone" required placeholder="e.g. 9820012345" maxlength="10" style="flex: 1;">
             </div>
           </div>
           <div class="input-block">
-            <label>Assign Tracked Baskets / Folders (Check to assign)</label>
+            <label>Email Address <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">(Optional)</span></label>
+            <input type="email" id="input-analyst-email" placeholder="e.g. vikram@example.com">
+          </div>
+          <div class="input-block">
+            <label>Assign Portfolio Baskets (Morning briefing coverage)</label>
             <div id="analyst-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 140px;">
               <!-- Populated dynamically via JS: GAME, SET, MATCH, etc. -->
             </div>
           </div>
           <div class="modal-bottom">
             <button type="button" id="btn-cancel-analyst-modal" class="btn-cancel">Cancel</button>
-            <button type="submit" class="terminal-action-btn">Save Analyst</button>
+            <button type="submit" class="terminal-action-btn">Save Client</button>
           </div>
         </form>
       </div>
@@ -637,6 +668,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=3.1"></script>
+  <script src="/static/app.js?v=3.2"></script>
 </body>
 </html>

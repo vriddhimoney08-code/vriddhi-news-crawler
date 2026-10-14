@@ -2208,3 +2208,162 @@ body.dark-theme {
 .folder-checkbox-tag:hover {
   border-color: rgba(255, 255, 255, 0.2);
 }
+
+/* ==========================================================================
+   Client Directory & Recipient Cards
+   ========================================================================== */
+.client-row:hover {
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+.client-cell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.client-avatar-chip {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(30, 41, 59, 0.7) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #6ee7b7;
+  letter-spacing: -0.2px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.client-avatar-chip:hover {
+  border-color: var(--emerald);
+  transform: scale(1.06);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.3);
+}
+
+.client-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.client-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.client-name:hover {
+  color: #34d399;
+}
+
+.client-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.client-phone-badge {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 1px 7px;
+  border-radius: var(--radius-xs);
+  font-weight: 600;
+}
+
+.client-email-badge {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  padding: 1px 7px;
+  border-radius: var(--radius-xs);
+}
+
+.client-coverage-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.client-baskets-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.client-stocks-count-badge {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.client-dispatch-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dispatch-cycle-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.btn-client-dispatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-client-dispatch:hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: var(--emerald);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.folder-checkbox-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.folder-checkbox-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.folder-checkbox-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

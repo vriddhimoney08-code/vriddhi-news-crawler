@@ -93,8 +93,13 @@ document.addEventListener("DOMContentLoaded", () => {
   let watchlistSearchQuery = "";
   let availableFolders = ["GAME", "SET", "MATCH"];
 
-  // Analysts & Sources
+  // Clients & Directory Elements
   const analystsTableBody = document.getElementById("analysts-table-body");
+  const clientSearchInput = document.getElementById("client-search-input");
+  const btnClearClientSearch = document.getElementById("btn-clear-client-search");
+  const clientsVisibleCount = document.getElementById("clients-visible-count");
+  const clientsTotalPill = document.getElementById("clients-total-pill");
+  let clientSearchQuery = "";
   const sourcesListContainer = document.getElementById("sources-list-container");
 
   // 1. Clock Updater (IST)
@@ -249,40 +254,168 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Search Input Listeners for Clients
+  if (clientSearchInput) {
+    clientSearchInput.addEventListener("input", (e) => {
+      clientSearchQuery = (e.target.value || "").trim().toLowerCase();
+      if (btnClearClientSearch) {
+        btnClearClientSearch.style.display = clientSearchQuery ? "inline-flex" : "none";
+      }
+      renderAnalystsTable();
+    });
+  }
+
+  if (btnClearClientSearch) {
+    btnClearClientSearch.addEventListener("click", () => {
+      window.clearClientSearch();
+    });
+  }
+
+  window.clearClientSearch = () => {
+    if (clientSearchInput) clientSearchInput.value = "";
+    clientSearchQuery = "";
+    if (btnClearClientSearch) btnClearClientSearch.style.display = "none";
+    renderAnalystsTable();
+    if (clientSearchInput) clientSearchInput.focus();
+  };
+
   function renderAnalystsTable() {
-    analystsTableBody.innerHTML = analystsList.map(a => {
+    if (!analystsTableBody) return;
+
+    if (clientsTotalPill) {
+      clientsTotalPill.textContent = `${analystsList.length} Registered Clients`;
+    }
+
+    let filtered = [...analystsList];
+    if (clientSearchQuery) {
+      filtered = filtered.filter(a => {
+        const name = (a.name || "").toLowerCase();
+        const phone = (a.phone || "").toLowerCase();
+        const email = (a.email || "").toLowerCase();
+        const flds = (a.assigned_folders || []).map(f => f.toLowerCase());
+        return name.includes(clientSearchQuery) ||
+               phone.includes(clientSearchQuery) ||
+               email.includes(clientSearchQuery) ||
+               flds.some(f => f.includes(clientSearchQuery));
+      });
+    }
+
+    if (clientsVisibleCount) {
+      if (clientSearchQuery) {
+        clientsVisibleCount.textContent = `Showing ${filtered.length} of ${analystsList.length} clients (matching "${clientSearchQuery}")`;
+      } else {
+        clientsVisibleCount.textContent = `Showing ${filtered.length} of ${analystsList.length} clients`;
+      }
+    }
+
+    if (filtered.length === 0) {
+      const msg = clientSearchQuery
+        ? `No clients found matching "<strong>${clientSearchQuery}</strong>".`
+        : `No clients registered yet. Click "+ Add Client" to add WhatsApp briefing recipients!`;
+      
+      analystsTableBody.innerHTML = `
+        <tr>
+          <td colspan="4" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
+            <div style="font-size: 1.6rem; margin-bottom: 8px;">👥</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary);">${msg}</div>
+            ${clientSearchQuery ? `<button type="button" class="btn-secondary-micro" onclick="window.clearClientSearch()" style="margin-top: 14px; padding: 6px 16px; border-radius: 8px; cursor: pointer;">Clear Search</button>` : ''}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    analystsTableBody.innerHTML = filtered.map(a => {
       const folders = a.assigned_folders || [];
       const stockCount = getAnalystCoveredStockCount(a);
+      
+      // Initials for avatar
+      const names = (a.name || "Client").trim().split(" ");
+      const initials = names.length > 1
+        ? (names[0][0] + names[names.length - 1][0]).toUpperCase()
+        : names[0].slice(0, 2).toUpperCase();
+
       const foldersDisplay = folders.length > 0
         ? folders.map(f => {
-            let cls = "folder-tag-custom";
-            if (f === "GAME") cls = "folder-tag-game";
-            else if (f === "SET") cls = "folder-tag-set";
-            else if (f === "MATCH") cls = "folder-tag-match";
-            return `<span class="folder-tag ${cls}">${f}</span>`;
+            const tagClass = getFolderClass(f);
+            return `<span class="folder-tag ${tagClass}">${f}</span>`;
           }).join(" ")
-        : '<span style="color:var(--text-dim);font-style:italic;">None (No Baskets)</span>';
+        : `<span class="badge-unassigned" onclick="window.editAnalyst('${a.id}')" title="Click to assign portfolio baskets">+ Assign Baskets</span>`;
 
       return `
-      <tr>
-        <td><strong>${a.name}</strong></td>
-        <td><code>+91 ${a.phone}</code></td>
-        <td>${a.email || '—'}</td>
-        <td>${foldersDisplay} <span style="font-size:0.75rem; color:var(--text-dim); margin-left:6px; font-weight:600;">(${stockCount} Stocks)</span></td>
-        <td><span class="status-badge-ok">8:00 AM QUEUED</span></td>
-        <td>
-          <button class="btn-edit-action" onclick="editAnalyst('${a.id}')">Edit</button>
-          <button class="btn-cancel" style="padding: 3px 8px; font-size: 0.72rem;" onclick="deleteAnalyst('${a.id}')">Delete</button>
-        </td>
-      </tr>
+        <tr class="client-row" data-client-id="${a.id}">
+          <!-- Column 1: Client / Recipient -->
+          <td>
+            <div class="client-cell">
+              <div class="client-avatar-chip" onclick="window.editAnalyst('${a.id}')" title="Click to edit profile">${initials}</div>
+              <div class="client-info">
+                <span class="client-name" onclick="window.editAnalyst('${a.id}')" title="Click to edit profile">${a.name}</span>
+                <div class="client-meta-row">
+                  <span class="client-phone-badge" title="WhatsApp Delivery Number">💬 +91 ${a.phone}</span>
+                  ${a.email ? `<span class="client-email-badge" title="Email: ${a.email}">✉️ ${a.email}</span>` : ''}
+                </div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Column 2: Portfolio Coverage -->
+          <td>
+            <div class="client-coverage-cell">
+              <div class="client-baskets-row">${foldersDisplay}</div>
+              <span class="client-stocks-count-badge">📊 ${stockCount} Stocks Tracked</span>
+            </div>
+          </td>
+
+          <!-- Column 3: Morning Dispatch Status -->
+          <td>
+            <div class="client-dispatch-cell">
+              <span class="status-badge-ok"><span class="pulse-dot"></span>8:00 AM QUEUED</span>
+              <span class="dispatch-cycle-sub">Next: Tomorrow 8 AM</span>
+            </div>
+          </td>
+
+          <!-- Column 4: Actions -->
+          <td style="text-align: right;">
+            <div class="row-actions-cell">
+              <button type="button" class="btn-client-dispatch" onclick="window.sendBriefToClient('${a.id}')" title="Send WhatsApp briefing right now">
+                <span class="action-icon">💬</span>
+                <span>Send Brief</span>
+              </button>
+              <button type="button" class="btn-row-edit" onclick="window.editAnalyst('${a.id}')" title="Edit client details">
+                <span class="action-icon">✏️</span>
+                <span>Edit</span>
+              </button>
+              <button type="button" class="btn-row-del" onclick="window.deleteAnalyst('${a.id}')" title="Remove client">
+                <span class="action-icon">🗑️</span>
+              </button>
+            </div>
+          </td>
+        </tr>
       `;
     }).join("");
   }
 
+  window.sendBriefToClient = async (id) => {
+    const a = analystsList.find(x => x.id === id);
+    const clientName = a ? a.name : id;
+    if (!confirm(`Dispatch morning WhatsApp briefing to ${clientName} now?`)) return;
+
+    try {
+      const res = await fetch(`/api/digest/simulate-send/${id}`, { method: "POST" });
+      const data = await res.json();
+      showToast(data.message || `Briefing sent to ${clientName}!`);
+      loadStats();
+      loadAnalystStoriesPreview(currentAnalystId);
+      loadLogs();
+    } catch (err) {
+      showToast("Dispatch error", true);
+    }
+  };
+
   window.editAnalyst = (id) => {
     const a = analystsList.find(x => x.id === id);
     if (!a) return;
-    document.getElementById("analyst-modal-title").textContent = `Edit Analyst: ${a.name}`;
+    document.getElementById("analyst-modal-title").textContent = `Edit Client: ${a.name}`;
     document.getElementById("input-analyst-id").value = a.id;
     document.getElementById("input-analyst-name").value = a.name;
     document.getElementById("input-analyst-phone").value = a.phone;
@@ -292,16 +425,18 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.deleteAnalyst = async (id) => {
-    if (!confirm("Are you sure you want to remove this analyst?")) return;
+    const a = analystsList.find(x => x.id === id);
+    const clientName = a ? a.name : id;
+    if (!confirm(`Are you sure you want to remove ${clientName} from the client directory?`)) return;
     try {
       const res = await fetch(`/api/analysts/${id}`, { method: "DELETE" });
       if (res.ok) {
-        showToast("Analyst removed.");
+        showToast("Client removed.");
         await loadAnalysts();
         loadStats();
       }
     } catch(err) {
-      showToast("Error deleting analyst", true);
+      showToast("Error deleting client", true);
     }
   };
 
@@ -342,7 +477,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const formAddAnalyst = document.getElementById("form-add-analyst");
 
   btnOpenAddAnalyst.addEventListener("click", () => {
-    document.getElementById("analyst-modal-title").textContent = "Add New Analyst";
+    document.getElementById("analyst-modal-title").textContent = "Add New Client";
     formAddAnalyst.reset();
     document.getElementById("input-analyst-id").value = "";
     renderAnalystFoldersCheckboxes([]);
@@ -367,12 +502,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const checkedBoxes = document.querySelectorAll('input[name="assigned_folder"]:checked');
     const assignedFolders = Array.from(checkedBoxes).map(cb => cb.value);
 
+    // Preserve existing directly assigned stocks
+    const existing = analystsList.find(x => x.id === id);
+    const assignedCompanies = existing ? (existing.assigned_companies || []) : [];
+
     const payload = {
       id: id || name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16),
       name,
       phone,
       email,
-      assigned_companies: [],
+      assigned_companies: assignedCompanies,
       assigned_folders: assignedFolders
     };
 
@@ -383,14 +522,14 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        showToast(`Saved analyst: ${name}!`);
+        showToast(`Saved client: ${name}!`);
         modalAddAnalyst.classList.remove("open");
         formAddAnalyst.reset();
         await loadAnalysts();
         loadStats();
       }
     } catch(err) {
-      showToast("Failed to save analyst", true);
+      showToast("Failed to save client", true);
     }
   });
 

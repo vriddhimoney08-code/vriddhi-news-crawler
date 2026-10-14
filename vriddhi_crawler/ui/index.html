@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=3.0">
+  <link rel="stylesheet" href="/static/style.css?v=3.1">
 </head>
 <body class="dark-theme">
 
@@ -322,7 +322,7 @@
             <div class="watchlist-search-row">
               <div class="watchlist-search-wrap">
                 <span class="search-input-icon">🔍</span>
-                <input type="text" id="watchlist-search-input" placeholder="Search by company name, NSE symbol (e.g. BEL, RELIANCE), or BSE code..." autocomplete="off">
+                <input type="text" id="watchlist-search-input" placeholder="Search by company name or NSE symbol (e.g. BEL, RELIANCE)..." autocomplete="off">
                 <button type="button" id="btn-clear-watchlist-search" class="search-clear-btn" style="display: none;" title="Clear search">&times;</button>
               </div>
               <div class="watchlist-filter-stats">
@@ -480,15 +480,9 @@
             <label>Company Name *</label>
             <input type="text" id="input-comp-name" required placeholder="e.g. Bharat Electronics Ltd">
           </div>
-          <div class="input-row">
-            <div class="input-block">
-              <label>NSE Symbol</label>
-              <input type="text" id="input-comp-nse" placeholder="e.g. BEL">
-            </div>
-            <div class="input-block">
-              <label>BSE Code</label>
-              <input type="text" id="input-comp-bse" placeholder="e.g. 500049">
-            </div>
+          <div class="input-block">
+            <label>NSE Symbol</label>
+            <input type="text" id="input-comp-nse" placeholder="e.g. BEL">
           </div>
           <div class="input-block">
             <label>Assign to Baskets / Portfolios</label>
@@ -502,13 +496,6 @@
               <!-- Populated dynamically via JS: checkboxes for analysts -->
             </div>
           </div>
-          <details class="modal-collapsible-details">
-            <summary style="cursor: pointer; font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">+ Advanced: Aliases &amp; Brand Keywords</summary>
-            <div class="input-block" style="margin-top: 10px;">
-              <label>Aliases &amp; Brands (comma-separated)</label>
-              <input type="text" id="input-comp-aliases" placeholder="e.g. BEL, Bharat Electronics, Defence PSU">
-            </div>
-          </details>
           <div class="modal-bottom">
             <button type="button" id="btn-cancel-stock-modal" class="btn-cancel">Cancel</button>
             <button type="submit" class="terminal-action-btn">Save to Watchlist</button>
@@ -533,15 +520,9 @@
             <label>Company Name *</label>
             <input type="text" id="edit-comp-name" required placeholder="e.g. Bharat Electronics Ltd">
           </div>
-          <div class="input-row">
-            <div class="input-block">
-              <label>NSE Symbol</label>
-              <input type="text" id="edit-comp-nse" placeholder="e.g. BEL">
-            </div>
-            <div class="input-block">
-              <label>BSE Code</label>
-              <input type="text" id="edit-comp-bse" placeholder="e.g. 500049">
-            </div>
+          <div class="input-block">
+            <label>NSE Symbol</label>
+            <input type="text" id="edit-comp-nse" placeholder="e.g. BEL">
           </div>
           <div class="input-block">
             <label>Assign to Baskets / Portfolios</label>
@@ -555,13 +536,6 @@
               <!-- Populated dynamically via JS -->
             </div>
           </div>
-          <details class="modal-collapsible-details">
-            <summary style="cursor: pointer; font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">+ Advanced: Aliases &amp; Brand Keywords</summary>
-            <div class="input-block" style="margin-top: 10px;">
-              <label>Aliases &amp; Brands (comma-separated)</label>
-              <input type="text" id="edit-comp-aliases" placeholder="e.g. BEL, Bharat Electronics">
-            </div>
-          </details>
           <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
             <button type="button" id="btn-delete-from-edit-modal" class="btn-cancel" style="background: rgba(244, 63, 94, 0.12); color: #fb7185; border-color: rgba(244, 63, 94, 0.3);">
               🗑️ Delete Stock
@@ -663,6 +637,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=3.0"></script>
+  <script src="/static/app.js?v=3.1"></script>
 </body>
 </html>

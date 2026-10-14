@@ -79,8 +79,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const editCompId = document.getElementById("edit-comp-id");
   const editCompName = document.getElementById("edit-comp-name");
   const editCompNse = document.getElementById("edit-comp-nse");
-  const editCompBse = document.getElementById("edit-comp-bse");
-  const editCompAliases = document.getElementById("edit-comp-aliases");
   const editStockFoldersCheckboxes = document.getElementById("edit-stock-folders-checkboxes");
   const editStockAnalystsCheckboxes = document.getElementById("edit-stock-analysts-checkboxes");
 
@@ -1136,8 +1134,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span class="asset-name" onclick="window.openEditStockModal('${c.id}')" title="Click to edit stock details">${c.name}</span>
                 <div class="asset-sub-meta">
                   ${c.nse_symbol ? `<span class="exchange-tag nse">NSE: <strong>${c.nse_symbol}</strong></span>` : ''}
-                  ${c.bse_code ? `<span class="exchange-tag bse">BSE: <strong>${c.bse_code}</strong></span>` : ''}
-                  ${(c.aliases || []).length > 0 ? `<span class="aliases-hint" title="Aliases: ${c.aliases.join(', ')}">🏷️ ${c.aliases.length} aliases</span>` : ''}
                 </div>
               </div>
             </div>
@@ -1357,8 +1353,8 @@ document.addEventListener("DOMContentLoaded", () => {
       id: name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16),
       name,
       nse_symbol: nse,
-      bse_code: bse,
-      aliases,
+      bse_code: "",
+      aliases: [name, nse].filter(Boolean),
       search_queries: [`"${name}"`],
       folder: folders.join(", "),
       folders: folders,
@@ -1394,8 +1390,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (editCompId) editCompId.value = comp.id;
     if (editCompName) editCompName.value = comp.name;
     if (editCompNse) editCompNse.value = comp.nse_symbol || "";
-    if (editCompBse) editCompBse.value = comp.bse_code || "";
-    if (editCompAliases) editCompAliases.value = (comp.aliases || []).join(", ");
 
     const modalTitle = document.getElementById("edit-stock-modal-title");
     if (modalTitle) modalTitle.textContent = `Edit Stock: ${comp.name}`;
@@ -1459,10 +1453,9 @@ document.addEventListener("DOMContentLoaded", () => {
     formEditStock.addEventListener("submit", async (e) => {
       e.preventDefault();
       const id = editCompId.value;
+      const comp = companiesList.find(c => c.id === id);
       const name = editCompName.value.trim();
-      const nse = editCompNse.value.trim().toUpperCase();
-      const bse = editCompBse.value.trim();
-      const aliases = editCompAliases.value.split(",").map(s => s.trim()).filter(Boolean);
+      const nse = (editCompNse.value || "").trim().toUpperCase();
 
       const checkedFolderBoxes = document.querySelectorAll('input[name="edit_stock_folder"]:checked');
       const folders = Array.from(checkedFolderBoxes).map(cb => cb.value.trim().toUpperCase()).filter(Boolean);
@@ -1474,8 +1467,8 @@ document.addEventListener("DOMContentLoaded", () => {
         id,
         name,
         nse_symbol: nse,
-        bse_code: bse,
-        aliases,
+        bse_code: comp ? (comp.bse_code || "") : "",
+        aliases: comp ? (comp.aliases || [name, nse].filter(Boolean)) : [name, nse].filter(Boolean),
         search_queries: [`"${name}"`],
         folder: folders.join(", "),
         folders,

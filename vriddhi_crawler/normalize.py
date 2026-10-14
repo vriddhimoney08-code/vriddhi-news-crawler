@@ -18,7 +18,7 @@ def clean_text(text: str | None) -> str:
     if not text:
         return ""
     # Unescape HTML entities
-    cleaned = html.unescape(str(text))
+    cleaned = html.unescape(text)
     # Remove HTML tags if present
     cleaned = re.sub(r"<[^>]+>", " ", cleaned)
     # Remove zero-width spaces and weird unicode whitespace

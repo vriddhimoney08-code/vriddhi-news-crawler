@@ -358,7 +358,7 @@ def add_source(data: dict, db_path: Path = DB_PATH) -> int:
                 1 if data.get("is_active", True) else 0,
             )
         )
-        return cur.lastrowid
+        return int(cur.lastrowid or 0)
 
 
 def toggle_source_status(source_id: int, is_active: bool, db_path: Path = DB_PATH):

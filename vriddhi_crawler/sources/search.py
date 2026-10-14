@@ -44,7 +44,7 @@ def google_news(fetcher: Fetcher, company: Company, editions: list[str], since: 
                 continue
             for e in feedparser.parse(r.content).entries:
                 pub = parse_date(str(e.get("published", "")))
-                if pub and pub < since:
+                if not pub or pub < since:
                     continue
                 src = e.get("source")
                 publisher = "Google News"
@@ -85,7 +85,7 @@ def gdelt(fetcher: Fetcher, companies: list[Company], since: datetime, failures:
             continue
         for a in data.get("articles", []):
             pub = parse_date(a.get("seendate"))
-            if pub and pub < since:
+            if not pub or pub < since:
                 continue
             out.append(RawItem(source_name=a.get("domain") or "GDELT", source_type="news",
                                title=clean_text(a.get("title")), url=a.get("url"), published_at=pub,

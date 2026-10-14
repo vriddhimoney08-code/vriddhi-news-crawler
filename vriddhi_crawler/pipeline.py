@@ -156,8 +156,14 @@ class Pipeline:
             if item.source_type != "filing" and is_generic_market_noise(item.title):
                 continue
 
-            # 0b. Drop news older than MAX_ITEM_AGE_HOURS (24 hours)
-            if item.published_at and (now_utc - item.published_at) > timedelta(hours=MAX_ITEM_AGE_HOURS):
+            # 0b. Strict 24-hour freshness filter: drop older news or news without a publication date
+            if item.published_at:
+                if (now_utc - item.published_at) > timedelta(hours=MAX_ITEM_AGE_HOURS):
+                    continue
+                if (item.published_at - now_utc) > timedelta(hours=2):
+                    continue
+            elif item.source_type != "filing":
+                # Drop undated news so old archived articles never get stamped with today's date
                 continue
 
             # 1. Deduplicate by filing ID if present

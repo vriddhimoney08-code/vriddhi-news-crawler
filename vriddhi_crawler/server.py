@@ -413,6 +413,7 @@ def serve_digest_file(filename: str):
         media_type=media_type,
         filename=filename,
         headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",

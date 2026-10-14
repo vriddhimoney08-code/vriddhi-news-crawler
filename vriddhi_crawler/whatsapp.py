@@ -61,9 +61,29 @@ def build_highlights_text(stories: list[dict[str, Any]]) -> str:
 
 
 def upload_pdf_to_cdn(pdf_path: Path | None) -> str | None:
-    """Upload research scorecard PDF to a fast public CDN so WhatsApp media servers can fetch it."""
+    """Upload research scorecard PDF to a fast public CDN preserving the exact [Client]_[Date].pdf filename."""
     if not pdf_path or not Path(pdf_path).exists() or Path(pdf_path).suffix.lower() != ".pdf":
         return None
+    try:
+        import requests
+        fname = Path(pdf_path).name
+        # 1. Try tmpfiles.org first: preserves the exact filename in the URL for WhatsApp
+        with open(pdf_path, "rb") as f:
+            res = requests.post(
+                "https://tmpfiles.org/api/v1/upload",
+                files={"file": (fname, f, "application/pdf")},
+                timeout=20,
+            )
+        if res.status_code == 200:
+            data = res.json()
+            raw_url = data.get("data", {}).get("url", "")
+            if raw_url:
+                direct_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                log.info("Uploaded research scorecard PDF to CDN with preserved filename: %s", direct_url)
+                return direct_url
+    except Exception as e:
+        log.warning("tmpfiles upload failed (%s); trying fallback CDN...", e)
+
     try:
         import requests
         with open(pdf_path, "rb") as f:
@@ -75,7 +95,7 @@ def upload_pdf_to_cdn(pdf_path: Path | None) -> str | None:
             )
         if res.status_code == 200 and res.text.strip().startswith("http"):
             cdn_url = res.text.strip()
-            log.info("Uploaded research scorecard PDF to CDN: %s", cdn_url)
+            log.info("Uploaded research scorecard PDF to fallback CDN: %s", cdn_url)
             return cdn_url
     except Exception as e:
         log.warning("Could not upload PDF to CDN (%s); falling back to default media URL", e)

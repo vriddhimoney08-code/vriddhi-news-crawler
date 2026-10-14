@@ -76,7 +76,7 @@ def read_sitemap(fetcher: Fetcher, src: Source, since: datetime, _depth: int = 0
                 lang = (el.text or lang).strip()
         if not loc or not _keep(src, loc):
             continue
-        if pub and pub < since:
+        if not pub or pub < since:
             continue
         if not title:   # plain sitemap with no news:title: derive words from the address
             slug_part = loc.rstrip("/").rsplit("/", 1)[-1]
@@ -99,7 +99,7 @@ def read_rss(fetcher: Fetcher, src: Source, since: datetime) -> list[RawItem]:
         if not _keep(src, link):
             continue
         pub = parse_date(e.get("published") or e.get("updated"))
-        if pub and pub < since:
+        if not pub or pub < since:
             continue
         title = clean_text(e.get("title"))
         if not title:

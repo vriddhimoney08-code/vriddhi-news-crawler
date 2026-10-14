@@ -445,7 +445,7 @@ def get_recent_stories(limit: int = 100, company_id: str | None = None, source_t
     params = []
     if window_only:
         start_utc, end_utc = get_morning_digest_window()
-        query += " AND COALESCE(NULLIF(s.published_at, ''), s.created_at) >= ? AND COALESCE(NULLIF(s.published_at, ''), s.created_at) < ?"
+        query += " AND s.published_at IS NOT NULL AND s.published_at != '' AND s.published_at >= ? AND s.published_at < ?"
         params.extend([start_utc, end_utc])
 
     if company_id:
@@ -497,8 +497,10 @@ def get_unsent_stories_for_analyst(analyst_id: str, db_path: Path = DB_PATH) -> 
         FROM stories s
         JOIN companies c ON s.company_id = c.id
         WHERE s.company_id IN ({placeholders})
-          AND COALESCE(NULLIF(s.published_at, ''), s.created_at) >= ?
-          AND COALESCE(NULLIF(s.published_at, ''), s.created_at) < ?
+          AND s.published_at IS NOT NULL
+          AND s.published_at != ''
+          AND s.published_at >= ?
+          AND s.published_at < ?
           AND s.id NOT IN (
               SELECT story_id FROM sent_ledger WHERE analyst_id = ? AND status = 'sent'
           )
@@ -543,15 +545,17 @@ def get_dashboard_stats(db_path: Path = DB_PATH) -> dict:
     with get_connection(db_path) as conn:
         total_stories = conn.execute("""
             SELECT count(*) FROM stories
-            WHERE COALESCE(NULLIF(published_at, ''), created_at) >= ?
-              AND COALESCE(NULLIF(published_at, ''), created_at) < ?
+            WHERE published_at IS NOT NULL AND published_at != ''
+              AND published_at >= ?
+              AND published_at < ?
         """, (start_utc, end_utc)).fetchone()[0]
 
         total_filings = conn.execute("""
             SELECT count(*) FROM stories
             WHERE source_type = 'filing'
-              AND COALESCE(NULLIF(published_at, ''), created_at) >= ?
-              AND COALESCE(NULLIF(published_at, ''), created_at) < ?
+              AND published_at IS NOT NULL AND published_at != ''
+              AND published_at >= ?
+              AND published_at < ?
         """, (start_utc, end_utc)).fetchone()[0]
 
         total_companies = conn.execute("SELECT count(*) FROM companies WHERE is_active = 1").fetchone()[0]

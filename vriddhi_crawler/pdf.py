@@ -15,6 +15,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>{{ analyst_name }}_{{ date_str_file }}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
@@ -851,12 +852,14 @@ def render_digest_html(
                 })
 
     assigned_folders_str = ", ".join(assigned_folders) if assigned_folders else "Direct Watchlist"
+    date_str_file = datetime.now(IST).strftime("%d-%m-%Y")
 
     template = Template(HTML_TEMPLATE)
     return template.render(
         analyst_name=analyst_name,
         assigned_folders_str=assigned_folders_str,
         date_str=date_str,
+        date_str_file=date_str_file,
         total_items=len(stories),
         total_filings=total_filings,
         scorecard=scorecard,
@@ -903,9 +906,9 @@ def generate_pdf_via_browser(html_path: Path, pdf_path: Path) -> bool:
 
 
 def get_clean_digest_filename(analyst_name: str, ext: str = ".pdf") -> str:
-    """Format PDF filename as [Client_Name]_[Date].pdf."""
+    """Format PDF filename as [Client_Name]_[Date].pdf using DD-MM-YYYY format."""
     now = datetime.now(IST)
-    date_str = now.strftime("%Y-%m-%d")
+    date_str = now.strftime("%d-%m-%Y")
     words = [w for w in analyst_name.strip().split() if w]
     sanitized_words = ["".join(c for c in w if c.isalnum() or c == "_") for w in words]
     clean_name = "_".join(w for w in sanitized_words if w) or "Client"

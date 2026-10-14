@@ -22,12 +22,12 @@ class RawItem:
     body_check: bool = False       # open the article page to look for companies not named in the headline
 
 
-def parse_date(value, assume_ist: bool = False) -> datetime | None:
+def parse_date(value, assume_ist: bool = False, dayfirst: bool = True) -> datetime | None:
     """Parse any date string; times with no zone are taken as IST if assume_ist, else UTC."""
     if not value:
         return None
     try:
-        parsed = dateparser.parse(str(value), dayfirst=False)
+        parsed = dateparser.parse(str(value), dayfirst=dayfirst)
     except (ValueError, OverflowError, TypeError):
         return None
     if parsed is None:

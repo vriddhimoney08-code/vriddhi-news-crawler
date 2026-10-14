@@ -70,8 +70,8 @@ def get_stats():
 
 
 @app.get("/api/stories")
-def list_stories(limit: int = 100, company_id: str | None = None, source_type: str | None = None):
-    return get_recent_stories(limit=limit, company_id=company_id, source_type=source_type)
+def list_stories(limit: int = 100, company_id: str | None = None, source_type: str | None = None, window_only: bool = True):
+    return get_recent_stories(limit=limit, company_id=company_id, source_type=source_type, window_only=window_only)
 
 
 @app.get("/api/watchlist")

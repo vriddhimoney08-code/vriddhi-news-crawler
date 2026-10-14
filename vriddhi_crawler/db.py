@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import DB_PATH
@@ -376,9 +376,39 @@ def save_story(story: dict, db_path: Path = DB_PATH) -> str:
         return story["id"]
 
 
-def get_recent_stories(limit: int = 100, company_id: str | None = None, source_type: str | None = None, db_path: Path = DB_PATH) -> list[dict]:
+def get_morning_digest_window(now: datetime | None = None) -> tuple[str, str]:
+    """
+    Returns (start_iso_utc, end_iso_utc) for the strict 24-hour reporting cycle:
+    Yesterday 8:00 AM IST to Today 8:00 AM IST.
+    Any stories arriving after 8:00 AM today roll into tomorrow's briefing cycle.
+    """
+    if now is None:
+        now = datetime.now(UTC)
+    
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_ist = now.astimezone(ist_tz)
+    
+    cutoff_today_ist = now_ist.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now_ist >= cutoff_today_ist:
+        end_ist = cutoff_today_ist
+        start_ist = end_ist - timedelta(days=1)
+    else:
+        end_ist = cutoff_today_ist - timedelta(days=1)
+        start_ist = end_ist - timedelta(days=1)
+        
+    start_utc = start_ist.astimezone(UTC).isoformat()
+    end_utc = end_ist.astimezone(UTC).isoformat()
+    return start_utc, end_utc
+
+
+def get_recent_stories(limit: int = 100, company_id: str | None = None, source_type: str | None = None, window_only: bool = True, db_path: Path = DB_PATH) -> list[dict]:
     query = "SELECT s.*, c.name as company_name FROM stories s LEFT JOIN companies c ON s.company_id = c.id WHERE 1=1"
     params = []
+    if window_only:
+        start_utc, end_utc = get_morning_digest_window()
+        query += " AND COALESCE(NULLIF(s.published_at, ''), s.created_at) >= ? AND COALESCE(NULLIF(s.published_at, ''), s.created_at) < ?"
+        params.extend([start_utc, end_utc])
+
     if company_id:
         query += " AND s.company_id = ?"
         params.append(company_id)
@@ -399,7 +429,7 @@ def get_recent_stories(limit: int = 100, company_id: str | None = None, source_t
 
 
 def get_unsent_stories_for_analyst(analyst_id: str, db_path: Path = DB_PATH) -> list[dict]:
-    """Find all stories matching analyst's assigned companies and assigned folders that have not been marked 'sent'."""
+    """Find all stories matching analyst's assigned companies and assigned folders within the 8:00 AM - 8:00 AM window."""
     with get_connection(db_path) as conn:
         analyst = conn.execute("SELECT * FROM analysts WHERE id = ?", (analyst_id,)).fetchone()
         if not analyst:
@@ -421,12 +451,15 @@ def get_unsent_stories_for_analyst(analyst_id: str, db_path: Path = DB_PATH) -> 
         if not assigned:
             return []
 
+        start_utc, end_utc = get_morning_digest_window()
         placeholders = ",".join("?" for _ in assigned)
         query = f"""
         SELECT s.*, c.name as company_name
         FROM stories s
         JOIN companies c ON s.company_id = c.id
         WHERE s.company_id IN ({placeholders})
+          AND COALESCE(NULLIF(s.published_at, ''), s.created_at) >= ?
+          AND COALESCE(NULLIF(s.published_at, ''), s.created_at) < ?
           AND s.id NOT IN (
               SELECT story_id FROM sent_ledger WHERE analyst_id = ? AND status = 'sent'
           )
@@ -434,7 +467,7 @@ def get_unsent_stories_for_analyst(analyst_id: str, db_path: Path = DB_PATH) -> 
             CASE s.grade WHEN 'Grade A' THEN 1 WHEN 'Grade B' THEN 2 ELSE 3 END,
             s.published_at DESC
         """
-        rows = conn.execute(query, (*assigned, analyst_id)).fetchall()
+        rows = conn.execute(query, (*assigned, start_utc, end_utc, analyst_id)).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -467,9 +500,21 @@ def clear_failed_sending(analyst_id: str, db_path: Path = DB_PATH):
 
 
 def get_dashboard_stats(db_path: Path = DB_PATH) -> dict:
+    start_utc, end_utc = get_morning_digest_window()
     with get_connection(db_path) as conn:
-        total_stories = conn.execute("SELECT count(*) FROM stories").fetchone()[0]
-        total_filings = conn.execute("SELECT count(*) FROM stories WHERE source_type = 'filing'").fetchone()[0]
+        total_stories = conn.execute("""
+            SELECT count(*) FROM stories
+            WHERE COALESCE(NULLIF(published_at, ''), created_at) >= ?
+              AND COALESCE(NULLIF(published_at, ''), created_at) < ?
+        """, (start_utc, end_utc)).fetchone()[0]
+
+        total_filings = conn.execute("""
+            SELECT count(*) FROM stories
+            WHERE source_type = 'filing'
+              AND COALESCE(NULLIF(published_at, ''), created_at) >= ?
+              AND COALESCE(NULLIF(published_at, ''), created_at) < ?
+        """, (start_utc, end_utc)).fetchone()[0]
+
         total_companies = conn.execute("SELECT count(*) FROM companies WHERE is_active = 1").fetchone()[0]
         total_analysts = conn.execute("SELECT count(*) FROM analysts").fetchone()[0]
         recent_run = conn.execute("SELECT * FROM crawl_runs ORDER BY id DESC LIMIT 1").fetchone()
@@ -480,5 +525,7 @@ def get_dashboard_stats(db_path: Path = DB_PATH) -> dict:
             "total_companies": total_companies,
             "total_analysts": total_analysts,
             "last_crawl": dict(recent_run) if recent_run else None,
-            "status": "HEALTHY"
+            "status": "HEALTHY",
+            "cycle_start": start_utc,
+            "cycle_end": end_utc
         }

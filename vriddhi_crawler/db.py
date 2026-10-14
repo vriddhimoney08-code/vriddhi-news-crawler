@@ -340,7 +340,46 @@ def delete_analyst(aid: str, db_path: Path = DB_PATH):
 
 def get_sources(db_path: Path = DB_PATH) -> list[dict]:
     with get_connection(db_path) as conn:
-        return [dict(r) for r in conn.execute("SELECT * FROM sources").fetchall()]
+        return [dict(r) for r in conn.execute("SELECT * FROM sources ORDER BY id ASC").fetchall()]
+
+
+def add_source(data: dict, db_path: Path = DB_PATH) -> int:
+    with get_connection(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO sources (name, url, type, keep_pattern, language, body_check, is_active, status, items_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'OK', 0)""",
+            (
+                data["name"].strip(),
+                data["url"].strip(),
+                data.get("type", "rss").strip().lower(),
+                data.get("keep_pattern"),
+                data.get("language", "en"),
+                1 if data.get("body_check") else 0,
+                1 if data.get("is_active", True) else 0,
+            )
+        )
+        return cur.lastrowid
+
+
+def toggle_source_status(source_id: int, is_active: bool, db_path: Path = DB_PATH):
+    with get_connection(db_path) as conn:
+        conn.execute("UPDATE sources SET is_active = ? WHERE id = ?", (1 if is_active else 0, source_id))
+
+
+def delete_source(source_id: int, db_path: Path = DB_PATH):
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
+
+
+def update_source_status(source_id: int, status: str, items_count: int | None = None, db_path: Path = DB_PATH):
+    now = datetime.now(UTC).isoformat()
+    with get_connection(db_path) as conn:
+        if items_count is not None:
+            conn.execute("UPDATE sources SET status = ?, items_count = ?, last_crawled_at = ? WHERE id = ?",
+                         (status, items_count, now, source_id))
+        else:
+            conn.execute("UPDATE sources SET status = ?, last_crawled_at = ? WHERE id = ?",
+                         (status, now, source_id))
 
 
 def has_fingerprint(hash_val: str, db_path: Path = DB_PATH) -> bool:

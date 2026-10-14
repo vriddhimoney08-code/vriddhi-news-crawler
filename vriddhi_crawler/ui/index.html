@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=3.2">
+  <link rel="stylesheet" href="/static/style.css?v=3.3">
 </head>
 <body class="dark-theme">
 
@@ -427,9 +427,60 @@
 
         <!-- VIEW 4: SOURCES -->
         <section id="view-sources" class="workspace-view">
-          <div class="view-header-bar">
-            <h2>Ingestion Sources &amp; Exchange Feeds</h2>
+          <div class="view-header-bar" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+              <div class="view-title-tag">MARKET INGESTION ENGINE</div>
+              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">Ingestion Sources &amp; Feeds Radar</h2>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">Multi-threaded crawlers monitoring regulatory exchange disclosures, verified publisher RSS streams, and live corporate radars.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div class="source-health-pill">
+                <span class="source-pulse-dot"></span>
+                <span id="sources-stream-status">All Systems Operational</span>
+              </div>
+              <span class="stats-badge-pill" id="sources-total-pill">5 Feeds Connected</span>
+              <button id="btn-ping-all-sources" class="btn-secondary-action">
+                <span class="btn-icon">⚡</span> Ping All Feeds
+              </button>
+              <button id="btn-open-add-source-modal" class="terminal-action-btn">
+                <span class="btn-icon">+</span> Add Feed
+              </button>
+            </div>
           </div>
+
+          <!-- Controls Bar: Category Filter Pills + Instant Search -->
+          <div class="sources-control-bar">
+            <div class="sources-filter-tabs">
+              <button class="source-filter-btn active" data-type="ALL">
+                <span>All Feeds</span>
+                <span class="filter-count-badge" id="filter-count-all">0</span>
+              </button>
+              <button class="source-filter-btn" data-type="filing">
+                <span>🏛️ Exchange Filings</span>
+                <span class="filter-count-badge" id="filter-count-filing">0</span>
+              </button>
+              <button class="source-filter-btn" data-type="rss">
+                <span>📰 Financial Press (RSS)</span>
+                <span class="filter-count-badge" id="filter-count-rss">0</span>
+              </button>
+              <button class="source-filter-btn" data-type="search">
+                <span>⚡ Search Radar</span>
+                <span class="filter-count-badge" id="filter-count-search">0</span>
+              </button>
+            </div>
+
+            <div class="sources-search-wrapper">
+              <span class="search-icon-symbol">🔍</span>
+              <input type="text" id="sources-search-input" placeholder="Search feeds by name, domain, format, or endpoint URL...">
+              <button id="btn-clear-sources-search" class="clear-search-btn" title="Clear Search" style="display: none;">&times;</button>
+            </div>
+          </div>
+
+          <div class="sources-summary-bar">
+            <span id="sources-visible-count" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Showing 5 feeds</span>
+            <span style="font-size: 0.78rem; color: var(--text-dim);">Polled on continuous 24h market cycle (8:00 AM &ndash; 8:00 AM IST)</span>
+          </div>
+
           <div class="sources-list-grid" id="sources-list-container">
             <!-- Populated via JS -->
           </div>
@@ -637,6 +688,54 @@
       </div>
     </div>
 
+    <!-- Modal: Add Data Feed -->
+    <div id="modal-add-source" class="terminal-modal">
+      <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-top">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.3rem;">📡</span>
+            <div>
+              <h3 style="font-size: 1.15rem; color: #fff; font-weight: 700; margin: 0;">Connect Data Feed</h3>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">Integrate an institutional RSS stream or exchange announcement endpoint</span>
+            </div>
+          </div>
+          <button id="btn-close-source-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-add-source" style="padding: 22px 24px; display: flex; flex-direction: column; gap: 16px;">
+          <div class="input-block">
+            <label>Feed / Publisher Name <span style="color: var(--accent-emerald);">*</span></label>
+            <input type="text" id="input-source-name" placeholder="e.g. Financial Express Markets RSS" required>
+          </div>
+          <div class="input-block">
+            <label>Endpoint / Feed URL <span style="color: var(--accent-emerald);">*</span></label>
+            <input type="url" id="input-source-url" placeholder="https://www.financialexpress.com/market/rss" required>
+          </div>
+          <div class="input-block">
+            <label>Feed Architecture / Category</label>
+            <select id="input-source-type" class="terminal-select" style="width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 8px; color: #fff;">
+              <option value="rss">📰 Financial Press RSS / XML Feed</option>
+              <option value="filing">🏛️ Exchange Regulatory Disclosure / Filing</option>
+              <option value="sitemap">🗺️ Publisher XML Sitemap</option>
+            </select>
+          </div>
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 600; color: #fff;">Full Article Content Extraction</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Fetch and parse entire news body beyond the basic headline/RSS snippet</div>
+            </div>
+            <label class="switch-toggle" style="margin: 0;">
+              <input type="checkbox" id="input-source-bodycheck" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="modal-bottom" style="margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end; gap: 12px;">
+            <button type="button" id="btn-cancel-source-modal" class="btn-cancel">Cancel</button>
+            <button type="submit" class="terminal-action-btn" id="btn-submit-source">Save &amp; Activate Feed</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- KPI Drilldown Quick-View Modal -->
     <div id="modal-kpi-drilldown" class="terminal-modal">
       <div class="modal-content" style="max-width: 820px; max-height: 85vh; display: flex; flex-direction: column;">
@@ -668,6 +767,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=3.2"></script>
+  <script src="/static/app.js?v=3.3"></script>
 </body>
 </html>

@@ -17,9 +17,11 @@ from .config import DIGESTS_DIR, PORT
 from .controlpanel import Analyst, Company
 from .db import (
     add_folder,
+    add_source,
     delete_analyst,
     delete_company,
     delete_folder,
+    delete_source,
     get_analysts,
     get_companies,
     get_connection,
@@ -32,7 +34,9 @@ from .db import (
     mark_sent,
     save_analyst,
     save_company,
+    toggle_source_status,
 )
+from .http import Fetcher
 from .pdf import generate_analyst_digest, render_digest_html
 from .pipeline import Pipeline
 from .whatsapp import send_whatsapp_digest
@@ -274,6 +278,57 @@ def remove_analyst(analyst_id: str):
 @app.get("/api/sources")
 def list_sources():
     return get_sources()
+
+
+@app.post("/api/sources")
+def create_source(source_data: dict):
+    if not source_data.get("name") or not source_data.get("url"):
+        raise HTTPException(status_code=400, detail="Source name and URL are required")
+    new_id = add_source(source_data)
+    return {"status": "created", "id": new_id}
+
+
+@app.post("/api/sources/{source_id}/toggle")
+def toggle_source(source_id: int, req: dict):
+    is_active = bool(req.get("is_active", True))
+    toggle_source_status(source_id, is_active)
+    return {"status": "updated", "id": source_id, "is_active": is_active}
+
+
+@app.delete("/api/sources/{source_id}")
+def remove_source(source_id: int):
+    delete_source(source_id)
+    return {"status": "deleted", "id": source_id}
+
+
+@app.post("/api/sources/ping")
+def ping_source(req: dict):
+    url = req.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required for ping")
+    import time
+    t0 = time.time()
+    try:
+        fetcher = Fetcher()
+        resp = fetcher.session.get(url, timeout=6.0, headers=fetcher.session.headers)
+        latency_ms = int((time.time() - t0) * 1000)
+        content_len = len(resp.content)
+        return {
+            "status": "online" if resp.status_code < 400 else "warning",
+            "http_code": resp.status_code,
+            "latency_ms": latency_ms,
+            "bytes": content_len,
+            "msg": f"HTTP {resp.status_code} ({latency_ms}ms, {content_len} bytes)"
+        }
+    except Exception as e:
+        latency_ms = int((time.time() - t0) * 1000)
+        return {
+            "status": "error",
+            "http_code": 0,
+            "latency_ms": latency_ms,
+            "bytes": 0,
+            "msg": str(e)[:120]
+        }
 
 
 @app.post("/api/crawl/run")

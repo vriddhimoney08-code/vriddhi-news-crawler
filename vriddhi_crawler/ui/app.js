@@ -101,6 +101,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const clientsTotalPill = document.getElementById("clients-total-pill");
   let clientSearchQuery = "";
   const sourcesListContainer = document.getElementById("sources-list-container");
+  const sourcesSearchInput = document.getElementById("sources-search-input");
+  const btnClearSourcesSearch = document.getElementById("btn-clear-sources-search");
+  const sourcesVisibleCount = document.getElementById("sources-visible-count");
+  const sourcesTotalPill = document.getElementById("sources-total-pill");
+  const sourcesStreamStatus = document.getElementById("sources-stream-status");
+  const btnPingAllSources = document.getElementById("btn-ping-all-sources");
+  const btnOpenAddSourceModal = document.getElementById("btn-open-add-source-modal");
+  const modalAddSource = document.getElementById("modal-add-source");
+  const btnCloseSourceModal = document.getElementById("btn-close-source-modal");
+  const btnCancelSourceModal = document.getElementById("btn-cancel-source-modal");
+  const formAddSource = document.getElementById("form-add-source");
+  const filterCountAll = document.getElementById("filter-count-all");
+  const filterCountFiling = document.getElementById("filter-count-filing");
+  const filterCountRss = document.getElementById("filter-count-rss");
+  const filterCountSearch = document.getElementById("filter-count-search");
+  let allSourcesList = [];
+  let currentSourceCategory = "ALL";
+  let sourcesSearchQuery = "";
+  const sourcePingResults = {};
 
   // 1. Clock Updater (IST)
   function updateClock() {
@@ -123,6 +142,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (targetId === "view-digest") {
         loadFullDigestFrame();
+      }
+      if (targetId === "view-sources") {
+        loadSources();
       }
     });
   });
@@ -1635,27 +1657,436 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 11. Sources Feeds
+  // 11. Data Sources Feeds & Feed Radar
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   async function loadSources() {
     try {
       const res = await fetch("/api/sources");
-      const sources = await res.json();
-      sourcesListContainer.innerHTML = sources.map(s => `
-        <div class="source-item-card">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong>${s.name}</strong>
-            <span class="status-badge-ok">ACTIVE</span>
-          </div>
-          <code style="font-size: 0.72rem; color: var(--text-dim);">${s.url}</code>
-          <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 4px;">
-            <span>TYPE: ${s.type.toUpperCase()}</span>
-            <span>BODY CHECK: ${s.body_check ? 'YES' : 'NO'}</span>
-          </div>
-        </div>
-      `).join("");
+      const dbSources = await res.json();
+
+      const googleSearchRadar = {
+        id: "sys-google-news-radar",
+        name: "Google News Financial Radar",
+        url: "https://news.google.com/rss/search?q=india+stock+market",
+        type: "search",
+        keep_pattern: null,
+        language: "en-IN",
+        body_check: 1,
+        is_active: 1,
+        is_system: true,
+        status: "OK",
+        items_count: 0
+      };
+
+      allSourcesList = [googleSearchRadar, ...dbSources];
+
+      const totalAll = allSourcesList.length;
+      const totalFiling = allSourcesList.filter(s => s.type === "filing").length;
+      const totalRss = allSourcesList.filter(s => s.type === "rss" || s.type === "sitemap").length;
+      const totalSearch = allSourcesList.filter(s => s.type === "search").length;
+
+      if (filterCountAll) filterCountAll.textContent = totalAll;
+      if (filterCountFiling) filterCountFiling.textContent = totalFiling;
+      if (filterCountRss) filterCountRss.textContent = totalRss;
+      if (filterCountSearch) filterCountSearch.textContent = totalSearch;
+      if (sourcesTotalPill) sourcesTotalPill.textContent = `${totalAll} Feeds Connected`;
+
+      renderSourcesGrid();
     } catch (err) {
       console.error("Sources fetch error", err);
+      if (sourcesListContainer) {
+        sourcesListContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 30px; text-align: center; color: var(--text-muted);">Failed to load data feeds. Please retry.</div>`;
+      }
     }
+  }
+
+  function renderSourcesGrid() {
+    if (!sourcesListContainer) return;
+
+    const filtered = allSourcesList.filter(s => {
+      if (currentSourceCategory === "filing" && s.type !== "filing") return false;
+      if (currentSourceCategory === "rss" && s.type !== "rss" && s.type !== "sitemap") return false;
+      if (currentSourceCategory === "search" && s.type !== "search") return false;
+
+      if (sourcesSearchQuery) {
+        const q = sourcesSearchQuery.toLowerCase();
+        const matchesName = (s.name || "").toLowerCase().includes(q);
+        const matchesUrl = (s.url || "").toLowerCase().includes(q);
+        const matchesType = (s.type || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesUrl && !matchesType) return false;
+      }
+      return true;
+    });
+
+    if (sourcesVisibleCount) {
+      sourcesVisibleCount.textContent = `Showing ${filtered.length} of ${allSourcesList.length} feeds`;
+    }
+
+    if (filtered.length === 0) {
+      sourcesListContainer.innerHTML = `
+        <div style="grid-column: 1/-1; padding: 48px 24px; text-align: center; background: rgba(15,23,42,0.4); border: 1px dashed var(--border-subtle); border-radius: 12px;">
+          <div style="font-size: 2.2rem; margin-bottom: 8px;">📡</div>
+          <div style="font-size: 1.05rem; font-weight: 700; color: #fff;">No Feeds Matched</div>
+          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">Try searching with different keywords or change the category filter above.</div>
+        </div>
+      `;
+      return;
+    }
+
+    sourcesListContainer.innerHTML = filtered.map(s => {
+      const isPaused = !s.is_active;
+      const type = (s.type || "rss").toLowerCase();
+
+      let avatarIcon = "📰";
+      let typeLabel = "RSS 2.0 Feed";
+      let typeClass = "rss";
+      let formatVal = "XML / RSS";
+
+      if (type === "filing") {
+        avatarIcon = "🏛️";
+        typeLabel = "Exchange Filing";
+        typeClass = "filing";
+        formatVal = "HTML / JSON";
+      } else if (type === "search") {
+        avatarIcon = "⚡";
+        typeLabel = "Search Radar";
+        typeClass = "search";
+        formatVal = "Search API";
+      } else if (type === "sitemap") {
+        avatarIcon = "🗺️";
+        typeLabel = "Publisher Sitemap";
+        typeClass = "rss";
+        formatVal = "XML Sitemap";
+      }
+
+      const ping = sourcePingResults[s.id];
+      let pingHtml = `<span class="source-ping-badge ${isPaused ? '' : 'ok'}"><span class="source-pulse-dot" style="${isPaused ? 'background: #64748b; box-shadow: none;' : ''}"></span> ${isPaused ? 'PAUSED' : 'ACTIVE'}</span>`;
+
+      if (ping) {
+        if (ping.status === "testing") {
+          pingHtml = `<span class="source-ping-badge" style="color: var(--accent-emerald);"><span class="source-pulse-dot"></span> Pinging...</span>`;
+        } else if (ping.status === "online") {
+          pingHtml = `<span class="source-ping-badge ok" title="${ping.msg}">✓ ${ping.http_code} OK (${ping.latency_ms}ms)</span>`;
+        } else if (ping.status === "warning") {
+          pingHtml = `<span class="source-ping-badge warn" title="${ping.msg}">⚠ HTTP ${ping.http_code} (${ping.latency_ms}ms)</span>`;
+        } else {
+          pingHtml = `<span class="source-ping-badge err" title="${ping.msg}">✕ Error (${ping.latency_ms}ms)</span>`;
+        }
+      }
+
+      const bodyCheckVal = s.body_check ? "Full Article" : "Headline Only";
+      const intervalVal = type === "filing" ? "Every 15m" : "Every 30m";
+      const isSystemFeed = s.is_system || type === "filing";
+
+      return `
+        <div class="source-feed-card ${isPaused ? 'is-paused' : ''}" data-feed-id="${s.id}">
+          <div class="source-feed-card-header">
+            <div class="source-brand-wrap">
+              <div class="source-brand-avatar ${typeClass}">${avatarIcon}</div>
+              <div class="source-feed-info">
+                <div class="source-feed-title" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
+                <div class="source-feed-type-tag ${typeClass}">
+                  <span>${typeLabel}</span>
+                </div>
+              </div>
+            </div>
+            <label class="switch-toggle" title="${isPaused ? 'Click to Activate feed' : 'Click to Pause feed'}">
+              <input type="checkbox" class="source-toggle-input" data-id="${s.id}" ${s.is_active ? 'checked' : ''}>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="source-url-bar">
+            <span class="source-url-text" title="${escapeHtml(s.url)}">${escapeHtml(s.url)}</span>
+            <div class="source-url-actions">
+              <button class="btn-icon-micro btn-copy-feed-url" data-url="${escapeHtml(s.url)}" title="Copy Feed URL">📋</button>
+              <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" class="btn-icon-micro" title="Open URL in New Tab">↗</a>
+            </div>
+          </div>
+
+          <div class="source-specs-grid">
+            <div class="source-spec-item">
+              <span class="source-spec-label">Format</span>
+              <span class="source-spec-val">${formatVal}</span>
+            </div>
+            <div class="source-spec-item">
+              <span class="source-spec-label">Body Check</span>
+              <span class="source-spec-val" style="color: ${s.body_check ? '#34d399' : 'var(--text-muted)'};">${bodyCheckVal}</span>
+            </div>
+            <div class="source-spec-item">
+              <span class="source-spec-label">Poll Cycle</span>
+              <span class="source-spec-val">${intervalVal}</span>
+            </div>
+          </div>
+
+          <div class="source-card-footer">
+            <div id="source-ping-container-${s.id}">
+              ${pingHtml}
+            </div>
+            <div class="source-card-btns">
+              <button class="btn-ping-feed" data-id="${s.id}" data-url="${escapeHtml(s.url)}">
+                <span>⚡</span> Ping
+              </button>
+              ${!isSystemFeed ? `
+                <button class="btn-delete-feed" data-id="${s.id}" data-name="${escapeHtml(s.name)}" title="Remove Feed">
+                  🗑️
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // Category filter tabs
+  document.querySelectorAll(".source-filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".source-filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentSourceCategory = btn.dataset.type;
+      renderSourcesGrid();
+    });
+  });
+
+  // Sources search input & clear button
+  if (sourcesSearchInput) {
+    sourcesSearchInput.addEventListener("input", (e) => {
+      sourcesSearchQuery = e.target.value.trim();
+      if (btnClearSourcesSearch) {
+        btnClearSourcesSearch.style.display = sourcesSearchQuery ? "block" : "none";
+      }
+      renderSourcesGrid();
+    });
+  }
+
+  if (btnClearSourcesSearch) {
+    btnClearSourcesSearch.addEventListener("click", () => {
+      sourcesSearchInput.value = "";
+      sourcesSearchQuery = "";
+      btnClearSourcesSearch.style.display = "none";
+      renderSourcesGrid();
+    });
+  }
+
+  // Sources list container delegated events: toggle, copy, ping, delete
+  if (sourcesListContainer) {
+    sourcesListContainer.addEventListener("change", async (e) => {
+      if (e.target.classList.contains("source-toggle-input")) {
+        const id = e.target.dataset.id;
+        const isChecked = e.target.checked;
+        const feedCard = e.target.closest(".source-feed-card");
+        if (feedCard) {
+          feedCard.classList.toggle("is-paused", !isChecked);
+        }
+
+        const src = allSourcesList.find(s => String(s.id) === String(id));
+        if (src) src.is_active = isChecked ? 1 : 0;
+
+        if (id === "sys-google-news-radar") {
+          showToast(`Google News Radar ${isChecked ? "activated" : "paused"}`);
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/sources/${id}/toggle`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_active: isChecked })
+          });
+          if (res.ok) {
+            showToast(`${src ? src.name : "Feed"} ${isChecked ? "activated" : "paused"}`);
+          } else {
+            showToast("Failed to update feed state", true);
+          }
+        } catch (err) {
+          showToast("Network error updating feed state", true);
+        }
+      }
+    });
+
+    sourcesListContainer.addEventListener("click", async (e) => {
+      const copyBtn = e.target.closest(".btn-copy-feed-url");
+      if (copyBtn) {
+        const url = copyBtn.dataset.url;
+        if (url) {
+          navigator.clipboard.writeText(url).then(() => {
+            showToast("Feed URL copied to clipboard");
+          }).catch(() => {
+            showToast("Copied: " + url);
+          });
+        }
+        return;
+      }
+
+      const pingBtn = e.target.closest(".btn-ping-feed");
+      if (pingBtn) {
+        const id = pingBtn.dataset.id;
+        const url = pingBtn.dataset.url;
+        await testFeedPing(id, url, pingBtn);
+        return;
+      }
+
+      const delBtn = e.target.closest(".btn-delete-feed");
+      if (delBtn) {
+        const id = delBtn.dataset.id;
+        const name = delBtn.dataset.name;
+        if (confirm(`Are you sure you want to remove "${name}" from data feeds?`)) {
+          try {
+            const res = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+            if (res.ok) {
+              showToast(`Feed removed: ${name}`);
+              loadSources();
+            } else {
+              showToast("Failed to remove feed", true);
+            }
+          } catch (err) {
+            showToast("Network error removing feed", true);
+          }
+        }
+      }
+    });
+  }
+
+  async function testFeedPing(id, url, pingBtn) {
+    if (pingBtn) {
+      pingBtn.disabled = true;
+      pingBtn.innerHTML = `<span>⏳</span> Pinging...`;
+    }
+    sourcePingResults[id] = { status: "testing" };
+    renderSourcesGrid();
+
+    try {
+      const res = await fetch("/api/sources/ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url })
+      });
+      const data = await res.json();
+      sourcePingResults[id] = data;
+      if (data.status === "online") {
+        showToast(`✓ Ping successful: ${data.msg}`);
+      } else {
+        showToast(`Feed Ping notice: ${data.msg}`, true);
+      }
+    } catch (err) {
+      sourcePingResults[id] = { status: "error", latency_ms: 0, http_code: 0, msg: "Network error" };
+      showToast("Feed ping timeout or network failure", true);
+    } finally {
+      renderSourcesGrid();
+    }
+  }
+
+  // Ping All Feeds button
+  if (btnPingAllSources) {
+    btnPingAllSources.addEventListener("click", async () => {
+      btnPingAllSources.disabled = true;
+      btnPingAllSources.innerHTML = `<span class="btn-icon">⏳</span> Pinging Feeds...`;
+      showToast("Testing connectivity across all active feeds...");
+
+      const activeFeeds = allSourcesList.filter(s => s.is_active);
+      let successCount = 0;
+
+      for (const feed of activeFeeds) {
+        sourcePingResults[feed.id] = { status: "testing" };
+      }
+      renderSourcesGrid();
+
+      await Promise.all(activeFeeds.map(async (feed) => {
+        try {
+          const res = await fetch("/api/sources/ping", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: feed.url })
+          });
+          const data = await res.json();
+          sourcePingResults[feed.id] = data;
+          if (data.status === "online") successCount++;
+        } catch (err) {
+          sourcePingResults[feed.id] = { status: "error", latency_ms: 0, http_code: 0, msg: "Network error" };
+        }
+      }));
+
+      btnPingAllSources.disabled = false;
+      btnPingAllSources.innerHTML = `<span class="btn-icon">⚡</span> Ping All Feeds`;
+      renderSourcesGrid();
+      showToast(`Ping completed: ${successCount} of ${activeFeeds.length} feeds verified online!`);
+    });
+  }
+
+  // Add Source Modal handling
+  if (btnOpenAddSourceModal) {
+    btnOpenAddSourceModal.addEventListener("click", () => {
+      if (modalAddSource) modalAddSource.classList.add("active");
+    });
+  }
+
+  function closeAddSourceModal() {
+    if (modalAddSource) modalAddSource.classList.remove("active");
+    if (formAddSource) formAddSource.reset();
+  }
+
+  if (btnCloseSourceModal) btnCloseSourceModal.addEventListener("click", closeAddSourceModal);
+  if (btnCancelSourceModal) btnCancelSourceModal.addEventListener("click", closeAddSourceModal);
+
+  if (formAddSource) {
+    formAddSource.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("input-source-name").value.trim();
+      const url = document.getElementById("input-source-url").value.trim();
+      const type = document.getElementById("input-source-type").value;
+      const bodyCheck = document.getElementById("input-source-bodycheck").checked;
+
+      if (!name || !url) {
+        showToast("Please provide feed name and endpoint URL", true);
+        return;
+      }
+
+      const submitBtn = document.getElementById("btn-submit-source");
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Verifying & Saving...";
+      }
+
+      try {
+        const res = await fetch("/api/sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name,
+            url: url,
+            type: type,
+            body_check: bodyCheck ? 1 : 0,
+            is_active: 1
+          })
+        });
+
+        if (res.ok) {
+          showToast(`Feed connected: ${name}`);
+          closeAddSourceModal();
+          loadSources();
+        } else {
+          const errData = await res.json();
+          showToast(`Error: ${errData.detail || 'Could not save feed'}`, true);
+        }
+      } catch (err) {
+        showToast("Network error connecting feed", true);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Save & Activate Feed";
+        }
+      }
+    });
   }
 
   // 12. Run Crawl Trigger Button

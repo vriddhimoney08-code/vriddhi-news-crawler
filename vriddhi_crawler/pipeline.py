@@ -24,6 +24,7 @@ from .normalize import (
     are_near_duplicates,
     canonical_url,
     is_generic_market_noise,
+    is_reputable_publisher,
     strip_publisher_suffix,
 )
 from .sources import exchanges, publishers, search
@@ -152,7 +153,11 @@ class Pipeline:
         now_utc = datetime.now(UTC)
 
         for item in items:
-            # 0. Drop generic market wrap noise immediately
+            # 0a. Strict Tier-1 Institutional Publisher Filter: drop ScanX and unverified scrapers
+            if not is_reputable_publisher(item.source_name, item.url, item.source_type):
+                continue
+
+            # 0b. Drop generic market wrap noise immediately
             if item.source_type != "filing" and is_generic_market_noise(item.title):
                 continue
 

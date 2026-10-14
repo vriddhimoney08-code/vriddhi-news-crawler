@@ -10,7 +10,7 @@ import feedparser
 
 from ..controlpanel import Company
 from ..http import Fetcher
-from ..normalize import clean_text, strip_publisher_suffix
+from ..normalize import clean_text, is_reputable_publisher, strip_publisher_suffix
 from .base import RawItem, parse_date
 
 log = logging.getLogger(__name__)
@@ -56,6 +56,8 @@ def google_news(fetcher: Fetcher, company: Company, editions: list[str], since: 
                 title = strip_publisher_suffix(clean_text(raw_title), publisher)
                 raw_link = e.get("link")
                 link_str: str | None = str(raw_link) if raw_link is not None else None
+                if not is_reputable_publisher(publisher, link_str, "news"):
+                    continue
                 out.append(RawItem(source_name=publisher, source_type="news", title=title, url=link_str,
                                    published_at=pub, lang=lang))
     return out
@@ -87,7 +89,11 @@ def gdelt(fetcher: Fetcher, companies: list[Company], since: datetime, failures:
             pub = parse_date(a.get("seendate"))
             if not pub or pub < since:
                 continue
-            out.append(RawItem(source_name=a.get("domain") or "GDELT", source_type="news",
-                               title=clean_text(a.get("title")), url=a.get("url"), published_at=pub,
+            src_domain = a.get("domain") or "GDELT"
+            raw_url = a.get("url")
+            if not is_reputable_publisher(src_domain, raw_url, "news"):
+                continue
+            out.append(RawItem(source_name=src_domain, source_type="news",
+                               title=clean_text(a.get("title")), url=raw_url, published_at=pub,
                                lang=(a.get("language") or "en")[:2].lower()))
     return out

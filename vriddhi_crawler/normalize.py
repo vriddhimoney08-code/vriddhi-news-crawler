@@ -142,3 +142,105 @@ def are_near_duplicates(headline_a: str, headline_b: str, threshold: float = 0.5
             return True
 
     return SequenceMatcher(None, fp_a, fp_b).ratio() >= threshold
+
+
+REPUTED_DOMAINS = {
+    # Tier 1 Indian Financial Press
+    "livemint.com",
+    "moneycontrol.com",
+    "economictimes.indiatimes.com",
+    "timesofindia.indiatimes.com",
+    "business-standard.com",
+    "financialexpress.com",
+    "cnbctv18.com",
+    "ndtvprofit.com",
+    "ndtv.com",
+    "businesstoday.in",
+    "thehindubusinessline.com",
+    "thehindu.com",
+    "indianexpress.com",
+    "hindustantimes.com",
+    "zeebiz.com",
+    # Global Financial Wires
+    "reuters.com",
+    "bloomberg.com",
+    "bloombergquint.com",
+    # Official Stock Exchanges
+    "bseindia.com",
+    "nseindia.com",
+}
+
+REPUTED_PUBLISHER_KEYWORDS = [
+    # Top Tier Financial Publications
+    "livemint",
+    "mint",
+    "moneycontrol",
+    "economic times",
+    "times of india",
+    "toi",
+    "business standard",
+    "financial express",
+    "cnbc tv18",
+    "cnbc-tv18",
+    "cnbc",
+    "ndtv profit",
+    "ndtv",
+    "business today",
+    "businessline",
+    "the hindu",
+    "indian express",
+    "hindustan times",
+    "zee business",
+    "reuters",
+    "bloomberg",
+    # Official Exchanges
+    "bse",
+    "nse",
+]
+
+BLACKLIST_KEYWORDS = [
+    "scanx",
+    "scannx",
+    "odisha diary",
+    "univest",
+    "ad-hoc-news",
+    "kalkine",
+    "goodreturns",
+    "investing.com",
+    "instagram",
+    "dailyhunt",
+    "openpr",
+    "trade brains",
+    "simply wall street",
+    "marketbeat",
+    "bizzbuzz",
+    "cxotoday",
+    "apnnews",
+    "dsij",
+    "indiainfoline",
+]
+
+
+def is_reputable_publisher(source_name: str, url: str | None = None, source_type: str = "news") -> bool:
+    """Ensure news stories strictly originate from tier-1 reputed institutions (Mint, Moneycontrol, ET, TOI, etc.)."""
+    # 1. Official exchange regulatory announcements are always trusted
+    if source_type == "filing":
+        return True
+
+    s_lower = (source_name or "").lower().strip()
+    u_lower = (url or "").lower().strip()
+
+    # 2. Strict blacklist check: immediately reject scrapers, aggregators, and spam blogs
+    if any(b in s_lower or b in u_lower for b in BLACKLIST_KEYWORDS):
+        return False
+
+    # 3. Whitelist check by URL domain
+    if any(d in u_lower for d in REPUTED_DOMAINS):
+        return True
+
+    # 4. Whitelist check by publisher brand name
+    if any(p in s_lower for p in REPUTED_PUBLISHER_KEYWORDS):
+        return True
+
+    # Reject obscure blogs, unknown aggregators, and non-whitelisted sources
+    return False

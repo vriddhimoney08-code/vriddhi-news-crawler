@@ -53,19 +53,19 @@
         <nav class="sidebar-nav">
           <button class="nav-item active" data-view="view-overview">
             <span class="nav-icon">&#128202;</span>
-            <span class="nav-label">Overview</span>
+            <span class="nav-label">Dashboard</span>
           </button>
           <button class="nav-item" data-view="view-watchlist">
             <span class="nav-icon">&#127970;</span>
-            <span class="nav-label">Watchlist</span>
+            <span class="nav-label">Portfolios &amp; Watchlist</span>
           </button>
           <button class="nav-item" data-view="view-analysts">
             <span class="nav-icon">&#128101;</span>
-            <span class="nav-label">Analysts</span>
+            <span class="nav-label">Clients &amp; Analysts</span>
           </button>
           <button class="nav-item" data-view="view-sources">
             <span class="nav-icon">&#128225;</span>
-            <span class="nav-label">Sources</span>
+            <span class="nav-label">Data Sources</span>
           </button>
           <button class="nav-item" data-view="view-digest">
             <span class="nav-icon">&#128196;</span>
@@ -78,8 +78,8 @@
         </nav>
 
         <div class="sidebar-footer">
-          <div class="footer-badge">SENT LEDGER: ACTIVE</div>
-          <div class="footer-sub">Port 3009 &bull; v1.0.0</div>
+          <div class="footer-badge">Zero-Duplicate Engine</div>
+          <div class="footer-sub">Port 3009 &bull; Production v1.0</div>
         </div>
       </aside>
 
@@ -91,12 +91,12 @@
           
           <!-- Section 1: SYSTEM METRICS (Today) -->
           <div class="section-box">
-            <div class="section-header-title">SYSTEM METRICS (Today)</div>
+            <div class="section-header-title">Today's Market Intelligence</div>
             <div class="metrics-kpi-grid">
               
               <div class="kpi-card">
                 <div class="kpi-top">
-                  <span class="kpi-label">STORIES CRAWLED</span>
+                  <span class="kpi-label">Stories Curated</span>
                   <span class="kpi-icon-badge">📰</span>
                 </div>
                 <div class="kpi-value" id="stat-stories">0 Stories</div>
@@ -108,7 +108,7 @@
 
               <div class="kpi-card">
                 <div class="kpi-top">
-                  <span class="kpi-label">EXCHANGE FILINGS</span>
+                  <span class="kpi-label">Exchange Filings</span>
                   <span class="kpi-icon-badge">🏛️</span>
                 </div>
                 <div class="kpi-value" id="stat-filings">0 Filings</div>
@@ -120,7 +120,7 @@
 
               <div class="kpi-card">
                 <div class="kpi-top">
-                  <span class="kpi-label">ACTIVE ANALYSTS</span>
+                  <span class="kpi-label">Active Portfolios</span>
                   <span class="kpi-icon-badge">👥</span>
                 </div>
                 <div class="kpi-value" id="stat-analysts">0 Analysts</div>
@@ -132,7 +132,7 @@
 
               <div class="kpi-card">
                 <div class="kpi-top">
-                  <span class="kpi-label">SYSTEM HEALTH</span>
+                  <span class="kpi-label">Stream Health</span>
                   <span class="kpi-icon-badge">⚡</span>
                 </div>
                 <div class="kpi-value" id="stat-health">100% Health</div>
@@ -149,29 +149,29 @@
           <div class="section-box digest-workspace-panel">
             <div class="panel-headline-row">
               <div class="panel-title-wrap">
-                <h2 class="panel-main-title">TODAY'S DIGEST PREVIEW &amp; DISPATCH</h2>
-                <p class="panel-subtitle">Review personalized morning briefs and trigger real-time WhatsApp dispatches</p>
+                <h2 class="panel-main-title">Morning Digest &amp; WhatsApp Dispatch</h2>
+                <p class="panel-subtitle">Review personalized intelligence briefings and trigger real-time WhatsApp delivery</p>
               </div>
             </div>
             
             <!-- Modern Configuration Toolbar -->
             <div class="analyst-config-toolbar">
               <div class="toolbar-section mode-select-section">
-                <span class="config-label">RECIPIENT SELECTION</span>
+                <span class="config-label">Dispatch Mode</span>
                 <div class="mode-segmented-control">
                   <button type="button" class="mode-segment-btn active" id="btn-mode-single">
                     <span class="segment-icon">👤</span>
-                    <span class="segment-text">Single Analyst</span>
+                    <span class="segment-text">Single Recipient</span>
                   </button>
                   <button type="button" class="mode-segment-btn" id="btn-mode-multiple">
                     <span class="segment-icon">👥</span>
-                    <span class="segment-text">Multiple Analysts</span>
+                    <span class="segment-text">Batch Dispatch</span>
                   </button>
                 </div>
               </div>
 
               <div class="toolbar-section delivery-route-section">
-                <span class="config-label">DELIVERY ROUTE</span>
+                <span class="config-label">Delivery Mode</span>
                 <button type="button" id="btn-toggle-delivery-mode" class="delivery-status-card mode-safety" title="Click to toggle between Safety Redirect and Live Direct delivery">
                   <span class="delivery-pulse-dot" id="delivery-mode-pulse"></span>
                   <div class="delivery-text-group">
@@ -187,7 +187,7 @@
             <div id="single-analyst-wrapper" class="analyst-single-panel">
               <div class="single-analyst-row">
                 <div class="analyst-select-field">
-                  <label for="overview-analyst-select" class="field-label">Selected Analyst Desk</label>
+                  <label for="overview-analyst-select" class="field-label">Target Recipient / Portfolio</label>
                   <div class="select-dropdown-container">
                     <select id="overview-analyst-select" class="modern-select">
                       <!-- Populated via JS -->
@@ -240,7 +240,7 @@
                 <div class="split-card-header">
                   <div class="header-left-group">
                     <span class="header-badge-icon">⚡</span>
-                    <span>DISPATCH ACTIONS</span>
+                    <span>Quick Dispatch Actions</span>
                   </div>
                 </div>
                 <div class="split-card-body actions-stack">
@@ -268,16 +268,16 @@
                   <!-- Master Action: Send to All -->
                   <button id="btn-send-to-all" class="btn-master-action" type="button">
                     <span class="btn-action-icon">🚀</span>
-                    <span>Dispatch to All 4 Analysts</span>
+                    <span>Dispatch to All Analysts</span>
                   </button>
 
                   <!-- Deduplication Ledger Guarantee Card -->
                   <div class="ledger-guarantee-card">
                     <div class="guarantee-header-row">
                       <span class="guarantee-shield">🛡️</span>
-                      <span class="guarantee-title">Zero-Duplicate Ledger Active</span>
+                      <span class="guarantee-title">Zero-Duplicate Protection Active</span>
                     </div>
-                    <p class="guarantee-text">Every story sent is stamped into the SQLite registry. Analysts will never receive repeat news on the same day.</p>
+                    <p class="guarantee-text">Smart deduplication active. Recipients will never receive repeat news stories on the same day.</p>
                   </div>
 
                 </div>
@@ -290,8 +290,9 @@
           <div class="section-box logs-stream-panel">
             <div class="panel-headline-row">
               <div class="panel-title-wrap">
-                <div class="section-header-title">LIVE CRAWLER LOGS &amp; EVENT STREAM</div>
+                <div class="section-header-title">Live Engine Activity &amp; Logs</div>
               </div>
+            </div>
             <div class="terminal-log-window" id="event-logs-container">
               <!-- Populated via JS -->
               <div class="log-line"><span class="log-ts">[BOOT]</span> <span class="log-txt">Vriddhi News Crawler online. Ingestion pipeline ready.</span></div>

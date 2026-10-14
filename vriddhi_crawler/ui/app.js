@@ -981,10 +981,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function triggerSilentDownload(url, filename) {
+    const a = document.createElement("a");
+    a.href = url;
+    if (filename) a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 250);
+  }
+
   if (btnDownloadDigestPdf) {
     btnDownloadDigestPdf.addEventListener("click", () => {
       showToast("Generating and downloading high-definition PDF...");
-      window.location.href = `/api/digest/download/${currentAnalystId}?t=${Date.now()}`;
+      triggerSilentDownload(`/api/digest/download/${currentAnalystId}?t=${Date.now()}`);
     });
   }
 
@@ -2668,7 +2678,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Backup SQLite Database
   const triggerDbBackup = () => {
     showToast("Downloading binary snapshot of crawler.db...");
-    window.location.href = `/api/settings/backup?t=${Date.now()}`;
+    triggerSilentDownload(`/api/settings/backup?t=${Date.now()}`);
   };
   const btnBackupSqlite = document.getElementById("btn-backup-sqlite");
   if (btnBackupSqlite) btnBackupSqlite.addEventListener("click", triggerDbBackup);

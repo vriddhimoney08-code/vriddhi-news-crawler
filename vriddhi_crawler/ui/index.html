@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=3.4">
+  <link rel="stylesheet" href="/static/style.css?v=3.5">
 </head>
 <body class="dark-theme">
 
@@ -577,38 +577,223 @@
 
         <!-- VIEW 6: SETTINGS -->
         <section id="view-settings" class="workspace-view">
-          <div class="view-header-bar">
-            <h2>System Configuration</h2>
+          <div class="view-header-bar" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+              <div class="view-title-tag">CORE INFRASTRUCTURE &amp; CONTROLS</div>
+              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">System Settings &amp; Gateway Controls</h2>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">Configure automated WhatsApp dispatch gateways, AI summarization engines, 24h market crawl windows, and database backups.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <button id="btn-backup-sqlite" class="btn-secondary-action" title="Download direct backup of crawler.db">
+                <span class="btn-icon">💾</span> Backup Database
+              </button>
+              <button id="btn-clean-sqlite" class="btn-secondary-action" title="Vacuum database and prune old crawl runs">
+                <span class="btn-icon">🧹</span> Optimize DB
+              </button>
+              <button id="btn-save-settings-main" class="terminal-action-btn">
+                <span class="btn-icon">✓</span> Save Changes
+              </button>
+            </div>
           </div>
-          <div class="settings-card">
-            <div class="setting-item">
-              <div>
-                <strong>Test Mode</strong>
-                <p>Redirects all 8:00 AM WhatsApp sends to the test recipient number.</p>
+
+          <!-- Settings Grid: 4 Modern FinTech Sections -->
+          <div class="settings-sections-grid">
+
+            <!-- Section 1: WhatsApp Gateway & Delivery Controls -->
+            <div class="settings-box-panel">
+              <div class="settings-panel-header">
+                <div class="settings-panel-icon-wrap green">📱</div>
+                <div>
+                  <h3 class="settings-panel-title">WhatsApp Gateway &amp; Morning Dispatch</h3>
+                  <span class="settings-panel-sub">Official Meta/Interakt Cloud API &amp; 8:00 AM Delivery Safety Switch</span>
+                </div>
               </div>
-              <span class="setting-badge">ENABLED (YES)</span>
-            </div>
-            <div class="setting-item">
-              <div>
-                <strong>Test WhatsApp Number</strong>
-                <p>Configured in .env file.</p>
+
+              <div class="settings-panel-body">
+                <!-- Delivery Mode Toggle -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Delivery Safety Mode</div>
+                    <div class="setting-row-desc">In Test Mode, all WhatsApp briefs are safely redirected to the Test Recipient Number. Switch to Live Production for client dispatch.</div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <span id="settings-delivery-label" class="setting-status-pill warn">TEST MODE</span>
+                    <label class="switch-toggle" title="Toggle between Test Mode and Live Production">
+                      <input type="checkbox" id="setting-toggle-testmode">
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Test Recipient Phone -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Test Recipient WhatsApp Number</div>
+                    <div class="setting-row-desc">All simulation sends and test mode dispatches deliver to this verified device.</div>
+                  </div>
+                  <div class="setting-input-inline-wrap">
+                    <span class="country-prefix">+91</span>
+                    <input type="text" id="setting-test-phone" placeholder="9820000000" maxlength="10">
+                  </div>
+                </div>
+
+                <!-- Interakt WhatsApp Credentials -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Interakt WhatsApp API Key</div>
+                    <div class="setting-row-desc">Basic Auth token used for document header uploads and template dispatches.</div>
+                  </div>
+                  <div class="setting-masked-credential-wrap">
+                    <input type="password" id="setting-interakt-key" placeholder="Configured in .env" class="setting-mono-input" readonly>
+                    <button type="button" class="btn-credential-toggle" id="btn-toggle-interakt-key" title="Show/Hide Key">👁️</button>
+                    <button type="button" class="btn-micro-verify" id="btn-test-whatsapp-gateway">⚡ Ping API</button>
+                  </div>
+                </div>
+
+                <!-- WhatsApp Template Name -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">WhatsApp Approved Template Name</div>
+                    <div class="setting-row-desc">Pre-approved Meta Business template code for morning intelligence PDF briefings.</div>
+                  </div>
+                  <div class="setting-input-inline-wrap" style="width: 250px;">
+                    <input type="text" id="setting-interakt-template" placeholder="vriddhi_daily_digest_49" class="setting-mono-input">
+                  </div>
+                </div>
               </div>
-              <code>9820000000</code>
             </div>
-            <div class="setting-item">
-              <div>
-                <strong>Storage Endpoint</strong>
-                <p>Expiring signed download URLs for PDF delivery.</p>
+
+            <!-- Section 2: AI Summarization & Intelligence -->
+            <div class="settings-box-panel">
+              <div class="settings-panel-header">
+                <div class="settings-panel-icon-wrap purple">🤖</div>
+                <div>
+                  <h3 class="settings-panel-title">AI Summarization &amp; Deduplication</h3>
+                  <span class="settings-panel-sub">Google Gemini 1.5 Flash Model &amp; Near-Duplicate Intelligence</span>
+                </div>
               </div>
-              <code>Local / Google Cloud Storage</code>
-            </div>
-            <div class="setting-item">
-              <div>
-                <strong>Crawl Frequencies</strong>
-                <p>BSE/NSE: every 30m &bull; Sitemaps: every 30m &bull; Google News/GDELT: every 3h</p>
+
+              <div class="settings-panel-body">
+                <!-- Gemini API Key -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Google Gemini API Key</div>
+                    <div class="setting-row-desc">Generates institutional bullet summaries and grades impact (Grade A / B / C).</div>
+                  </div>
+                  <div class="setting-masked-credential-wrap">
+                    <input type="password" id="setting-gemini-key" placeholder="Configured in .env" class="setting-mono-input" readonly>
+                    <button type="button" class="btn-credential-toggle" id="btn-toggle-gemini-key" title="Show/Hide Key">👁️</button>
+                    <button type="button" class="btn-micro-verify" id="btn-test-gemini-api">⚡ Test AI</button>
+                  </div>
+                </div>
+
+                <!-- Deduplication Architecture -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Zero-Duplicate Cross-Publisher Engine</div>
+                    <div class="setting-row-desc">Fingerprints incoming stories via MD5 canonical URLs and token similarity to merge multi-source coverage into a single briefing item.</div>
+                  </div>
+                  <span class="setting-status-pill ok">● ACTIVE (MD5 + Jaccard)</span>
+                </div>
+
+                <!-- Classification Engine -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Intelligence Grade Thresholds</div>
+                    <div class="setting-row-desc">Grade A: High Impact / Regulatory / Earnings &bull; Grade B: Strategic &bull; Grade C: Sector Routine.</div>
+                  </div>
+                  <span class="setting-status-pill ok">● 3-Tier Classification</span>
+                </div>
               </div>
-              <span class="setting-badge">ACTIVE</span>
             </div>
+
+            <!-- Section 3: Crawl Timing & 24h Cycle -->
+            <div class="settings-box-panel">
+              <div class="settings-panel-header">
+                <div class="settings-panel-icon-wrap blue">⏱️</div>
+                <div>
+                  <h3 class="settings-panel-title">Ingestion Timings &amp; Market Cycle</h3>
+                  <span class="settings-panel-sub">Continuous 24-Hour Cycle Aligned to 8:00 AM IST Morning Briefing</span>
+                </div>
+              </div>
+
+              <div class="settings-panel-body">
+                <!-- 24h Cycle -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Market Intelligence Window</div>
+                    <div class="setting-row-desc">Strict 24-hour cutoff: news published between Yesterday 8:00 AM and Today 8:00 AM IST. Items received after 8:00 AM are queued for tomorrow.</div>
+                  </div>
+                  <span class="setting-status-pill ok">● 24h Cycle (8 AM &ndash; 8 AM)</span>
+                </div>
+
+                <!-- Polite Rate Limiting -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Host Politeness &amp; Rate Limiting</div>
+                    <div class="setting-row-desc">Per-host crawl delay to respect exchange and publisher servers.</div>
+                  </div>
+                  <span class="setting-code-badge">1.5s per domain delay</span>
+                </div>
+
+                <!-- Max Article Age -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Maximum Item Age Threshold</div>
+                    <div class="setting-row-desc">Prevents historical stories from contaminating the current day's executive brief.</div>
+                  </div>
+                  <span class="setting-code-badge">24 Hours Strict Cutoff</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 4: Database Diagnostics & Storage -->
+            <div class="settings-box-panel">
+              <div class="settings-panel-header">
+                <div class="settings-panel-icon-wrap amber">🗄️</div>
+                <div>
+                  <h3 class="settings-panel-title">Database Diagnostics &amp; Storage Engine</h3>
+                  <span class="settings-panel-sub">SQLite WAL Multi-Threaded Engine &amp; Automatic Recovery</span>
+                </div>
+              </div>
+
+              <div class="settings-panel-body">
+                <!-- Database File Stats -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">SQLite Database Footprint</div>
+                    <div class="setting-row-desc">Local high-concurrency WAL mode database file located at <code>data/crawler.db</code>.</div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="setting-status-pill ok" id="settings-db-size">-- MB</span>
+                    <span class="setting-code-badge" id="settings-db-records">-- Records</span>
+                  </div>
+                </div>
+
+                <!-- Database Maintenance -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Storage Optimization &amp; Vacuum</div>
+                    <div class="setting-row-desc">Reclaim fragmented disk pages and prune crawl run execution logs older than 50 cycles.</div>
+                  </div>
+                  <button type="button" class="btn-secondary-action" id="btn-quick-clean-db" style="padding: 6px 14px;">
+                    <span>🧹</span> Vacuum DB Now
+                  </button>
+                </div>
+
+                <!-- Backup Trigger -->
+                <div class="setting-row-item">
+                  <div class="setting-row-info">
+                    <div class="setting-row-label">Cold Storage Snapshot Backup</div>
+                    <div class="setting-row-desc">Download an instant binary snapshot of the entire research database.</div>
+                  </div>
+                  <button type="button" class="btn-secondary-action" id="btn-quick-backup-db" style="padding: 6px 14px;">
+                    <span>💾</span> Download .db
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -840,6 +1025,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=3.4"></script>
+  <script src="/static/app.js?v=3.5"></script>
 </body>
 </html>

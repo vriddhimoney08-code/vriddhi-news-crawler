@@ -158,6 +158,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (targetId === "view-sources") {
         loadSources();
       }
+      if (targetId === "view-settings") {
+        loadFullSettings();
+      }
     });
   });
 
@@ -2503,6 +2506,213 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // 12. Full System Settings & Infrastructure Controls
+  async function loadFullSettings() {
+    try {
+      const res = await fetch("/api/settings/full");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const toggleTestMode = document.getElementById("setting-toggle-testmode");
+      const deliveryLabel = document.getElementById("settings-delivery-label");
+      const testPhoneInput = document.getElementById("setting-test-phone");
+      const interaktKeyInput = document.getElementById("setting-interakt-key");
+      const interaktTemplateInput = document.getElementById("setting-interakt-template");
+      const geminiKeyInput = document.getElementById("setting-gemini-key");
+      const dbSizeEl = document.getElementById("settings-db-size");
+      const dbRecordsEl = document.getElementById("settings-db-records");
+
+      if (toggleTestMode) {
+        toggleTestMode.checked = !!data.test_mode;
+      }
+      if (deliveryLabel) {
+        deliveryLabel.textContent = data.test_mode ? "TEST MODE" : "LIVE PRODUCTION";
+        deliveryLabel.className = data.test_mode ? "setting-status-pill warn" : "setting-status-pill ok";
+      }
+      if (testPhoneInput) {
+        testPhoneInput.value = data.test_phone || "";
+      }
+      if (interaktKeyInput) {
+        interaktKeyInput.value = data.interakt_key_masked || "";
+      }
+      if (interaktTemplateInput) {
+        interaktTemplateInput.value = data.interakt_template || "vriddhi_daily_digest_49";
+      }
+      if (geminiKeyInput) {
+        geminiKeyInput.value = data.gemini_key_masked || "";
+      }
+      if (dbSizeEl) {
+        dbSizeEl.textContent = data.db_size_formatted || "2.4 MB";
+      }
+      if (dbRecordsEl && data.counts) {
+        dbRecordsEl.textContent = `${data.counts.stories || 0} Stories • ${data.counts.companies || 0} Stocks`;
+      }
+
+      isTestDeliveryMode = !!data.test_mode;
+      updateDeliveryModeUI(data.test_phone || "7900084773");
+    } catch (err) {
+      console.error("Settings fetch failed", err);
+    }
+  }
+
+  // Toggle Delivery Mode switch in Settings
+  const settingToggleTestMode = document.getElementById("setting-toggle-testmode");
+  if (settingToggleTestMode) {
+    settingToggleTestMode.addEventListener("change", async (e) => {
+      const isChecked = e.target.checked;
+      const deliveryLabel = document.getElementById("settings-delivery-label");
+      if (deliveryLabel) {
+        deliveryLabel.textContent = isChecked ? "TEST MODE" : "LIVE PRODUCTION";
+        deliveryLabel.className = isChecked ? "setting-status-pill warn" : "setting-status-pill ok";
+      }
+
+      try {
+        const res = await fetch("/api/settings/delivery-mode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ test_mode: isChecked })
+        });
+        const data = await res.json();
+        isTestDeliveryMode = !!data.test_mode;
+        showToast(isTestDeliveryMode ? "🛡️ Safety Test Mode Active" : "🟢 Live Production Delivery Active!");
+        loadDeliveryMode();
+      } catch (err) {
+        showToast("Error updating delivery mode", true);
+      }
+    });
+  }
+
+  // Save Settings Main Button
+  const btnSaveSettingsMain = document.getElementById("btn-save-settings-main");
+  if (btnSaveSettingsMain) {
+    btnSaveSettingsMain.addEventListener("click", async () => {
+      btnSaveSettingsMain.disabled = true;
+      btnSaveSettingsMain.innerHTML = `<span class="btn-icon">⏳</span> Saving...`;
+
+      const testMode = document.getElementById("setting-toggle-testmode")?.checked ?? true;
+      const testPhone = document.getElementById("setting-test-phone")?.value.trim() ?? "";
+      const interaktTemplate = document.getElementById("setting-interakt-template")?.value.trim() ?? "";
+
+      try {
+        const res = await fetch("/api/settings/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            test_mode: testMode,
+            test_phone: testPhone,
+            interakt_template: interaktTemplate,
+          })
+        });
+
+        if (res.ok) {
+          showToast("Settings updated & persistent to .env");
+          loadFullSettings();
+        } else {
+          showToast("Failed to save settings", true);
+        }
+      } catch (err) {
+        showToast("Network error saving settings", true);
+      } finally {
+        btnSaveSettingsMain.disabled = false;
+        btnSaveSettingsMain.innerHTML = `<span class="btn-icon">✓</span> Save Changes`;
+      }
+    });
+  }
+
+  // Test WhatsApp Gateway
+  const btnTestWhatsAppGateway = document.getElementById("btn-test-whatsapp-gateway");
+  if (btnTestWhatsAppGateway) {
+    btnTestWhatsAppGateway.addEventListener("click", async () => {
+      btnTestWhatsAppGateway.disabled = true;
+      btnTestWhatsAppGateway.innerHTML = `<span>⏳</span> Testing...`;
+      showToast("Pinging Interakt WhatsApp Business Gateway...");
+
+      try {
+        const res = await fetch("/api/settings/test-whatsapp", { method: "POST" });
+        const data = await res.json();
+        if (data.status === "online") {
+          showToast(`✓ ${data.message}`);
+        } else {
+          showToast(`WhatsApp Gateway: ${data.message}`, true);
+        }
+      } catch (err) {
+        showToast("WhatsApp Gateway ping timeout", true);
+      } finally {
+        btnTestWhatsAppGateway.disabled = false;
+        btnTestWhatsAppGateway.innerHTML = `⚡ Ping API`;
+      }
+    });
+  }
+
+  // Test Gemini AI Engine
+  const btnTestGeminiApi = document.getElementById("btn-test-gemini-api");
+  if (btnTestGeminiApi) {
+    btnTestGeminiApi.addEventListener("click", async () => {
+      btnTestGeminiApi.disabled = true;
+      btnTestGeminiApi.innerHTML = `<span>⏳</span> Testing...`;
+      showToast("Testing Google Gemini AI summarization engine...");
+
+      try {
+        const res = await fetch("/api/settings/test-ai", { method: "POST" });
+        const data = await res.json();
+        showToast(data.message, data.status !== "online");
+      } catch (err) {
+        showToast("AI test error or timeout", true);
+      } finally {
+        btnTestGeminiApi.disabled = false;
+        btnTestGeminiApi.innerHTML = `⚡ Test AI`;
+      }
+    });
+  }
+
+  // Backup SQLite Database
+  const triggerDbBackup = () => {
+    showToast("Downloading binary snapshot of crawler.db...");
+    window.location.href = `/api/settings/backup?t=${Date.now()}`;
+  };
+  const btnBackupSqlite = document.getElementById("btn-backup-sqlite");
+  if (btnBackupSqlite) btnBackupSqlite.addEventListener("click", triggerDbBackup);
+  const btnQuickBackupDb = document.getElementById("btn-quick-backup-db");
+  if (btnQuickBackupDb) btnQuickBackupDb.addEventListener("click", triggerDbBackup);
+
+  // Clean & Vacuum Database
+  const triggerDbClean = async () => {
+    if (!confirm("Vacuum SQLite database and prune legacy crawl runs?")) return;
+    showToast("Vacuuming database and defragmenting disk pages...");
+    try {
+      const res = await fetch("/api/settings/clean-db", { method: "POST" });
+      const data = await res.json();
+      showToast(`✓ ${data.message || 'Database vacuumed successfully'}`);
+      loadFullSettings();
+    } catch (err) {
+      showToast("Error vacuuming database", true);
+    }
+  };
+  const btnCleanSqlite = document.getElementById("btn-clean-sqlite");
+  if (btnCleanSqlite) btnCleanSqlite.addEventListener("click", triggerDbClean);
+  const btnQuickCleanDb = document.getElementById("btn-quick-clean-db");
+  if (btnQuickCleanDb) btnQuickCleanDb.addEventListener("click", triggerDbClean);
+
+  // Credential Show/Hide Toggles
+  const btnToggleInteraktKey = document.getElementById("btn-toggle-interakt-key");
+  if (btnToggleInteraktKey) {
+    btnToggleInteraktKey.addEventListener("click", () => {
+      const inp = document.getElementById("setting-interakt-key");
+      if (inp) {
+        inp.type = inp.type === "password" ? "text" : "password";
+      }
+    });
+  }
+  const btnToggleGeminiKey = document.getElementById("btn-toggle-gemini-key");
+  if (btnToggleGeminiKey) {
+    btnToggleGeminiKey.addEventListener("click", () => {
+      const inp = document.getElementById("setting-gemini-key");
+      if (inp) {
+        inp.type = inp.type === "password" ? "text" : "password";
+      }
+    });
+  }
+
   // Initial Load
   async function initDashboard() {
     loadStats();
@@ -2512,6 +2722,7 @@ document.addEventListener("DOMContentLoaded", () => {
     await loadAnalysts();
     loadSources();
     loadLogs();
+    loadFullSettings();
     initKpiDrilldowns();
   }
   initDashboard();

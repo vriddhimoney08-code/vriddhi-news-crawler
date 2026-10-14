@@ -57,6 +57,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Watchlist & Folder Elements
   const watchlistTableBody = document.getElementById("watchlist-table-body");
   const watchlistFolderTabs = document.getElementById("watchlist-folder-tabs");
+  const watchlistSearchInput = document.getElementById("watchlist-search-input");
+  const btnClearWatchlistSearch = document.getElementById("btn-clear-watchlist-search");
+  const watchlistVisibleCount = document.getElementById("watchlist-visible-count");
+  const watchlistTotalPill = document.getElementById("watchlist-total-pill");
   const btnOpenAddStock = document.getElementById("btn-open-add-stock");
   const modalAddStock = document.getElementById("modal-add-stock");
   const btnCloseStockModal = document.getElementById("btn-close-stock-modal");
@@ -66,6 +70,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const stockAnalystsCheckboxes = document.getElementById("stock-analysts-checkboxes");
   const stockFoldersCheckboxes = document.getElementById("stock-folders-checkboxes");
 
+  // Edit Stock Modal Elements
+  const modalEditStock = document.getElementById("modal-edit-stock");
+  const btnCloseEditStockModal = document.getElementById("btn-close-edit-stock-modal");
+  const btnCancelEditStockModal = document.getElementById("btn-cancel-edit-stock-modal");
+  const btnDeleteFromEditModal = document.getElementById("btn-delete-from-edit-modal");
+  const formEditStock = document.getElementById("form-edit-stock");
+  const editCompId = document.getElementById("edit-comp-id");
+  const editCompName = document.getElementById("edit-comp-name");
+  const editCompNse = document.getElementById("edit-comp-nse");
+  const editCompBse = document.getElementById("edit-comp-bse");
+  const editCompAliases = document.getElementById("edit-comp-aliases");
+  const editStockFoldersCheckboxes = document.getElementById("edit-stock-folders-checkboxes");
+  const editStockAnalystsCheckboxes = document.getElementById("edit-stock-analysts-checkboxes");
+
   const btnOpenAddFolder = document.getElementById("btn-open-add-folder");
   const modalAddFolder = document.getElementById("modal-add-folder");
   const btnCloseFolderModal = document.getElementById("btn-close-folder-modal");
@@ -74,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const inputFolderName = document.getElementById("input-folder-name");
 
   let currentWatchlistFolder = "ALL";
+  let watchlistSearchQuery = "";
   let availableFolders = ["GAME", "SET", "MATCH"];
 
   // Analysts & Sources
@@ -983,18 +1002,81 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Search Input Listeners for Watchlist
+  if (watchlistSearchInput) {
+    watchlistSearchInput.addEventListener("input", (e) => {
+      watchlistSearchQuery = (e.target.value || "").trim().toLowerCase();
+      if (btnClearWatchlistSearch) {
+        btnClearWatchlistSearch.style.display = watchlistSearchQuery ? "inline-flex" : "none";
+      }
+      renderWatchlistTable();
+    });
+  }
+
+  if (btnClearWatchlistSearch) {
+    btnClearWatchlistSearch.addEventListener("click", () => {
+      window.clearWatchlistSearch();
+    });
+  }
+
+  window.clearWatchlistSearch = () => {
+    if (watchlistSearchInput) watchlistSearchInput.value = "";
+    watchlistSearchQuery = "";
+    if (btnClearWatchlistSearch) btnClearWatchlistSearch.style.display = "none";
+    renderWatchlistTable();
+    if (watchlistSearchInput) watchlistSearchInput.focus();
+  };
+
   function renderWatchlistTable() {
     if (!watchlistTableBody) return;
 
-    const filtered = currentWatchlistFolder === "ALL"
-      ? companiesList
+    if (watchlistTotalPill) {
+      watchlistTotalPill.textContent = `${companiesList.length} Monitored Stocks`;
+    }
+
+    // 1. Filter by Basket / Folder
+    let filtered = currentWatchlistFolder === "ALL"
+      ? [...companiesList]
       : companiesList.filter(c => getCompanyFolders(c).includes(currentWatchlistFolder.toUpperCase()));
 
+    // 2. Filter by Search Query (Name, Symbol, BSE Code, or Aliases)
+    if (watchlistSearchQuery) {
+      filtered = filtered.filter(c => {
+        const name = (c.name || "").toLowerCase();
+        const nse = (c.nse_symbol || "").toLowerCase();
+        const bse = (c.bse_code || "").toLowerCase();
+        const cid = (c.id || "").toLowerCase();
+        const aliases = (c.aliases || []).map(a => String(a).toLowerCase());
+        return name.includes(watchlistSearchQuery) ||
+               nse.includes(watchlistSearchQuery) ||
+               bse.includes(watchlistSearchQuery) ||
+               cid.includes(watchlistSearchQuery) ||
+               aliases.some(a => a.includes(watchlistSearchQuery));
+      });
+    }
+
+    // Update visible count badge
+    if (watchlistVisibleCount) {
+      if (watchlistSearchQuery) {
+        watchlistVisibleCount.textContent = `Showing ${filtered.length} of ${companiesList.length} stocks (matching "${watchlistSearchQuery}")`;
+      } else if (currentWatchlistFolder !== "ALL") {
+        watchlistVisibleCount.textContent = `Showing ${filtered.length} stocks in ${currentWatchlistFolder}`;
+      } else {
+        watchlistVisibleCount.textContent = `Showing ${filtered.length} of ${companiesList.length} stocks`;
+      }
+    }
+
     if (filtered.length === 0) {
+      const msg = watchlistSearchQuery
+        ? `No stocks found matching "<strong>${watchlistSearchQuery}</strong>" in basket <strong>${currentWatchlistFolder}</strong>.`
+        : `No stocks currently in <strong>${currentWatchlistFolder}</strong> basket. Click "+ Add Stock" or assign a stock using the + Basket button!`;
+      
       watchlistTableBody.innerHTML = `
         <tr>
-          <td colspan="8" style="text-align: center; padding: 28px; color: var(--text-dim); font-style: italic;">
-            No stocks currently in <strong>${currentWatchlistFolder}</strong> basket. Click "+ Add New Stock" or assign a stock using the + Basket button!
+          <td colspan="4" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
+            <div style="font-size: 1.6rem; margin-bottom: 8px;">🔍</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary);">${msg}</div>
+            ${watchlistSearchQuery ? `<button type="button" class="btn-secondary-micro" onclick="window.clearWatchlistSearch()" style="margin-top: 14px; padding: 6px 16px; border-radius: 8px; cursor: pointer;">Clear Search</button>` : ''}
           </td>
         </tr>
       `;
@@ -1003,6 +1085,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     watchlistTableBody.innerHTML = filtered.map(c => {
       const cFolders = getCompanyFolders(c);
+      const symbol = (c.nse_symbol || c.id || "STK").toUpperCase();
 
       // Render pills for each assigned basket with dot and "x" to remove
       const pillsHtml = cFolders.map(fld => {
@@ -1037,23 +1120,50 @@ document.addEventListener("DOMContentLoaded", () => {
           const hasFolderOverlap = cFolders.some(f => aFlds.includes(f));
           return hasFolderOverlap || (a.assigned_companies || []).includes(c.id);
         })
-        .map(a => `<span class="analyst-pill">👤 ${a.name}</span>`);
+        .map(a => `<span class="analyst-pill" title="Morning brief recipient">👤 ${a.name}</span>`);
       
       const assignedDisplay = assigned.length > 0
-        ? assigned.join(" ")
-        : `<span class="badge-unassigned">Unassigned</span>`;
+        ? `<div class="analyst-pill-wrap">${assigned.join("")}</div>`
+        : `<span class="badge-unassigned" onclick="window.openEditStockModal('${c.id}')" title="Click to assign clients">+ Assign Client</span>`;
 
       return `
-        <tr>
-          <td><strong style="color:#f8fafc; font-weight:600;">${c.name}</strong></td>
-          <td>${c.nse_symbol ? `<span class="code-pill">${c.nse_symbol}</span>` : '<span class="empty-cell-dash">—</span>'}</td>
-          <td>${c.bse_code ? `<span class="code-pill" style="opacity:0.8;">${c.bse_code}</span>` : '<span class="empty-cell-dash">—</span>'}</td>
-          <td>${folderCellHtml}</td>
-          <td>${(c.aliases || []).length > 0 ? `<span style="font-size:0.75rem; color:var(--text-dim);">${c.aliases.slice(0, 2).join(", ")}</span>` : '<span class="empty-cell-dash">—</span>'}</td>
-          <td>${assignedDisplay}</td>
-          <td><span class="status-pill-active"><span class="pulse-dot"></span>ACTIVE</span></td>
+        <tr class="watchlist-row" data-stock-id="${c.id}">
+          <!-- Column 1: Asset / Company -->
           <td>
-            <button class="btn-table-del" onclick="deleteStock('${c.id}')">Delete</button>
+            <div class="asset-cell">
+              <div class="asset-symbol-chip" onclick="window.openEditStockModal('${c.id}')" title="Click to edit stock">${symbol.slice(0, 10)}</div>
+              <div class="asset-info">
+                <span class="asset-name" onclick="window.openEditStockModal('${c.id}')" title="Click to edit stock details">${c.name}</span>
+                <div class="asset-sub-meta">
+                  ${c.nse_symbol ? `<span class="exchange-tag nse">NSE: <strong>${c.nse_symbol}</strong></span>` : ''}
+                  ${c.bse_code ? `<span class="exchange-tag bse">BSE: <strong>${c.bse_code}</strong></span>` : ''}
+                  ${(c.aliases || []).length > 0 ? `<span class="aliases-hint" title="Aliases: ${c.aliases.join(', ')}">🏷️ ${c.aliases.length} aliases</span>` : ''}
+                </div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Column 2: Basket / Portfolio -->
+          <td>
+            ${folderCellHtml}
+          </td>
+
+          <!-- Column 3: Client Coverage -->
+          <td>
+            ${assignedDisplay}
+          </td>
+
+          <!-- Column 4: Actions -->
+          <td style="text-align: right;">
+            <div class="row-actions-cell">
+              <button type="button" class="btn-row-edit" onclick="window.openEditStockModal('${c.id}')" title="Edit stock tickers & coverage">
+                <span class="action-icon">✏️</span>
+                <span>Edit</span>
+              </button>
+              <button type="button" class="btn-row-del" onclick="deleteStock('${c.id}')" title="Remove stock from watchlist">
+                <span class="action-icon">🗑️</span>
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -1275,6 +1385,123 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast("Error adding company", true);
     }
   });
+
+  // Edit Stock Modal Events
+  window.openEditStockModal = (companyId) => {
+    const comp = companiesList.find(c => c.id === companyId);
+    if (!comp) return;
+
+    if (editCompId) editCompId.value = comp.id;
+    if (editCompName) editCompName.value = comp.name;
+    if (editCompNse) editCompNse.value = comp.nse_symbol || "";
+    if (editCompBse) editCompBse.value = comp.bse_code || "";
+    if (editCompAliases) editCompAliases.value = (comp.aliases || []).join(", ");
+
+    const modalTitle = document.getElementById("edit-stock-modal-title");
+    if (modalTitle) modalTitle.textContent = `Edit Stock: ${comp.name}`;
+
+    // Render Baskets
+    const cFolders = getCompanyFolders(comp);
+    if (editStockFoldersCheckboxes) {
+      if (!availableFolders.length) {
+        editStockFoldersCheckboxes.innerHTML = `<span style="font-size:0.75rem; color:var(--text-dim); padding:4px;">No folders available.</span>`;
+      } else {
+        editStockFoldersCheckboxes.innerHTML = availableFolders.map(f => {
+          const isChecked = cFolders.includes(f.toUpperCase()) ? 'checked' : '';
+          const tagClass = getFolderClass(f);
+          return `
+            <label class="folder-checkbox-tag">
+              <input type="checkbox" name="edit_stock_folder" value="${f}" ${isChecked}>
+              <span class="folder-tag ${tagClass}" style="margin:0;">${f}</span>
+            </label>
+          `;
+        }).join("");
+      }
+    }
+
+    // Render Analyst Coverage Checkboxes
+    if (editStockAnalystsCheckboxes) {
+      if (!analystsList.length) {
+        editStockAnalystsCheckboxes.innerHTML = `<span style="font-size:0.75rem; color:var(--text-dim); padding:4px;">No analysts registered.</span>`;
+      } else {
+        editStockAnalystsCheckboxes.innerHTML = analystsList.map(a => {
+          const isAssigned = (a.assigned_companies || []).includes(comp.id);
+          return `
+            <label class="checkbox-item" style="padding: 4px 6px;">
+              <input type="checkbox" name="edit_stock_assigned_analyst" value="${a.id}" ${isAssigned ? 'checked' : ''}>
+              <span><strong>${a.name}</strong> <span style="color:var(--text-dim); font-size:0.72rem;">(+91 ${a.phone})</span></span>
+            </label>
+          `;
+        }).join("");
+      }
+    }
+
+    if (modalEditStock) modalEditStock.classList.add("open");
+  };
+
+  if (btnCloseEditStockModal) {
+    btnCloseEditStockModal.addEventListener("click", () => modalEditStock.classList.remove("open"));
+  }
+  if (btnCancelEditStockModal) {
+    btnCancelEditStockModal.addEventListener("click", () => modalEditStock.classList.remove("open"));
+  }
+
+  if (btnDeleteFromEditModal) {
+    btnDeleteFromEditModal.addEventListener("click", async () => {
+      const cid = editCompId.value;
+      if (!cid) return;
+      modalEditStock.classList.remove("open");
+      await window.deleteStock(cid);
+    });
+  }
+
+  if (formEditStock) {
+    formEditStock.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = editCompId.value;
+      const name = editCompName.value.trim();
+      const nse = editCompNse.value.trim().toUpperCase();
+      const bse = editCompBse.value.trim();
+      const aliases = editCompAliases.value.split(",").map(s => s.trim()).filter(Boolean);
+
+      const checkedFolderBoxes = document.querySelectorAll('input[name="edit_stock_folder"]:checked');
+      const folders = Array.from(checkedFolderBoxes).map(cb => cb.value.trim().toUpperCase()).filter(Boolean);
+
+      const checkedAnalystBoxes = document.querySelectorAll('input[name="edit_stock_assigned_analyst"]:checked');
+      const assignedAnalystIds = Array.from(checkedAnalystBoxes).map(cb => cb.value);
+
+      const payload = {
+        id,
+        name,
+        nse_symbol: nse,
+        bse_code: bse,
+        aliases,
+        search_queries: [`"${name}"`],
+        folder: folders.join(", "),
+        folders,
+        assigned_analyst_ids: assignedAnalystIds
+      };
+
+      try {
+        const res = await fetch("/api/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          showToast(`Updated ${name} successfully!`);
+          modalEditStock.classList.remove("open");
+          await loadAnalysts();
+          await loadWatchlist();
+          loadStats();
+        } else {
+          showToast("Error updating stock", true);
+        }
+      } catch (err) {
+        showToast("Network error updating stock", true);
+      }
+    });
+  }
 
   // 11. Sources Feeds
   async function loadSources() {

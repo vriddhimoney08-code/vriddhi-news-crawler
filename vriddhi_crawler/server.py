@@ -110,7 +110,7 @@ class CompanyCreate(BaseModel):
     analyst_names: list[str] = []
     folder: str = ""
     folders: list[str] = []
-    assigned_analyst_ids: list[str] = []
+    assigned_analyst_ids: list[str] | None = None
 
 
 class CompanyFolderUpdate(BaseModel):
@@ -142,15 +142,22 @@ def add_watchlist_company(item: CompanyCreate):
     )
     save_company(comp)
 
-    # Manual assignment to selected analysts (only if explicitly checked by user)
-    if item.assigned_analyst_ids:
-        all_analysts = {a.id: a for a in get_analysts()}
-        for aid in item.assigned_analyst_ids:
-            if aid in all_analysts:
-                an = all_analysts[aid]
+    # Sync manual analyst assignment (if provided)
+    if item.assigned_analyst_ids is not None:
+        all_analysts = get_analysts()
+        target_aids = set(item.assigned_analyst_ids)
+        for an in all_analysts:
+            changed = False
+            if an.id in target_aids:
                 if comp.id not in an.assigned_companies:
                     an.assigned_companies.append(comp.id)
-                    save_analyst(an)
+                    changed = True
+            else:
+                if comp.id in an.assigned_companies:
+                    an.assigned_companies.remove(comp.id)
+                    changed = True
+            if changed:
+                save_analyst(an)
 
     return {"status": "ok", "company": asdict(comp)}
 

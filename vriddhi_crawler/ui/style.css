@@ -1317,17 +1317,135 @@ body.dark-theme {
 }
 
 /* Folder Tabs Bar */
+/* Watchlist Controls Panel (Search & Tabs) */
+.watchlist-controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: rgba(13, 19, 34, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 4px;
+}
+
+.watchlist-search-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.watchlist-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 14px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.watchlist-search-wrap input {
+  width: 100%;
+  background: rgba(8, 12, 22, 0.75);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 10px 38px 10px 40px;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.watchlist-search-wrap input:focus {
+  border-color: var(--indigo);
+  background: rgba(10, 15, 28, 0.95);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.search-clear-btn:hover {
+  color: #ffffff;
+}
+
+.visible-count-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* Header Count Pill */
+.header-count-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 20px;
+  letter-spacing: 0.2px;
+}
+
+/* Primary Add Button */
+.btn-primary-add {
+  background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary-add:hover {
+  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Folder Tabs Navigation */
 .watchlist-folder-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
 }
 
 .folder-tabs-list {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .folder-tab-btn {
@@ -1340,15 +1458,17 @@ body.dark-theme {
   font-family: var(--font-sans);
   font-size: 0.82rem;
   font-weight: 600;
-  padding: 8px 16px;
+  padding: 7px 16px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.18s ease;
+  white-space: nowrap;
 }
 
 .folder-tab-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .folder-tab-btn.active {
@@ -1358,11 +1478,12 @@ body.dark-theme {
   box-shadow: var(--shadow-glow-indigo);
 }
 
-.folder-tab-badge {
-  font-size: 0.7rem;
-  background: rgba(0, 0, 0, 0.25);
-  padding: 2px 7px;
+.folder-tab-count {
+  font-size: 0.72rem;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 7px;
   border-radius: 10px;
+  font-weight: 700;
 }
 
 /* Tables */
@@ -1409,6 +1530,253 @@ body.dark-theme {
 
 .terminal-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Modern Watchlist Table & Cells */
+.modern-watchlist-table th {
+  background: rgba(10, 15, 28, 0.9);
+}
+
+.watchlist-row:hover {
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+/* Column 1: Asset Cell */
+.asset-cell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.asset-symbol-chip {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(30, 41, 59, 0.6) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #c7d2fe;
+  letter-spacing: -0.2px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px;
+}
+
+.asset-symbol-chip:hover {
+  border-color: var(--indigo);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(30, 41, 59, 0.8) 100%);
+  transform: scale(1.05);
+}
+
+.asset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.asset-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.asset-name:hover {
+  color: #818cf8;
+}
+
+.asset-sub-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exchange-tag {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  padding: 1px 7px;
+  border-radius: var(--radius-xs);
+}
+
+.exchange-tag strong {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.exchange-tag.bse strong {
+  color: #94a3b8;
+}
+
+.aliases-hint {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  cursor: help;
+}
+
+/* Column 2: Multi-Basket Cell */
+.multi-basket-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.folder-pill-removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  transition: all 0.15s ease;
+}
+
+.pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.tag-remove-x {
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0 1px;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.tag-remove-x:hover {
+  opacity: 1;
+  color: #f43f5e;
+}
+
+.btn-add-basket-trigger {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--border-default);
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-add-basket-trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Column 3: Analyst Coverage */
+.analyst-pill-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.analyst-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  color: #c7d2fe;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.badge-unassigned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.badge-unassigned:hover {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #ffffff;
+}
+
+/* Column 4: Row Actions */
+.row-actions-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-row-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-row-edit:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: var(--indigo);
+  color: #ffffff;
+}
+
+.btn-row-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(244, 63, 94, 0.06);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #fda4af;
+  width: 28px;
+  height: 28px;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-row-del:hover {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: var(--rose);
+  color: #ffffff;
 }
 
 /* Folder Tags */
@@ -1771,4 +2139,72 @@ body.dark-theme {
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 12px;
+}
+
+/* Modal Collapsible & Checkbox Chips */
+.modal-collapsible-details {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+
+.modal-collapsible-details summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.modal-collapsible-details summary:hover {
+  color: var(--indigo);
+}
+
+.modal-collapsible-details[open] summary {
+  color: #c7d2fe;
+  margin-bottom: 8px;
+}
+
+.checkbox-scroll-box {
+  background: rgba(10, 15, 26, 0.6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checkbox-scroll-box label.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  transition: background 0.15s ease;
+}
+
+.checkbox-scroll-box label.checkbox-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.folder-checkbox-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.15s ease;
+}
+
+.folder-checkbox-tag:hover {
+  border-color: rgba(255, 255, 255, 0.2);
 }

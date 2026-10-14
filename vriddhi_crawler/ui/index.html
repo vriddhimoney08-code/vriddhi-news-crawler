@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.5">
+  <link rel="stylesheet" href="/static/style.css?v=3.0">
 </head>
 <body class="dark-theme">
 
@@ -295,36 +295,58 @@
 
         <!-- VIEW 2: WATCHLIST -->
         <section id="view-watchlist" class="workspace-view">
+          
+          <!-- View Header & Primary Actions -->
           <div class="view-header-bar">
             <div class="view-header-title-wrap">
-              <h2>Watchlist Manager</h2>
-              <span class="view-header-sub">Organize stock baskets into folders &amp; manually assign client coverage</span>
+              <div class="view-title-row">
+                <h2>Portfolio &amp; Watchlist Desk</h2>
+                <span id="watchlist-total-pill" class="header-count-pill">-- Stocks</span>
+              </div>
+              <span class="view-header-sub">Manage monitored assets, organize custom baskets, and assign client briefings</span>
             </div>
             <div class="view-header-actions">
-              <button id="btn-open-add-folder" class="terminal-action-btn btn-secondary-micro">+ New Folder</button>
-              <button id="btn-open-add-stock" class="terminal-action-btn">+ Add New Stock</button>
+              <button id="btn-open-add-folder" class="terminal-action-btn btn-secondary-micro" title="Create a new basket">
+                <span class="btn-icon">📁</span>
+                <span>+ New Basket</span>
+              </button>
+              <button id="btn-open-add-stock" class="terminal-action-btn btn-primary-add" title="Add new company to watchlist">
+                <span class="btn-icon">➕</span>
+                <span>Add Stock</span>
+              </button>
             </div>
           </div>
 
-          <!-- Watchlist Folder Tabs Navigation -->
-          <div class="watchlist-folder-bar">
-            <div class="folder-tabs-list" id="watchlist-folder-tabs">
-              <!-- Populated dynamically via JS: ALL, GAME, SET, MATCH, etc. -->
+          <!-- Watchlist Controls: Live Search & Folder Tabs -->
+          <div class="watchlist-controls-panel">
+            <div class="watchlist-search-row">
+              <div class="watchlist-search-wrap">
+                <span class="search-input-icon">🔍</span>
+                <input type="text" id="watchlist-search-input" placeholder="Search by company name, NSE symbol (e.g. BEL, RELIANCE), or BSE code..." autocomplete="off">
+                <button type="button" id="btn-clear-watchlist-search" class="search-clear-btn" style="display: none;" title="Clear search">&times;</button>
+              </div>
+              <div class="watchlist-filter-stats">
+                <span id="watchlist-visible-count" class="visible-count-badge">Showing -- stocks</span>
+              </div>
+            </div>
+
+            <!-- Watchlist Basket Filter Tabs -->
+            <div class="watchlist-folder-bar">
+              <div class="folder-tabs-list" id="watchlist-folder-tabs">
+                <!-- Populated dynamically via JS: ALL, GAME, SET, MATCH, etc. -->
+              </div>
             </div>
           </div>
 
-          <div class="table-container">
-            <table class="terminal-table">
+          <!-- Consolidated 4-Column Executive Table -->
+          <div class="table-container watchlist-table-container">
+            <table class="terminal-table modern-watchlist-table">
               <thead>
                 <tr>
-                  <th>Company Name</th>
-                  <th>NSE Symbol</th>
-                  <th>BSE Code</th>
-                  <th>Folder / Basket</th>
-                  <th>Aliases &amp; Brands</th>
-                  <th>Assigned Analysts</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  <th style="width: 38%;">Asset / Company</th>
+                  <th style="width: 25%;">Basket / Portfolio</th>
+                  <th style="width: 23%;">Client Coverage</th>
+                  <th style="width: 14%; text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="watchlist-table-body">
@@ -346,7 +368,7 @@
               <!-- Populated dynamically via JS -->
             </div>
             <div class="basket-popover-footer">
-              <button type="button" class="btn-popover-new-folder" id="btn-popover-new-folder">+ New Folder</button>
+              <button type="button" class="btn-popover-new-folder" id="btn-popover-new-folder">+ New Basket</button>
             </div>
           </div>
         </section>
@@ -447,7 +469,10 @@
     <div id="modal-add-stock" class="terminal-modal">
       <div class="modal-content">
         <div class="modal-top">
-          <h3>Add Stock to Watchlist</h3>
+          <div>
+            <h3>Add Stock to Watchlist</h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">Add new company to intelligence tracking</span>
+          </div>
           <button id="btn-close-stock-modal" class="modal-x">&times;</button>
         </div>
         <form id="form-add-stock" class="modal-form">
@@ -466,24 +491,85 @@
             </div>
           </div>
           <div class="input-block">
-            <label>Assign to Baskets / Folders (Select one or multiple)</label>
+            <label>Assign to Baskets / Portfolios</label>
             <div id="stock-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 110px; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; background: rgba(15,23,42,0.6); border: 1px solid var(--border-color); border-radius: 8px;">
               <!-- Populated dynamically via JS: checkboxes for GAME, SET, MATCH, etc. -->
             </div>
           </div>
           <div class="input-block">
-            <label>Aliases &amp; Brands (comma-separated)</label>
-            <input type="text" id="input-comp-aliases" placeholder="e.g. BEL, Bharat Electronics">
-          </div>
-          <div class="input-block">
-            <label>Manually Assign to Analysts / Clients (Optional)</label>
-            <div id="stock-analysts-checkboxes" class="checkbox-scroll-box" style="max-height: 110px;">
+            <label>Client Coverage (Who gets this stock in morning WhatsApp briefing?)</label>
+            <div id="stock-analysts-checkboxes" class="checkbox-scroll-box" style="max-height: 120px;">
               <!-- Populated dynamically via JS: checkboxes for analysts -->
             </div>
           </div>
+          <details class="modal-collapsible-details">
+            <summary style="cursor: pointer; font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">+ Advanced: Aliases &amp; Brand Keywords</summary>
+            <div class="input-block" style="margin-top: 10px;">
+              <label>Aliases &amp; Brands (comma-separated)</label>
+              <input type="text" id="input-comp-aliases" placeholder="e.g. BEL, Bharat Electronics, Defence PSU">
+            </div>
+          </details>
           <div class="modal-bottom">
             <button type="button" id="btn-cancel-stock-modal" class="btn-cancel">Cancel</button>
             <button type="submit" class="terminal-action-btn">Save to Watchlist</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal for Editing Stock -->
+    <div id="modal-edit-stock" class="terminal-modal">
+      <div class="modal-content">
+        <div class="modal-top">
+          <div>
+            <h3 id="edit-stock-modal-title">Edit Stock Details</h3>
+            <span id="edit-stock-modal-subtitle" style="font-size: 0.76rem; color: var(--text-muted);">Update tickers, basket assignments &amp; client coverage</span>
+          </div>
+          <button id="btn-close-edit-stock-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-edit-stock" class="modal-form">
+          <input type="hidden" id="edit-comp-id" value="">
+          <div class="input-block">
+            <label>Company Name *</label>
+            <input type="text" id="edit-comp-name" required placeholder="e.g. Bharat Electronics Ltd">
+          </div>
+          <div class="input-row">
+            <div class="input-block">
+              <label>NSE Symbol</label>
+              <input type="text" id="edit-comp-nse" placeholder="e.g. BEL">
+            </div>
+            <div class="input-block">
+              <label>BSE Code</label>
+              <input type="text" id="edit-comp-bse" placeholder="e.g. 500049">
+            </div>
+          </div>
+          <div class="input-block">
+            <label>Assign to Baskets / Portfolios</label>
+            <div id="edit-stock-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 110px; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; background: rgba(15,23,42,0.6); border: 1px solid var(--border-color); border-radius: 8px;">
+              <!-- Populated dynamically via JS -->
+            </div>
+          </div>
+          <div class="input-block">
+            <label>Client Coverage (Who gets this stock in morning WhatsApp briefing?)</label>
+            <div id="edit-stock-analysts-checkboxes" class="checkbox-scroll-box" style="max-height: 120px;">
+              <!-- Populated dynamically via JS -->
+            </div>
+          </div>
+          <details class="modal-collapsible-details">
+            <summary style="cursor: pointer; font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">+ Advanced: Aliases &amp; Brand Keywords</summary>
+            <div class="input-block" style="margin-top: 10px;">
+              <label>Aliases &amp; Brands (comma-separated)</label>
+              <input type="text" id="edit-comp-aliases" placeholder="e.g. BEL, Bharat Electronics">
+            </div>
+          </details>
+          <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" id="btn-delete-from-edit-modal" class="btn-cancel" style="background: rgba(244, 63, 94, 0.12); color: #fb7185; border-color: rgba(244, 63, 94, 0.3);">
+              🗑️ Delete Stock
+            </button>
+            <div style="display: flex; gap: 10px;">
+              <button type="button" id="btn-cancel-edit-stock-modal" class="btn-cancel">Cancel</button>
+              <button type="submit" class="terminal-action-btn">Save Changes</button>
+            </div>
           </div>
         </form>
       </div>
@@ -577,6 +663,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=2.5"></script>
+  <script src="/static/app.js?v=3.0"></script>
 </body>
 </html>

@@ -49,10 +49,22 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedAnalystIds = new Set();
   let isTestDeliveryMode = true;
 
-  // Full Digest Tab
+  // Full Digest Tab Elements
   const digestViewAnalystSelect = document.getElementById("digest-view-analyst-select");
   const fullDigestIframe = document.getElementById("full-digest-iframe");
   const btnReloadDigestFrame = document.getElementById("btn-reload-digest-frame");
+  const btnDownloadDigestPdf = document.getElementById("btn-download-digest-pdf");
+  const btnOpenDigestTab = document.getElementById("btn-open-digest-tab");
+  const btnSendSingleWhatsapp = document.getElementById("btn-send-single-whatsapp");
+  const btnPrevDigestClient = document.getElementById("btn-prev-digest-client");
+  const btnNextDigestClient = document.getElementById("btn-next-digest-client");
+  const digestClientPhone = document.getElementById("digest-client-phone");
+  const digestClientBaskets = document.getElementById("digest-client-baskets");
+  const digestStoriesCount = document.getElementById("digest-stories-count");
+  const digestFilingsCount = document.getElementById("digest-filings-count");
+  const digestSelectedAvatar = document.getElementById("digest-selected-avatar");
+  const digestFrameLoader = document.getElementById("digest-frame-loader");
+  const digestFrameContainer = document.getElementById("digest-frame-container");
 
   // Watchlist & Folder Elements
   const watchlistTableBody = document.getElementById("watchlist-table-body");
@@ -908,12 +920,139 @@ document.addEventListener("DOMContentLoaded", () => {
     btnSendToAll.innerHTML = `<span class="btn-icon">&#128640;</span><span>Send to All Analysts</span>`;
   });
 
-  // 8. Full Digest Iframe
-  function loadFullDigestFrame() {
-    digestViewAnalystSelect.value = currentAnalystId;
-    fullDigestIframe.src = `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+  // 8. Full Daily Digest Desk & Interactive Workstation
+  async function loadFullDigestFrame() {
+    if (!digestViewAnalystSelect) return;
+
+    if (digestViewAnalystSelect.value !== currentAnalystId) {
+      digestViewAnalystSelect.value = currentAnalystId;
+    }
+
+    if (digestFrameLoader) digestFrameLoader.style.display = "flex";
+
+    if (fullDigestIframe) {
+      fullDigestIframe.onload = () => {
+        if (digestFrameLoader) digestFrameLoader.style.display = "none";
+      };
+      fullDigestIframe.src = `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+    }
+
+    try {
+      const res = await fetch(`/api/digest/meta/${currentAnalystId}`);
+      if (res.ok) {
+        const meta = await res.json();
+
+        if (digestClientPhone) {
+          digestClientPhone.textContent = meta.phone ? (meta.phone.startsWith("+") ? meta.phone : `+91 ${meta.phone}`) : "No Phone";
+        }
+
+        if (digestClientBaskets) {
+          const baskets = meta.assigned_folders && meta.assigned_folders.length > 0
+            ? meta.assigned_folders.join(", ")
+            : "All Stocks";
+          digestClientBaskets.textContent = baskets;
+        }
+
+        if (digestStoriesCount) {
+          digestStoriesCount.textContent = `${meta.total_stories || 0} Stories`;
+        }
+
+        if (digestFilingsCount) {
+          digestFilingsCount.textContent = `${meta.total_filings || 0} Filings`;
+        }
+
+        if (digestSelectedAvatar) {
+          const firstChar = (meta.name || "C").charAt(0).toUpperCase();
+          digestSelectedAvatar.textContent = firstChar;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch digest meta", err);
+    }
   }
-  btnReloadDigestFrame.addEventListener("click", loadFullDigestFrame);
+
+  if (btnReloadDigestFrame) {
+    btnReloadDigestFrame.addEventListener("click", () => {
+      showToast("Recompiling fresh daily briefing preview...");
+      loadFullDigestFrame();
+    });
+  }
+
+  if (btnDownloadDigestPdf) {
+    btnDownloadDigestPdf.addEventListener("click", () => {
+      showToast("Generating and downloading high-definition PDF...");
+      window.location.href = `/api/digest/download/${currentAnalystId}?t=${Date.now()}`;
+    });
+  }
+
+  if (btnOpenDigestTab) {
+    btnOpenDigestTab.addEventListener("click", () => {
+      window.open(`/api/digest/preview/${currentAnalystId}?t=${Date.now()}`, "_blank");
+    });
+  }
+
+  if (btnSendSingleWhatsapp) {
+    btnSendSingleWhatsapp.addEventListener("click", async () => {
+      btnSendSingleWhatsapp.disabled = true;
+      btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">⏳</span> Sending...`;
+      showToast(`Dispatching 8:00 AM briefing to client...`);
+
+      try {
+        const res = await fetch(`/api/digest/simulate-send/${currentAnalystId}`, { method: "POST" });
+        const data = await res.json();
+        if (data.status === "no_op") {
+          showToast(data.message || "No unsent stories for this client.", false);
+        } else {
+          showToast(`Briefing dispatched: ${data.message || 'Sent successfully'}`);
+          loadStats();
+          loadFullDigestFrame();
+          loadAnalystStoriesPreview(currentAnalystId);
+        }
+      } catch (err) {
+        showToast("Error sending briefing to client", true);
+      } finally {
+        btnSendSingleWhatsapp.disabled = false;
+        btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">🚀</span> Send Brief`;
+      }
+    });
+  }
+
+  if (btnPrevDigestClient) {
+    btnPrevDigestClient.addEventListener("click", () => {
+      if (!digestViewAnalystSelect || digestViewAnalystSelect.options.length <= 1) return;
+      let idx = digestViewAnalystSelect.selectedIndex - 1;
+      if (idx < 0) idx = digestViewAnalystSelect.options.length - 1;
+      digestViewAnalystSelect.selectedIndex = idx;
+      currentAnalystId = digestViewAnalystSelect.value;
+      loadFullDigestFrame();
+    });
+  }
+
+  if (btnNextDigestClient) {
+    btnNextDigestClient.addEventListener("click", () => {
+      if (!digestViewAnalystSelect || digestViewAnalystSelect.options.length <= 1) return;
+      let idx = digestViewAnalystSelect.selectedIndex + 1;
+      if (idx >= digestViewAnalystSelect.options.length) idx = 0;
+      digestViewAnalystSelect.selectedIndex = idx;
+      currentAnalystId = digestViewAnalystSelect.value;
+      loadFullDigestFrame();
+    });
+  }
+
+  document.querySelectorAll(".viewmode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".viewmode-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const mode = btn.dataset.mode;
+      if (digestFrameContainer) {
+        if (mode === "mobile") {
+          digestFrameContainer.classList.add("mobile-mode");
+        } else {
+          digestFrameContainer.classList.remove("mobile-mode");
+        }
+      }
+    });
+  });
 
   // 9. Live Crawler Logs
   async function loadLogs() {

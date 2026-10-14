@@ -414,6 +414,58 @@ def serve_digest_file(filename: str):
     )
 
 
+@app.get("/api/digest/download/{analyst_id}")
+def download_digest_pdf(analyst_id: str):
+    """Generate on demand and return high-definition PDF download for requested analyst."""
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    stories = get_unsent_stories_for_analyst(analyst_id)
+    file_path, _ = generate_analyst_digest(analyst.id, analyst.name, stories)
+
+    media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "text/html"
+    today_str = datetime.now().strftime("%Y%m%d")
+    clean_name = "".join(c for c in analyst.name if c.isalnum() or c in (" ", "_")).replace(" ", "_")
+    download_filename = f"Vriddhi_Market_Digest_{clean_name}_{today_str}{file_path.suffix}"
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=download_filename,
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_filename}"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        }
+    )
+
+
+@app.get("/api/digest/meta/{analyst_id}")
+def get_digest_meta(analyst_id: str):
+    """Provide real-time intelligence summary metrics for the selected client's daily briefing."""
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    stories = get_unsent_stories_for_analyst(analyst_id)
+    filings = sum(1 for s in stories if s.get("filing_id") or (s.get("source_type") or "").lower() == "filing")
+    grade_a = sum(1 for s in stories if (s.get("grade") or "").upper().startswith("GRADE A"))
+
+    return {
+        "analyst_id": analyst.id,
+        "name": analyst.name,
+        "phone": analyst.phone,
+        "email": analyst.email,
+        "assigned_folders": getattr(analyst, "assigned_folders", []),
+        "assigned_companies": getattr(analyst, "assigned_companies", []),
+        "total_stories": len(stories),
+        "total_filings": filings,
+        "grade_a_count": grade_a,
+    }
+
+
 @app.post("/api/digest/simulate-send/{analyst_id}")
 def simulate_send_digest(analyst_id: str):
     """Dispatch 8:00 AM morning digest: generate PDF/HTML, send via Interakt WhatsApp, update sent ledger."""

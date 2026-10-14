@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=3.3">
+  <link rel="stylesheet" href="/static/style.css?v=3.4">
 </head>
 <body class="dark-theme">
 
@@ -488,17 +488,90 @@
 
         <!-- VIEW 5: DAILY DIGEST -->
         <section id="view-digest" class="workspace-view">
-          <div class="view-header-bar">
-            <h2>Interactive Daily Digest Viewer</h2>
-            <div class="digest-view-actions">
-              <select id="digest-view-analyst-select" class="terminal-select">
-                <!-- Populated via JS -->
-              </select>
-              <button id="btn-reload-digest-frame" class="terminal-action-btn">&#8635; Reload</button>
+          
+          <!-- Executive Digest Top Bar -->
+          <div class="view-header-bar digest-topbar-custom" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+              <div class="view-title-tag">EXECUTIVE INTELLIGENCE BRIEF</div>
+              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">Interactive Daily Digest Desk</h2>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">24-Hour market intelligence compilation (8:00 AM &ndash; 8:00 AM IST) custom-formatted for client reading and automated WhatsApp delivery.</p>
+            </div>
+            
+            <!-- Quick Actions: Download, Print, Dispatch, Reload -->
+            <div class="digest-header-actions" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <button id="btn-download-digest-pdf" class="btn-secondary-action" title="Download High-Definition PDF">
+                <span class="btn-icon">📥</span> Download PDF
+              </button>
+              <button id="btn-open-digest-tab" class="btn-secondary-action" title="Open Full Document in New Tab">
+                <span class="btn-icon">↗</span> Open Tab
+              </button>
+              <button id="btn-send-single-whatsapp" class="terminal-action-btn" title="Simulate 8:00 AM WhatsApp Dispatch for this Client">
+                <span class="btn-icon">🚀</span> Send Brief
+              </button>
+              <button id="btn-reload-digest-frame" class="btn-secondary-action" title="Reload Fresh Digest Preview">
+                <span class="btn-icon">&#8635;</span> Reload
+              </button>
             </div>
           </div>
-          <div class="iframe-container">
-            <iframe id="full-digest-iframe" src="about:blank"></iframe>
+
+          <!-- Recipient Selector Strip + 24h Intelligence Metadata -->
+          <div class="digest-client-strip">
+            <div class="digest-client-selector-group">
+              <button id="btn-prev-digest-client" class="digest-nav-arrow-btn" title="Previous Client">&#10094;</button>
+              
+              <div class="digest-client-dropdown-wrap">
+                <span class="client-avatar-micro" id="digest-selected-avatar">👤</span>
+                <select id="digest-view-analyst-select" class="digest-select-modern">
+                  <!-- Populated via JS -->
+                </select>
+              </div>
+
+              <button id="btn-next-digest-client" class="digest-nav-arrow-btn" title="Next Client">&#10095;</button>
+            </div>
+
+            <!-- Client Coverage Metadata Badges -->
+            <div class="digest-metadata-pills">
+              <div class="digest-meta-pill" id="digest-phone-pill" title="Verified WhatsApp Dispatch Destination">
+                <span style="color: var(--accent-emerald);">📱</span>
+                <span id="digest-client-phone">+91 --</span>
+              </div>
+              <div class="digest-meta-pill" id="digest-baskets-pill" title="Assigned Portfolio Baskets">
+                <span style="color: var(--accent-indigo);">💼</span>
+                <span id="digest-client-baskets">All Baskets</span>
+              </div>
+              <div class="digest-meta-pill" id="digest-stories-count-pill" title="Stories in 24h Window (8:00 AM to 8:00 AM)">
+                <span style="color: #38bdf8;">📰</span>
+                <span id="digest-stories-count">0 Stories</span>
+              </div>
+              <div class="digest-meta-pill" id="digest-filings-count-pill" title="Exchange Filings (BSE / NSE)">
+                <span style="color: #fbbf24;">🏛️</span>
+                <span id="digest-filings-count">0 Filings</span>
+              </div>
+            </div>
+
+            <!-- View Mode Switcher: Desktop vs Mobile -->
+            <div class="digest-viewmode-toggle">
+              <button class="viewmode-btn active" data-mode="desktop" title="Full Width Desktop View">
+                <span>💻 Desktop</span>
+              </button>
+              <button class="viewmode-btn" data-mode="mobile" title="Mobile Smartphone View">
+                <span>📱 Phone</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Document Canvas Wrapper -->
+          <div class="digest-canvas-wrapper" id="digest-canvas-wrapper">
+            <!-- Loading Indicator Overlay -->
+            <div id="digest-frame-loader" class="digest-frame-loader" style="display: none;">
+              <span class="spinner-dot"></span>
+              <span>Compiling live market digest...</span>
+            </div>
+
+            <!-- Embedded Digest Frame -->
+            <div class="digest-frame-container" id="digest-frame-container">
+              <iframe id="full-digest-iframe" src="about:blank" title="Vriddhi Market Intelligence Digest"></iframe>
+            </div>
           </div>
         </section>
 
@@ -767,6 +840,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=3.3"></script>
+  <script src="/static/app.js?v=3.4"></script>
 </body>
 </html>

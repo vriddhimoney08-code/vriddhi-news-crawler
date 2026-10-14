@@ -61,41 +61,24 @@ def build_highlights_text(stories: list[dict[str, Any]]) -> str:
 
 
 def upload_pdf_to_cdn(pdf_path: Path | None) -> str | None:
-    """Upload research scorecard PDF to a fast public CDN preserving the exact [Client]_[Date].pdf filename."""
+    """Upload research scorecard PDF to a fast public CDN returning a direct application/pdf binary stream."""
     if not pdf_path or not Path(pdf_path).exists() or Path(pdf_path).suffix.lower() != ".pdf":
         return None
     try:
         import requests
         fname = Path(pdf_path).name
-        # 1. Try tmpfiles.org first: preserves the exact filename in the URL for WhatsApp
-        with open(pdf_path, "rb") as f:
-            res = requests.post(
-                "https://tmpfiles.org/api/v1/upload",
-                files={"file": (fname, f, "application/pdf")},
-                timeout=20,
-            )
-        if res.status_code == 200:
-            data = res.json()
-            raw_url = data.get("data", {}).get("url", "")
-            if raw_url:
-                direct_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-                log.info("Uploaded research scorecard PDF to CDN with preserved filename: %s", direct_url)
-                return direct_url
-    except Exception as e:
-        log.warning("tmpfiles upload failed (%s); trying fallback CDN...", e)
-
-    try:
-        import requests
+        # Direct application/pdf binary stream upload via Catbox CDN
         with open(pdf_path, "rb") as f:
             res = requests.post(
                 "https://catbox.moe/user/api.php",
                 data={"reqtype": "fileupload"},
-                files={"fileToUpload": (Path(pdf_path).name, f, "application/pdf")},
-                timeout=25,
+                files={"fileToUpload": (fname, f, "application/pdf")},
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+                timeout=30,
             )
         if res.status_code == 200 and res.text.strip().startswith("http"):
             cdn_url = res.text.strip()
-            log.info("Uploaded research scorecard PDF to fallback CDN: %s", cdn_url)
+            log.info("Uploaded direct binary PDF to Catbox CDN: %s", cdn_url)
             return cdn_url
     except Exception as e:
         log.warning("Could not upload PDF to CDN (%s); falling back to default media URL", e)
@@ -202,20 +185,26 @@ def send_whatsapp_digest(
         if alt not in candidates:
             candidates.append(alt)
 
+    pdf_filename = Path(pdf_path).name if pdf_path else f"{first_name}_{today_str}.pdf"
+
     last_error_code = 400
     last_error_body = ""
 
     for candidate in candidates:
+        template_obj: dict[str, Any] = {
+            "name": candidate,
+            "languageCode": lang,
+            "headerValues": header_values,
+            "bodyValues": body_values,
+        }
+        if doc_header and pdf_filename:
+            template_obj["fileName"] = pdf_filename
+
         payload = {
             "countryCode": country_code,
             "phoneNumber": clean_phone,
             "type": "Template",
-            "template": {
-                "name": candidate,
-                "languageCode": lang,
-                "headerValues": header_values,
-                "bodyValues": body_values,
-            },
+            "template": template_obj,
         }
 
         req = urllib.request.Request(
@@ -245,6 +234,36 @@ def send_whatsapp_digest(
             last_error_code = e.code
             last_error_body = e.read().decode("utf-8", errors="replace")
             log.warning("Interakt candidate '%s' HTTP %s: %s", candidate, e.code, last_error_body)
+
+            # If rejected because of fileName property, retry candidate without fileName
+            if "fileName" in last_error_body and "fileName" in template_obj:
+                try:
+                    template_obj.pop("fileName", None)
+                    payload["template"] = template_obj
+                    req_retry = urllib.request.Request(
+                        url="https://api.interakt.ai/v1/public/message/",
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Basic {auth_b64}",
+                            "User-Agent": "VriddhiCrawler/1.0",
+                        },
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req_retry, timeout=15) as resp:
+                        resp_data = json.loads(resp.read().decode("utf-8"))
+                        log.info("Interakt WhatsApp dispatch succeeded without fileName '%s': %s", candidate, resp_data)
+                        return {
+                            "status": "sent",
+                            "mode": "live",
+                            "recipient": f"{country_code} {clean_phone}",
+                            "template": candidate,
+                            "data": resp_data,
+                            "message": f"Live WhatsApp message dispatched to {country_code} {clean_phone} via Interakt!",
+                        }
+                except Exception as retry_err:
+                    log.warning("Retry without fileName also failed: %s", retry_err)
+
             # If error is not a template mismatch, don't try other candidates
             if "No approved template found" not in last_error_body:
                 break

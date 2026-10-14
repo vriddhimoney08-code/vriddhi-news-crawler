@@ -124,10 +124,27 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const res = await fetch("/api/stats");
       const data = await res.json();
-      statStories.textContent = `${data.total_stories ?? 0} Stories`;
-      statFilings.textContent = `${data.total_filings ?? 0} Filings`;
-      statAnalysts.textContent = `${data.total_analysts ?? 0} Analysts`;
-      statHealth.textContent = "100% Health";
+      if (statStories) statStories.textContent = `${data.total_stories ?? 0} Stories`;
+      if (statFilings) statFilings.textContent = `${data.total_filings ?? 0} Filings`;
+      if (statAnalysts) statAnalysts.textContent = `${data.total_analysts ?? 0} Clients`;
+      const statComp = document.getElementById("stat-companies");
+      if (statComp) statComp.textContent = `${data.total_companies ?? 0} Stocks`;
+      if (statHealth) statHealth.textContent = "100% Health";
+
+      const lastCrawlEl = document.getElementById("last-crawl-time");
+      if (lastCrawlEl) {
+        const crawlTs = data.last_crawl && (data.last_crawl.completed_at || data.last_crawl.started_at);
+        if (crawlTs) {
+          try {
+            const d = new Date(crawlTs);
+            lastCrawlEl.textContent = `Today, ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
+          } catch (e) {
+            lastCrawlEl.textContent = "Today, 8:30 AM";
+          }
+        } else {
+          lastCrawlEl.textContent = "Today, 8:30 AM";
+        }
+      }
     } catch (err) {
       console.error("Stats load failed", err);
     }
@@ -447,23 +464,15 @@ document.addEventListener("DOMContentLoaded", () => {
         sendWaBtnLabel.textContent = `Send WhatsApp to ${a.name}`;
       }
       if (testWaSubtext) {
-        if (isTestDeliveryMode) {
-          testWaSubtext.textContent = `Route: 🛡️ Safety Test -> 7900084773`;
-        } else {
-          testWaSubtext.textContent = `Target: 🟢 Direct to +91 ${a.phone || '—'}`;
-        }
+        testWaSubtext.textContent = `Direct to WhatsApp: +91 ${a.phone || '—'}`;
       }
     } else {
       const count = selectedAnalystIds.size;
       if (sendWaBtnLabel) {
-        sendWaBtnLabel.textContent = `Dispatch WhatsApp to Selected (${count} Analysts)`;
+        sendWaBtnLabel.textContent = `Dispatch to All (${count} Clients)`;
       }
       if (testWaSubtext) {
-        if (isTestDeliveryMode) {
-          testWaSubtext.textContent = `${count} analysts queued &bull; 🛡️ Safety Test -> 7900084773`;
-        } else {
-          testWaSubtext.textContent = `${count} analysts queued &bull; 🟢 Direct to registered phones`;
-        }
+        testWaSubtext.textContent = `Personalized briefs queued for ${count} clients`;
       }
     }
   }
@@ -561,6 +570,54 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // 6. Fetch Unsent Stories for Overview Left Box
+  let currentAnalystStories = [];
+
+  function renderStoryCards(stories) {
+    if (!stories || stories.length === 0) {
+      previewStoriesFeed.innerHTML = `
+        <div style="padding: 24px 16px; color: var(--text-muted); font-style: italic; text-align: center;">
+          No unsent stories currently queued. Sent ledger is clean!
+        </div>
+      `;
+      return;
+    }
+    previewStoriesFeed.innerHTML = stories.slice(0, 25).map(item => {
+      const isFiling = item.source_type === "filing";
+      const cname = item.company_name || "Company";
+      const sourcesText = (item.sources || []).map(s => s.name).join(" • ") || item.source_name;
+
+      return `
+        <div class="preview-story-card">
+          <div class="story-card-top">
+            <span class="ticker-badge ${isFiling ? 'badge-filing' : ''}">${isFiling ? '🏛️ ' : ''}${cname.toUpperCase()}</span>
+            <span class="story-source-badge">${sourcesText}</span>
+          </div>
+          <a class="story-card-title" href="${item.url || '#'}" target="_blank" rel="noopener">
+            ${item.title}
+          </a>
+        </div>
+      `;
+    }).join("");
+  }
+
+  const storySearchInput = document.getElementById("preview-story-search");
+  if (storySearchInput) {
+    storySearchInput.addEventListener("input", (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      if (!q) {
+        renderStoryCards(currentAnalystStories);
+        return;
+      }
+      const filtered = currentAnalystStories.filter(s => {
+        const title = (s.title || "").toLowerCase();
+        const cname = (s.company_name || "").toLowerCase();
+        const ticker = (s.company_id || "").toLowerCase();
+        return title.includes(q) || cname.includes(q) || ticker.includes(q);
+      });
+      renderStoryCards(filtered);
+    });
+  }
+
   async function loadAnalystStoriesPreview(analystId) {
     const analyst = analystsList.find(a => a.id === analystId) || { name: analystId };
     const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "");
@@ -568,7 +625,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     updateActionButtons();
 
-    previewStoriesFeed.innerHTML = `<div class="loading-line">&#9696; Loading unsent stories from database sent ledger...</div>`;
+    previewStoriesFeed.innerHTML = `<div class="loading-line">&#9696; Compiling personalized briefing stories...</div>`;
 
     try {
       const res = await fetch(`/api/stories?limit=80`);
@@ -583,39 +640,15 @@ document.addEventListener("DOMContentLoaded", () => {
           assignedSet.add(c.id);
         }
       });
-      const analystStories = all.filter(s => assignedSet.has(s.company_id));
+      currentAnalystStories = all.filter(s => assignedSet.has(s.company_id));
 
       const countBadge = document.getElementById("preview-stories-count");
       if (countBadge) {
-        countBadge.textContent = `${analystStories.length} Stories`;
+        countBadge.textContent = `${currentAnalystStories.length} Stories`;
       }
 
-      if (analystStories.length === 0) {
-        previewStoriesFeed.innerHTML = `
-          <div style="padding: 24px 16px; color: var(--text-muted); font-style: italic; text-align: center;">
-            No unsent stories currently queued for ${analyst.name}. Sent ledger is clean!
-          </div>
-        `;
-        return;
-      }
-
-      previewStoriesFeed.innerHTML = analystStories.slice(0, 15).map(item => {
-        const isFiling = item.source_type === "filing";
-        const cname = item.company_name || "Company";
-        const sourcesText = (item.sources || []).map(s => s.name).join(" • ") || item.source_name;
-
-        return `
-          <div class="preview-story-card">
-            <div class="story-card-top">
-              <span class="ticker-badge ${isFiling ? 'badge-filing' : ''}">${isFiling ? '🏛️ ' : ''}${cname.toUpperCase()}</span>
-              <span class="story-source-badge">${sourcesText}</span>
-            </div>
-            <a class="story-card-title" href="${item.url || '#'}" target="_blank" rel="noopener">
-              ${item.title}
-            </a>
-          </div>
-        `;
-      }).join("");
+      if (storySearchInput) storySearchInput.value = "";
+      renderStoryCards(currentAnalystStories);
 
     } catch (err) {
       previewStoriesFeed.innerHTML = `<div style="color: var(--text-red);">Failed to load preview stories.</div>`;

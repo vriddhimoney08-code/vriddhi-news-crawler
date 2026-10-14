@@ -1,0 +1,60 @@
+"""Configuration and environment variables for Vriddhi News Crawler."""
+from __future__ import annotations
+
+import os
+from datetime import timedelta, timezone
+from pathlib import Path
+
+from dotenv import load_dotenv  # type: ignore
+
+# Base paths
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PACKAGE_DIR.parent
+DATA_DIR = PROJECT_ROOT / "data"
+DIGESTS_DIR = DATA_DIR / "digests"
+LOGS_DIR = PROJECT_ROOT / "logs"
+
+# Ensure data and logs directories exist
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DIGESTS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Load environment variables
+load_dotenv(PROJECT_ROOT / ".env")
+
+# Indian Standard Time (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+# Server settings
+PORT = int(os.getenv("PORT", "3009"))
+HOST = os.getenv("HOST", "0.0.0.0")
+
+# Safety switches & test recipient
+TEST_MODE = os.getenv("TEST_MODE", "yes").strip().lower() in ("yes", "true", "1")
+TEST_WHATSAPP = os.getenv("TEST_WHATSAPP", "9820000000").strip()
+
+# Interakt WhatsApp API
+INTERAKT_API_KEY = os.getenv("INTERAKT_API_KEY", "").strip()
+INTERAKT_TEMPLATE = os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest").strip()
+INTERAKT_LANGUAGE = os.getenv("INTERAKT_LANGUAGE", "en").strip()
+INTERAKT_DOCUMENT_HEADER = os.getenv("INTERAKT_DOCUMENT_HEADER", "yes").strip().lower() in ("yes", "true", "1")
+
+# Storage / S3 / R2 / GCS
+S3_BUCKET = os.getenv("S3_BUCKET", "").strip()
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip() or None
+S3_REGION = os.getenv("S3_REGION", "ap-south-1").strip()
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "").strip()
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "").strip()
+S3_LINK_DAYS = int(os.getenv("S3_LINK_DAYS", "7"))
+
+# Crawler settings
+CRAWLER_CONTACT_EMAIL = os.getenv("CRAWLER_CONTACT_EMAIL", "research@vriddhicapital.com").strip()
+PER_HOST_DELAY_SEC = float(os.getenv("PER_HOST_DELAY_SEC", "1.5"))
+RESPECT_ROBOTS = os.getenv("RESPECT_ROBOTS", "yes").strip().lower() in ("yes", "true", "1")
+MAX_ITEM_AGE_HOURS = int(os.getenv("MAX_ITEM_AGE_HOURS", "48"))
+BODY_FETCH_LIMIT = int(os.getenv("BODY_FETCH_LIMIT", "300"))
+GOOGLE_NEWS_EDITIONS = [e.strip() for e in os.getenv("GOOGLE_NEWS_EDITIONS", "en-IN,hi-IN").split(",") if e.strip()]
+
+# Database path
+DB_PATH = DATA_DIR / "crawler.db"
+CONTROL_PANEL_PATH = PROJECT_ROOT / "control_panel.xlsx"

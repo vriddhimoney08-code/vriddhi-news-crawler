@@ -1,0 +1,16 @@
+requests>=2.31
+feedparser>=6.0
+python-dateutil>=2.8
+python-dotenv>=1.0
+openpyxl>=3.1
+trafilatura>=1.8
+weasyprint>=62
+boto3>=1.34
+jinja2>=3.1
+fastapi>=0.110
+uvicorn>=0.28
+# only if the control panel or archive is a Google Sheet:
+gspread>=6.0
+google-auth>=2.29
+# for running the tests:
+pytest>=8.0

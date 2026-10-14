@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vriddhi Money | Automated Market Intelligence Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=2.2">
+</head>
+<body class="dark-theme">
+
+  <!-- Main App Shell -->
+  <div class="terminal-shell">
+
+    <!-- Top Status Header -->
+    <header class="terminal-topbar">
+      <div class="topbar-left">
+        <div class="status-indicator">
+          <span class="live-dot"></span>
+          <span class="terminal-title">VRIDDHI <span style="color:#10b981;">MONEY</span></span>
+        </div>
+        <div class="topbar-divider">|</div>
+        <div class="topbar-item">
+          <span class="topbar-label">Crawler Status:</span>
+          <span class="topbar-val" id="crawler-status-badge">IDLE</span>
+        </div>
+        <div class="topbar-divider">|</div>
+        <div class="topbar-item">
+          <span class="topbar-label">Next Crawl:</span>
+          <span class="topbar-val" id="next-crawl-time">1:30 PM IST</span>
+        </div>
+        <div class="topbar-divider">|</div>
+        <div class="topbar-item clock-item" id="topbar-ist-clock">
+          --:--:-- IST
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button id="btn-trigger-crawl" class="terminal-action-btn">
+          <span class="play-icon">&#9658;</span>
+          <span id="crawl-btn-text">Run Crawl Now</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- App Body: Sidebar + Main Content -->
+    <div class="terminal-layout">
+
+      <!-- Left Sidebar Navigation -->
+      <aside class="terminal-sidebar">
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-view="view-overview">
+            <span class="nav-icon">&#128202;</span>
+            <span class="nav-label">Overview</span>
+          </button>
+          <button class="nav-item" data-view="view-watchlist">
+            <span class="nav-icon">&#127970;</span>
+            <span class="nav-label">Watchlist</span>
+          </button>
+          <button class="nav-item" data-view="view-analysts">
+            <span class="nav-icon">&#128101;</span>
+            <span class="nav-label">Analysts</span>
+          </button>
+          <button class="nav-item" data-view="view-sources">
+            <span class="nav-icon">&#128225;</span>
+            <span class="nav-label">Sources</span>
+          </button>
+          <button class="nav-item" data-view="view-digest">
+            <span class="nav-icon">&#128196;</span>
+            <span class="nav-label">Daily Digest</span>
+          </button>
+          <button class="nav-item" data-view="view-settings">
+            <span class="nav-icon">&#9881;</span>
+            <span class="nav-label">Settings</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="footer-badge">SENT LEDGER: ACTIVE</div>
+          <div class="footer-sub">Port 3009 &bull; v1.0.0</div>
+        </div>
+      </aside>
+
+      <!-- Main Workspace -->
+      <main class="terminal-workspace">
+
+        <!-- VIEW 1: OVERVIEW -->
+        <section id="view-overview" class="workspace-view active">
+          
+          <!-- Section 1: SYSTEM METRICS (Today) -->
+          <div class="section-box">
+            <div class="section-header-title">SYSTEM METRICS (Today)</div>
+            <div class="metrics-kpi-grid">
+              
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">STORIES CRAWLED</span>
+                  <span class="kpi-icon-badge">📰</span>
+                </div>
+                <div class="kpi-value" id="stat-stories">0 Stories</div>
+                <div class="kpi-footer">
+                  <span class="kpi-pill kpi-pill-green">● Live Ingestion</span>
+                  <span class="kpi-sub">Curated today</span>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">EXCHANGE FILINGS</span>
+                  <span class="kpi-icon-badge">🏛️</span>
+                </div>
+                <div class="kpi-value" id="stat-filings">0 Filings</div>
+                <div class="kpi-footer">
+                  <span class="kpi-pill kpi-pill-blue">● BSE &amp; NSE</span>
+                  <span class="kpi-sub">Official Disclosures</span>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">ACTIVE ANALYSTS</span>
+                  <span class="kpi-icon-badge">👥</span>
+                </div>
+                <div class="kpi-value" id="stat-analysts">0 Analysts</div>
+                <div class="kpi-footer">
+                  <span class="kpi-pill kpi-pill-purple">● Morning Briefs</span>
+                  <span class="kpi-sub">Personalized Coverage</span>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">SYSTEM HEALTH</span>
+                  <span class="kpi-icon-badge">⚡</span>
+                </div>
+                <div class="kpi-value" id="stat-health">100% Health</div>
+                <div class="kpi-footer">
+                  <span class="kpi-pill kpi-pill-green">● 11 Feeds OK</span>
+                  <span class="kpi-sub">Real-time Stream</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Section 2: TODAY'S DIGEST PREVIEW & DISPATCH -->
+          <div class="section-box digest-workspace-panel">
+            <div class="panel-headline-row">
+              <div class="panel-title-wrap">
+                <h2 class="panel-main-title">TODAY'S DIGEST PREVIEW &amp; DISPATCH</h2>
+                <p class="panel-subtitle">Review personalized morning briefs and trigger real-time WhatsApp dispatches</p>
+              </div>
+            </div>
+            
+            <!-- Modern Configuration Toolbar -->
+            <div class="analyst-config-toolbar">
+              <div class="toolbar-section mode-select-section">
+                <span class="config-label">RECIPIENT SELECTION</span>
+                <div class="mode-segmented-control">
+                  <button type="button" class="mode-segment-btn active" id="btn-mode-single">
+                    <span class="segment-icon">👤</span>
+                    <span class="segment-text">Single Analyst</span>
+                  </button>
+                  <button type="button" class="mode-segment-btn" id="btn-mode-multiple">
+                    <span class="segment-icon">👥</span>
+                    <span class="segment-text">Multiple Analysts</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="toolbar-section delivery-route-section">
+                <span class="config-label">DELIVERY ROUTE</span>
+                <button type="button" id="btn-toggle-delivery-mode" class="delivery-status-card mode-safety" title="Click to toggle between Safety Redirect and Live Direct delivery">
+                  <span class="delivery-pulse-dot" id="delivery-mode-pulse"></span>
+                  <div class="delivery-text-group">
+                    <div class="delivery-mode-headline" id="delivery-mode-text">🛡️ Safety Test (To 7900084773)</div>
+                    <div class="delivery-mode-sub" id="delivery-mode-subtext">Safe sandbox: All messages sent to your test WhatsApp</div>
+                  </div>
+                  <span class="delivery-toggle-hint">Toggle ⇄</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Single Analyst Selector -->
+            <div id="single-analyst-wrapper" class="analyst-single-panel">
+              <div class="single-analyst-row">
+                <div class="analyst-select-field">
+                  <label for="overview-analyst-select" class="field-label">Selected Analyst Desk</label>
+                  <div class="select-dropdown-container">
+                    <select id="overview-analyst-select" class="modern-select">
+                      <!-- Populated via JS -->
+                    </select>
+                  </div>
+                </div>
+                <div id="single-analyst-meta-badge" class="analyst-meta-badge">
+                  <!-- Populated via JS: Phone & Stock Count -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Multiple Analyst Selection Grid -->
+            <div id="multi-analyst-wrapper" class="multi-select-container" style="display: none;">
+              <div class="multi-header-bar">
+                <div class="multi-title-wrap">
+                  <span class="field-label">Select Target Analysts for Batch Dispatch</span>
+                  <span id="multi-selected-count-badge" class="count-badge">4 Selected</span>
+                </div>
+                <div class="multi-quick-actions">
+                  <button type="button" id="btn-select-all" class="btn-micro-action">✓ Select All</button>
+                  <button type="button" id="btn-deselect-all" class="btn-micro-action">✕ Clear Selection</button>
+                </div>
+              </div>
+              <div id="analyst-checkbox-chips" class="analyst-cards-grid">
+                <!-- Checkbox cards populated via JS -->
+              </div>
+            </div>
+
+            <!-- Two-Column Split Layout -->
+            <div class="digest-split-grid">
+              
+              <!-- Left Column: Live PDF Preview Stories List -->
+              <div class="split-card left-preview-card">
+                <div class="split-card-header">
+                  <div class="header-left-group">
+                    <span class="header-badge-icon">📄</span>
+                    <span id="preview-filename-badge" class="header-doc-name">Live PDF Preview (Siddhesh_Today.pdf)</span>
+                  </div>
+                  <span id="preview-stories-count" class="preview-count-pill">-- Stories</span>
+                </div>
+                <div class="split-card-body stories-preview-scroll" id="preview-stories-feed">
+                  <!-- Populated via JS with clean modern intelligence cards -->
+                  <div class="loading-line">&#9696; Compiling unsent stories from sent ledger...</div>
+                </div>
+              </div>
+
+              <!-- Right Column: Actions -->
+              <div class="split-card right-actions-card">
+                <div class="split-card-header">
+                  <div class="header-left-group">
+                    <span class="header-badge-icon">⚡</span>
+                    <span>DISPATCH ACTIONS</span>
+                  </div>
+                </div>
+                <div class="split-card-body actions-stack">
+                  
+                  <!-- Primary Action: High-Impact WhatsApp Dispatch Button -->
+                  <div class="primary-action-container">
+                    <button id="btn-send-test-wa" class="btn-primary-dispatch" type="button">
+                      <div class="dispatch-icon-wrap">
+                        <span class="wa-bubble-icon">💬</span>
+                      </div>
+                      <div class="dispatch-text-col">
+                        <span class="dispatch-main-label" id="send-wa-btn-label">Send WhatsApp Digest</span>
+                        <span class="dispatch-sub-label" id="test-wa-subtext">To: +91 7900084773</span>
+                      </div>
+                      <span class="dispatch-arrow-wrap">➔</span>
+                    </button>
+                  </div>
+
+                  <!-- Secondary Action: Open Full PDF / HTML -->
+                  <button id="btn-open-full-pdf" class="btn-secondary-action" type="button">
+                    <span class="btn-action-icon">👁️</span>
+                    <span>Open Full PDF / HTML Preview</span>
+                  </button>
+
+                  <!-- Master Action: Send to All -->
+                  <button id="btn-send-to-all" class="btn-master-action" type="button">
+                    <span class="btn-action-icon">🚀</span>
+                    <span>Dispatch to All 4 Analysts</span>
+                  </button>
+
+                  <!-- Deduplication Ledger Guarantee Card -->
+                  <div class="ledger-guarantee-card">
+                    <div class="guarantee-header-row">
+                      <span class="guarantee-shield">🛡️</span>
+                      <span class="guarantee-title">Zero-Duplicate Ledger Active</span>
+                    </div>
+                    <p class="guarantee-text">Every story sent is stamped into the SQLite registry. Analysts will never receive repeat news on the same day.</p>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Section 3: LIVE CRAWLER LOGS & EVENT STREAM -->
+          <div class="section-box logs-stream-panel">
+            <div class="panel-headline-row">
+              <div class="panel-title-wrap">
+                <div class="section-header-title">LIVE CRAWLER LOGS &amp; EVENT STREAM</div>
+              </div>
+            <div class="terminal-log-window" id="event-logs-container">
+              <!-- Populated via JS -->
+              <div class="log-line"><span class="log-ts">[BOOT]</span> <span class="log-txt">Vriddhi News Crawler online. Ingestion pipeline ready.</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: WATCHLIST -->
+        <section id="view-watchlist" class="workspace-view">
+          <div class="view-header-bar">
+            <div class="view-header-title-wrap">
+              <h2>Watchlist Manager</h2>
+              <span class="view-header-sub">Organize stock baskets into folders &amp; manually assign client coverage</span>
+            </div>
+            <div class="view-header-actions">
+              <button id="btn-open-add-folder" class="terminal-action-btn btn-secondary-micro">+ New Folder</button>
+              <button id="btn-open-add-stock" class="terminal-action-btn">+ Add New Stock</button>
+            </div>
+          </div>
+
+          <!-- Watchlist Folder Tabs Navigation -->
+          <div class="watchlist-folder-bar">
+            <div class="folder-tabs-list" id="watchlist-folder-tabs">
+              <!-- Populated dynamically via JS: ALL, GAME, SET, MATCH, etc. -->
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="terminal-table">
+              <thead>
+                <tr>
+                  <th>Company Name</th>
+                  <th>NSE Symbol</th>
+                  <th>BSE Code</th>
+                  <th>Folder / Basket</th>
+                  <th>Aliases &amp; Brands</th>
+                  <th>Assigned Analysts</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="watchlist-table-body">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Floating Basket Picker Popover -->
+          <div id="basket-picker-popover" class="basket-popover" style="display: none;">
+            <div class="basket-popover-header">
+              <div>
+                <div class="popover-title">Manage Baskets</div>
+                <div id="popover-company-name" class="popover-subtitle">Company Name</div>
+              </div>
+              <button type="button" class="popover-close-btn" id="btn-close-basket-popover" title="Close">&times;</button>
+            </div>
+            <div class="basket-popover-list" id="basket-popover-items">
+              <!-- Populated dynamically via JS -->
+            </div>
+            <div class="basket-popover-footer">
+              <button type="button" class="btn-popover-new-folder" id="btn-popover-new-folder">+ New Folder</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: ANALYSTS -->
+        <section id="view-analysts" class="workspace-view">
+          <div class="view-header-bar">
+            <h2>Research Desk Analysts</h2>
+            <button id="btn-open-add-analyst" class="terminal-action-btn">+ Add Analyst</button>
+          </div>
+          <div class="table-container">
+            <table class="terminal-table">
+              <thead>
+                <tr>
+                  <th>Analyst Name</th>
+                  <th>WhatsApp Phone</th>
+                  <th>Email</th>
+                  <th>Assigned Baskets / Folders</th>
+                  <th>Morning Digest</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="analysts-table-body">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 4: SOURCES -->
+        <section id="view-sources" class="workspace-view">
+          <div class="view-header-bar">
+            <h2>Ingestion Sources &amp; Exchange Feeds</h2>
+          </div>
+          <div class="sources-list-grid" id="sources-list-container">
+            <!-- Populated via JS -->
+          </div>
+        </section>
+
+        <!-- VIEW 5: DAILY DIGEST -->
+        <section id="view-digest" class="workspace-view">
+          <div class="view-header-bar">
+            <h2>Interactive Daily Digest Viewer</h2>
+            <div class="digest-view-actions">
+              <select id="digest-view-analyst-select" class="terminal-select">
+                <!-- Populated via JS -->
+              </select>
+              <button id="btn-reload-digest-frame" class="terminal-action-btn">&#8635; Reload</button>
+            </div>
+          </div>
+          <div class="iframe-container">
+            <iframe id="full-digest-iframe" src="about:blank"></iframe>
+          </div>
+        </section>
+
+        <!-- VIEW 6: SETTINGS -->
+        <section id="view-settings" class="workspace-view">
+          <div class="view-header-bar">
+            <h2>System Configuration</h2>
+          </div>
+          <div class="settings-card">
+            <div class="setting-item">
+              <div>
+                <strong>Test Mode</strong>
+                <p>Redirects all 8:00 AM WhatsApp sends to the test recipient number.</p>
+              </div>
+              <span class="setting-badge">ENABLED (YES)</span>
+            </div>
+            <div class="setting-item">
+              <div>
+                <strong>Test WhatsApp Number</strong>
+                <p>Configured in .env file.</p>
+              </div>
+              <code>9820000000</code>
+            </div>
+            <div class="setting-item">
+              <div>
+                <strong>Storage Endpoint</strong>
+                <p>Expiring signed download URLs for PDF delivery.</p>
+              </div>
+              <code>Local / Google Cloud Storage</code>
+            </div>
+            <div class="setting-item">
+              <div>
+                <strong>Crawl Frequencies</strong>
+                <p>BSE/NSE: every 30m &bull; Sitemaps: every 30m &bull; Google News/GDELT: every 3h</p>
+              </div>
+              <span class="setting-badge">ACTIVE</span>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+
+    <!-- Modal for Adding Stock -->
+    <div id="modal-add-stock" class="terminal-modal">
+      <div class="modal-content">
+        <div class="modal-top">
+          <h3>Add Stock to Watchlist</h3>
+          <button id="btn-close-stock-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-add-stock" class="modal-form">
+          <div class="input-block">
+            <label>Company Name *</label>
+            <input type="text" id="input-comp-name" required placeholder="e.g. Bharat Electronics Ltd">
+          </div>
+          <div class="input-row">
+            <div class="input-block">
+              <label>NSE Symbol</label>
+              <input type="text" id="input-comp-nse" placeholder="e.g. BEL">
+            </div>
+            <div class="input-block">
+              <label>BSE Code</label>
+              <input type="text" id="input-comp-bse" placeholder="e.g. 500049">
+            </div>
+          </div>
+          <div class="input-block">
+            <label>Assign to Baskets / Folders (Select one or multiple)</label>
+            <div id="stock-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 110px; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; background: rgba(15,23,42,0.6); border: 1px solid var(--border-color); border-radius: 8px;">
+              <!-- Populated dynamically via JS: checkboxes for GAME, SET, MATCH, etc. -->
+            </div>
+          </div>
+          <div class="input-block">
+            <label>Aliases &amp; Brands (comma-separated)</label>
+            <input type="text" id="input-comp-aliases" placeholder="e.g. BEL, Bharat Electronics">
+          </div>
+          <div class="input-block">
+            <label>Manually Assign to Analysts / Clients (Optional)</label>
+            <div id="stock-analysts-checkboxes" class="checkbox-scroll-box" style="max-height: 110px;">
+              <!-- Populated dynamically via JS: checkboxes for analysts -->
+            </div>
+          </div>
+          <div class="modal-bottom">
+            <button type="button" id="btn-cancel-stock-modal" class="btn-cancel">Cancel</button>
+            <button type="submit" class="terminal-action-btn">Save to Watchlist</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal for Adding New Folder -->
+    <div id="modal-add-folder" class="terminal-modal">
+      <div class="modal-content" style="max-width: 420px;">
+        <div class="modal-top">
+          <h3>Create Watchlist Folder</h3>
+          <button id="btn-close-folder-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-add-folder" class="modal-form">
+          <div class="input-block">
+            <label>Folder / Basket Name *</label>
+            <input type="text" id="input-folder-name" required placeholder="e.g. CORE, FNO, TECH, LARGE-CAP">
+          </div>
+          <div class="modal-bottom">
+            <button type="button" id="btn-cancel-folder-modal" class="btn-cancel">Cancel</button>
+            <button type="submit" class="terminal-action-btn">Create Folder</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal for Adding / Editing Analyst -->
+    <div id="modal-add-analyst" class="terminal-modal">
+      <div class="modal-content">
+        <div class="modal-top">
+          <h3 id="analyst-modal-title">Add New Analyst</h3>
+          <button id="btn-close-analyst-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-add-analyst" class="modal-form">
+          <input type="hidden" id="input-analyst-id" value="">
+          <div class="input-block">
+            <label>Analyst Name *</label>
+            <input type="text" id="input-analyst-name" required placeholder="e.g. Vikram Sharma">
+          </div>
+          <div class="input-row">
+            <div class="input-block">
+              <label>WhatsApp Phone (10 Digits) *</label>
+              <input type="tel" id="input-analyst-phone" required placeholder="e.g. 9820012345">
+            </div>
+            <div class="input-block">
+              <label>Email Address</label>
+              <input type="email" id="input-analyst-email" placeholder="e.g. vikram@vriddhicapital.com">
+            </div>
+          </div>
+          <div class="input-block">
+            <label>Assign Tracked Baskets / Folders (Check to assign)</label>
+            <div id="analyst-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 140px;">
+              <!-- Populated dynamically via JS: GAME, SET, MATCH, etc. -->
+            </div>
+          </div>
+          <div class="modal-bottom">
+            <button type="button" id="btn-cancel-analyst-modal" class="btn-cancel">Cancel</button>
+            <button type="submit" class="terminal-action-btn">Save Analyst</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="toast-banner" class="toast-banner"></div>
+
+  </div>
+
+  <script src="/static/app.js?v=2.2"></script>
+</body>
+</html>

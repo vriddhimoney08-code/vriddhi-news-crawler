@@ -1,0 +1,21 @@
+# Install with:  crontab -e   then paste these lines (adjust the folder path).
+# The server's clock must be on India time:  sudo timedatectl set-timezone Asia/Kolkata
+CRAWLER=/home/ubuntu/vriddhi-news-crawler
+PY=/home/ubuntu/vriddhi-news-crawler/.venv/bin/python
+
+# Exchange filings, publisher sitemaps/RSS, watched pages: every 30 minutes, day and night
+*/30 * * * *  cd $CRAWLER && $PY -m vriddhi_crawler crawl --only exchanges,publishers,pages >> logs/cron.log 2>&1
+
+# Google News and GDELT sweeps (slow, polite): every 3 hours, on their own lock
+10 */3 * * *  cd $CRAWLER && $PY -m vriddhi_crawler crawl --only search >> logs/cron.log 2>&1
+
+# Final catch-up before the digest
+35 7 * * *    cd $CRAWLER && $PY -m vriddhi_crawler crawl --only exchanges,publishers --force >> logs/cron.log 2>&1
+
+# The digest at 8:00, with two retries for anyone whose send failed
+0 8 * * *     cd $CRAWLER && $PY -m vriddhi_crawler send >> logs/cron.log 2>&1
+5 8 * * *     cd $CRAWLER && $PY -m vriddhi_crawler send --retry >> logs/cron.log 2>&1
+15 8 * * *    cd $CRAWLER && $PY -m vriddhi_crawler send --retry >> logs/cron.log 2>&1
+
+# Status to you at 8:20
+20 8 * * *    cd $CRAWLER && $PY -m vriddhi_crawler status >> logs/cron.log 2>&1

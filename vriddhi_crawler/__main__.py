@@ -96,7 +96,6 @@ def main():
     elif args.command == "macro-dispatch":
         init_db(seed_defaults=True)
         print("=== [CRON] Starting Evening 5:30 PM Macro & Sector Briefing Cycle ===")
-        from .pipeline import Pipeline
         from .db import get_analysts, get_macro_stories_for_analyst
         from .pdf import generate_macro_digest
         from .whatsapp import send_whatsapp_macro_digest

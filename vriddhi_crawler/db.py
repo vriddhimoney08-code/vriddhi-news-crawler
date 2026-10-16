@@ -1,6 +1,6 @@
-"""Database operations, SQLite schema, deduplication fingerprints, and sent ledger."""
 from __future__ import annotations
-
+"""Database operations, SQLite schema, deduplication fingerprints, and sent ledger."""
+import logging
 import json
 import sqlite3
 import time
@@ -15,6 +15,8 @@ from typing import Any
 
 from .config import DB_PATH, DEFAULT_FOLDERS
 from .controlpanel import Analyst, Company
+
+log = logging.getLogger(__name__)
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -163,24 +165,43 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
 
 
 def _seed_data(conn: sqlite3.Connection):
-    # Only seed sample analysts if the analysts table is completely empty (first run)
+    # Remove dummy legacy placeholder analysts
     try:
-        ac = conn.execute("SELECT count(*) FROM analysts").fetchone()[0]
-        if ac == 0:
-            from .seed_data import DEFAULT_ANALYSTS
-            conn.executemany("INSERT INTO analysts VALUES (?, ?, ?, ?, ?, ?)", DEFAULT_ANALYSTS)
+        conn.execute("DELETE FROM analysts WHERE id IN ('rahul', 'priya', 'amit')")
+    except Exception:
+        pass
+
+    # Upsert default analysts so all 5 team members always exist
+    try:
+        from .seed_data import DEFAULT_ANALYSTS
+        for a in DEFAULT_ANALYSTS:
+            conn.execute("""
+            INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                phone=excluded.phone,
+                email=excluded.email,
+                assigned_folders=excluded.assigned_folders
+            """, a)
     except Exception as e:
         log.warning("Seeding default analysts failed: %s", e)
 
-    # Only seed sample companies if the companies table is completely empty (first run)
+    # Upsert default companies
     try:
-        cc = conn.execute("SELECT count(*) FROM companies").fetchone()[0]
-        if cc == 0:
-            from .seed_data import DEFAULT_COMPANIES
-            conn.executemany("""
+        from .seed_data import DEFAULT_COMPANIES
+        for c in DEFAULT_COMPANIES:
+            conn.execute("""
             INSERT INTO companies (id, name, nse_symbol, bse_code, aliases, search_queries, analyst_names, folder, is_active)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, DEFAULT_COMPANIES)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                nse_symbol=excluded.nse_symbol,
+                bse_code=excluded.bse_code,
+                aliases=excluded.aliases,
+                search_queries=excluded.search_queries,
+                folder=excluded.folder
+            """, c)
     except Exception as e:
         log.warning("Seeding default companies failed: %s", e)
 

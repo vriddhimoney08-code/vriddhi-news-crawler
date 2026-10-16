@@ -104,11 +104,11 @@ def send_whatsapp_digest(
     load_dotenv(PROJECT_ROOT / ".env", override=True)
 
     api_key = os.getenv("INTERAKT_API_KEY", "").strip()
-    template_name = os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest").strip()
+    template_name = os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest_49").strip()
     lang = os.getenv("INTERAKT_LANGUAGE", "en").strip()
     doc_header = os.getenv("INTERAKT_DOCUMENT_HEADER", "yes").strip().lower() in ("yes", "true", "1")
-    is_test_mode = os.getenv("TEST_MODE", "yes").strip().lower() in ("yes", "true", "1")
-    test_phone = os.getenv("TEST_WHATSAPP", "9820000000").strip()
+    is_test_mode = os.getenv("TEST_MODE", "no").strip().lower() in ("yes", "true", "1")
+    test_phone = os.getenv("TEST_WHATSAPP", "").strip()
 
     today_str = datetime.now(IST).strftime("%d-%b-%Y")
     first_name = analyst_name.split()[0] if analyst_name else "Analyst"
@@ -118,6 +118,15 @@ def send_whatsapp_digest(
         target_raw_phone = test_phone
     else:
         target_raw_phone = analyst_phone or test_phone
+
+    if target_raw_phone in ("9820000000", "9820000001", "9820000002", "9820000003", ""):
+        log.info("Skipping dummy placeholder phone number %s for %s", target_raw_phone, analyst_name)
+        return {
+            "status": "skipped",
+            "mode": "dummy_phone",
+            "recipient": target_raw_phone,
+            "message": f"Skipped dispatch for {analyst_name} (dummy placeholder number {target_raw_phone})",
+        }
 
     country_code, clean_phone = format_phone_number(target_raw_phone)
 
@@ -311,11 +320,11 @@ def send_whatsapp_macro_digest(
     load_dotenv(PROJECT_ROOT / ".env", override=True)
 
     api_key = os.getenv("INTERAKT_API_KEY", "").strip()
-    template_name = os.getenv("INTERAKT_MACRO_TEMPLATE", os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest")).strip()
+    template_name = os.getenv("INTERAKT_MACRO_TEMPLATE", os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest_49")).strip()
     lang = os.getenv("INTERAKT_LANGUAGE", "en").strip()
     doc_header = os.getenv("INTERAKT_DOCUMENT_HEADER", "yes").strip().lower() in ("yes", "true", "1")
-    is_test_mode = os.getenv("TEST_MODE", "yes").strip().lower() in ("yes", "true", "1")
-    test_phone = os.getenv("TEST_WHATSAPP", "9820000000").strip()
+    is_test_mode = os.getenv("TEST_MODE", "no").strip().lower() in ("yes", "true", "1")
+    test_phone = os.getenv("TEST_WHATSAPP", "").strip()
 
     today_str = datetime.now(IST).strftime("%d-%b-%Y (Evening)")
     first_name = analyst_name.split()[0] if analyst_name else "Analyst"
@@ -324,6 +333,15 @@ def send_whatsapp_macro_digest(
         target_raw_phone = test_phone
     else:
         target_raw_phone = analyst_phone or test_phone
+
+    if target_raw_phone in ("9820000000", "9820000001", "9820000002", "9820000003", ""):
+        log.info("Skipping dummy placeholder phone number %s for %s", target_raw_phone, analyst_name)
+        return {
+            "status": "skipped",
+            "mode": "dummy_phone",
+            "recipient": target_raw_phone,
+            "message": f"Skipped dispatch for {analyst_name} (dummy placeholder number {target_raw_phone})",
+        }
 
     country_code, clean_phone = format_phone_number(target_raw_phone)
 
@@ -472,6 +490,9 @@ def send_whatsapp_macro_digest(
                         }
                 except Exception as retry_err:
                     log.warning("Retry without fileName failed: %s", retry_err)
+
+            if "No approved template found" not in last_error_body:
+                break
 
         except urllib.error.URLError as e:
             log.error("Failed to reach Interakt API: %s", e)

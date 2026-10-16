@@ -62,6 +62,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}
           BASE_URL: ${{ secrets.BASE_URL }}
+          INTERAKT_TEMPLATE: vriddhi_daily_digest_49
+          INTERAKT_MACRO_TEMPLATE: vriddhi_daily_digest_49
+          TEST_MODE: "no"
         run: |
           echo "Starting 9:00 AM Morning Companies News Broadcast..."
           python -m vriddhi_crawler run-daily
@@ -76,6 +79,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}
           BASE_URL: ${{ secrets.BASE_URL }}
+          INTERAKT_TEMPLATE: vriddhi_daily_digest_49
+          INTERAKT_MACRO_TEMPLATE: vriddhi_daily_digest_49
+          TEST_MODE: "no"
         run: |
           echo "Starting 5:30 PM Evening Sectorial & Macro News Broadcast..."
           python -m vriddhi_crawler macro-dispatch

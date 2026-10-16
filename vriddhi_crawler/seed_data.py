@@ -7,9 +7,6 @@ DEFAULT_ANALYSTS = [
     ('jash', 'JASH', '8879428842', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
     ('aashish', 'AASHISH', '9011052765', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
     ('aditya', 'Aditya', '9823763316', '', '[]', json.dumps(['DEMO'])),
-    ('rahul', 'Rahul', '9820000001', 'rahul@vriddhicapital.com', json.dumps(['tatamotors', 'polycab']), '[]'),
-    ('priya', 'Priya', '9820000002', 'priya@vriddhicapital.com', json.dumps(['reliance', 'infosys']), '[]'),
-    ('amit', 'Amit', '9820000003', 'amit@vriddhicapital.com', json.dumps(['hdfcbank']), '[]'),
 ]
 
 DEFAULT_COMPANIES = [   (   'tatamotors',

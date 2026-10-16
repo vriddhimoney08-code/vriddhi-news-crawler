@@ -30,12 +30,12 @@ PORT = int(os.getenv("PORT", "3009"))
 HOST = os.getenv("HOST", "0.0.0.0")
 
 # Safety switches & test recipient
-TEST_MODE = os.getenv("TEST_MODE", "yes").strip().lower() in ("yes", "true", "1")
-TEST_WHATSAPP = os.getenv("TEST_WHATSAPP", "9820000000").strip()
+TEST_MODE = os.getenv("TEST_MODE", "no").strip().lower() in ("yes", "true", "1")
+TEST_WHATSAPP = os.getenv("TEST_WHATSAPP", "").strip()
 
 # Interakt WhatsApp API
 INTERAKT_API_KEY = os.getenv("INTERAKT_API_KEY", "").strip()
-INTERAKT_TEMPLATE = os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest").strip()
+INTERAKT_TEMPLATE = os.getenv("INTERAKT_TEMPLATE", "vriddhi_daily_digest_49").strip()
 INTERAKT_LANGUAGE = os.getenv("INTERAKT_LANGUAGE", "en").strip()
 INTERAKT_DOCUMENT_HEADER = os.getenv("INTERAKT_DOCUMENT_HEADER", "yes").strip().lower() in ("yes", "true", "1")
 

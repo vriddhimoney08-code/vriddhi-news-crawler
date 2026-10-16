@@ -167,49 +167,22 @@ def _seed_data(conn: sqlite3.Connection):
     try:
         ac = conn.execute("SELECT count(*) FROM analysts").fetchone()[0]
         if ac == 0:
-            sample_analysts = [
-                ("rahul", "Rahul", "9820000001", "rahul@vriddhicapital.com", json.dumps(["tatamotors", "polycab"])),
-                ("priya", "Priya", "9820000002", "priya@vriddhicapital.com", json.dumps(["reliance", "infosys"])),
-                ("amit", "Amit", "9820000003", "amit@vriddhicapital.com", json.dumps(["hdfcbank"])),
-            ]
-            conn.executemany("INSERT INTO analysts VALUES (?, ?, ?, ?, ?, '[]')", [
-                (a[0], a[1], a[2], a[3], a[4]) for a in sample_analysts
-            ])
-    except Exception:
-        pass
+            from .seed_data import DEFAULT_ANALYSTS
+            conn.executemany("INSERT INTO analysts VALUES (?, ?, ?, ?, ?, ?)", DEFAULT_ANALYSTS)
+    except Exception as e:
+        log.warning("Seeding default analysts failed: %s", e)
 
     # Only seed sample companies if the companies table is completely empty (first run)
     try:
         cc = conn.execute("SELECT count(*) FROM companies").fetchone()[0]
         if cc == 0:
-            sample_companies = [
-                ("tatamotors", "Tata Motors Ltd", "TATAMOTORS", "500570",
-                 json.dumps(["Tata Motors", "JLR", "Jaguar Land Rover", "TaMo"]),
-                 json.dumps(['"Tata Motors"', '"JLR"']),
-                 json.dumps(["Rahul"]), "GAME", 1),
-                ("polycab", "Polycab India Ltd", "POLYCAB", "542652",
-                 json.dumps(["Polycab", "Polycab Wires", "Polycab India"]),
-                 json.dumps(['"Polycab"']),
-                 json.dumps(["Rahul"]), "GAME", 1),
-                ("reliance", "Reliance Industries Ltd", "RELIANCE", "500325",
-                 json.dumps(["Reliance", "RIL", "Jio", "Reliance Retail"]),
-                 json.dumps(['"Reliance Industries"', '"RIL"']),
-                 json.dumps(["Priya"]), "SET", 1),
-                ("infosys", "Infosys Ltd", "INFY", "500209",
-                 json.dumps(["Infosys", "Infy", "Salil Parekh"]),
-                 json.dumps(['"Infosys"', '"Infy"']),
-                 json.dumps(["Priya"]), "SET", 1),
-                ("hdfcbank", "HDFC Bank Ltd", "HDFCBANK", "500180",
-                 json.dumps(["HDFC Bank", "HDFC", "Sashidhar Jagdishan"]),
-                 json.dumps(['"HDFC Bank"']),
-                 json.dumps(["Amit"]), "MATCH", 1),
-            ]
+            from .seed_data import DEFAULT_COMPANIES
             conn.executemany("""
             INSERT INTO companies (id, name, nse_symbol, bse_code, aliases, search_queries, analyst_names, folder, is_active)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, sample_companies)
-    except Exception:
-        pass
+            """, DEFAULT_COMPANIES)
+    except Exception as e:
+        log.warning("Seeding default companies failed: %s", e)
 
     sample_sources = [
         ("BSE Corporate Announcements", "https://www.bseindia.com/corporates/ann.html", "filing", None, "en", 0, 1),

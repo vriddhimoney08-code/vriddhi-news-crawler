@@ -12,3 +12,4 @@ control_panel.xlsx
 *.sqlite3
 .ruff_cache/
 .vscode/
+scratch/

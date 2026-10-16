@@ -60,6 +60,10 @@
             <span class="nav-icon">&#128202;</span>
             <span class="nav-label">Dashboard</span>
           </button>
+          <button class="nav-item" data-view="view-macro">
+            <span class="nav-icon">&#127963;</span>
+            <span class="nav-label">Macro &amp; Sector Desk</span>
+          </button>
           <button class="nav-item" data-view="view-watchlist">
             <span class="nav-icon">&#127970;</span>
             <span class="nav-label">Portfolios &amp; Watchlist</span>
@@ -159,6 +163,18 @@
                 </div>
               </div>
 
+              <div class="kpi-card" id="kpi-card-macro" data-kpi="macro" title="Click to open Macro &amp; Sector Intelligence Desk">
+                <div class="kpi-top">
+                  <span class="kpi-label">Macro Policy Directives</span>
+                  <span class="kpi-icon-badge">🏛️</span>
+                </div>
+                <div class="kpi-value" id="stat-macro">-- Directives</div>
+                <div class="kpi-footer">
+                  <span class="kpi-pill kpi-pill-blue">● All Sectors</span>
+                  <span class="kpi-sub">Govt &amp; RBI Triggers ↗</span>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -230,9 +246,14 @@
                 <div class="split-card-header">
                   <div class="header-left-group">
                     <span class="header-badge-icon">📄</span>
-                    <span id="preview-filename-badge" class="header-doc-name">Live PDF Preview</span>
+                    <span id="preview-filename-badge" class="header-doc-name">Live Terminal Feed</span>
                   </div>
                   <span id="preview-stories-count" class="preview-count-pill">-- Stories</span>
+                </div>
+                <div class="feed-mode-tabs" style="display: flex; gap: 6px; padding: 8px 16px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border-subtle);">
+                  <button class="feed-mode-btn active" id="btn-mode-live" data-mode="live" style="flex: 1; padding: 6px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid rgba(59,130,246,0.4); background: rgba(59,130,246,0.2); color: #93c5fd; cursor: pointer; transition: all 0.2s ease;">⚡ Live Feed (24h)</button>
+                  <button class="feed-mode-btn" id="btn-mode-digest" data-mode="digest" style="flex: 1; padding: 6px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s ease;">📋 8 AM Digest</button>
+                  <button class="feed-mode-btn" id="btn-mode-48h" data-mode="48h" style="flex: 1; padding: 6px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s ease;">⏳ Last 48 Hours</button>
                 </div>
                 <div class="preview-search-wrap" style="padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); background: rgba(0,0,0,0.2);">
                   <input type="text" id="preview-story-search" placeholder="🔍 Filter stories by ticker or headline..." style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 12px; color: #fff; font-size: 0.82rem; outline: none;">
@@ -290,6 +311,95 @@
 
           <!-- Hidden Event Logs Container for silent backend logging -->
           <div id="event-logs-container" style="display: none;"></div>
+
+        </section>
+
+        <!-- VIEW: MACRO & SECTOR INTELLIGENCE DESK -->
+        <section id="view-macro" class="workspace-view">
+          
+          <!-- View Header & Primary Actions -->
+          <div class="view-header-bar" style="margin-bottom: 16px;">
+            <div class="header-text-group">
+              <h1 class="view-main-title" style="display: flex; align-items: center; gap: 10px;">
+                <span>🏛️</span> Macro &amp; Sector Intelligence Desk
+              </h1>
+              <p class="view-sub-title">100% verified policy directives, government gazettes, and regulatory catalysts across all Indian market sectors</p>
+            </div>
+            <div class="header-actions-group">
+              <button type="button" id="btn-trigger-macro-crawl" class="terminal-action-btn" style="padding: 9px 18px; font-size: 0.82rem; font-weight: 700; background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: none; border-radius: 8px; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.25);">
+                <span>⚡</span>
+                <span id="macro-crawl-btn-text">Refresh Macro Feeds</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 1: Live Macro Benchmark Ticker Strip -->
+          <div class="macro-vital-strip" id="macro-vital-strip" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+            <!-- Populated via JS: Brent, USD/INR, US 10Y, Repo, CPI, GST -->
+          </div>
+
+          <!-- Section 2: Macro Controls Toolbar (Time, Tiers & Sectors) -->
+          <div class="section-box" style="padding: 16px 20px; margin-bottom: 20px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 12px;">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 14px;">
+              <!-- Left: Time Mode Switcher -->
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px;">Time Horizon:</span>
+                <div class="feed-mode-tabs" style="display: flex; gap: 6px;">
+                  <button class="macro-mode-btn active" data-mode="live" style="padding: 5px 12px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid rgba(59,130,246,0.4); background: rgba(59,130,246,0.2); color: #93c5fd; cursor: pointer;">⚡ Live Feed (24h)</button>
+                  <button class="macro-mode-btn" data-mode="48h" style="padding: 5px 12px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer;">⏳ Last 48 Hours</button>
+                  <button class="macro-mode-btn" data-mode="all" style="padding: 5px 12px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer;">📋 All Records</button>
+                </div>
+              </div>
+
+              <!-- Right: Tier Filter -->
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Materiality:</span>
+                <select id="macro-tier-select" style="background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 6px; padding: 5px 10px; color: var(--text-primary); font-size: 0.78rem; outline: none; cursor: pointer;">
+                  <option value="ALL">All Tiers (Market &amp; Sector)</option>
+                  <option value="Tier 1">Tier 1 Market Movers 🔴</option>
+                  <option value="Tier 2">Tier 2 Sector Catalysts 🟡</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Dynamic All-Sector Pills Bar -->
+            <div style="border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Filter by Sector / Industry:
+                  </span>
+                  <span id="macro-sectors-total-badge" style="font-size: 0.7rem; font-family: var(--font-mono); color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.25); padding: 1px 7px; border-radius: 10px;">61 Sectors</span>
+                </div>
+                <div style="position: relative; max-width: 260px; width: 100%;">
+                  <input type="text" id="macro-sector-filter-search" placeholder="🔍 Quick filter 61 sectors..." style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 4px 12px; font-size: 0.72rem; color: #fff; outline: none;">
+                </div>
+              </div>
+              <div id="macro-sector-chips" class="macro-sector-chips-scroll" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; padding-right: 4px;">
+                <!-- Populated via JS: All Sectors + dynamically discovered sectors -->
+                <button class="macro-sector-pill active" data-sector="ALL">🌐 All Sectors</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Macro News Feed with Search -->
+          <div class="section-box" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
+              <div style="position: relative; flex: 1; max-width: 480px;">
+                <input type="text" id="macro-story-search" placeholder="🔍 Search verified policy directives, ministries, keywords..." style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; padding: 8px 14px; color: #fff; font-size: 0.82rem; outline: none;">
+              </div>
+              <div id="macro-stories-count-badge" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); font-family: var(--font-mono);">
+                0 Verified Directives
+              </div>
+            </div>
+
+            <!-- Feed Grid Container -->
+            <div id="macro-stories-feed" style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+                &#9696; Loading verified all-sector macro intelligence...
+              </div>
+            </div>
+          </div>
 
         </section>
 
@@ -512,6 +622,16 @@
                 <span class="btn-icon">&#8635;</span> Reload
               </button>
             </div>
+          </div>
+
+          <!-- Edition Switcher: Morning vs Evening -->
+          <div class="digest-edition-bar" style="margin-bottom: 14px;">
+            <button type="button" class="digest-edition-btn active" id="btn-edition-morning" data-edition="morning">
+              <span>☀️ Morning Equity Digest (08:00 AM)</span>
+            </button>
+            <button type="button" class="digest-edition-btn" id="btn-edition-evening" data-edition="evening">
+              <span>🌙 Evening Macro &amp; Policy Briefing (06:30 PM)</span>
+            </button>
           </div>
 
           <!-- Recipient Selector Strip + 24h Intelligence Metadata -->
@@ -1029,6 +1149,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=3.7"></script>
+  <script src="/static/app.js?v=4.1"></script>
 </body>
 </html>

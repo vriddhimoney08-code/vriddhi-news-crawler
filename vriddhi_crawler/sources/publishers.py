@@ -95,17 +95,18 @@ def read_rss(fetcher: Fetcher, src: Source, since: datetime) -> list[RawItem]:
         raise ValueError(f"unreadable feed: {feed.bozo_exception}")
     out = []
     for e in feed.entries:
-        link = e.get("link")
-        if not _keep(src, link):
+        link = str(e.get("link") or "").strip()
+        if not link or not _keep(src, link):
             continue
         pub = parse_date(e.get("published") or e.get("updated"))
         if not pub or pub < since:
             continue
-        title = clean_text(e.get("title"))
+        title = clean_text(str(e.get("title") or ""))
         if not title:
             continue
+        summary_raw = str(e.get("summary") or "")
         out.append(RawItem(source_name=src.name, source_type=_source_type(src), title=title, url=link,
-                           published_at=pub, summary=clean_text(e.get("summary"))[:1000], lang=src.language,
+                           published_at=pub, summary=clean_text(summary_raw)[:1000], lang=src.language,
                            body_check=src.body_check))
     return out
 

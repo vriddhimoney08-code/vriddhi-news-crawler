@@ -98,7 +98,7 @@ NOISE_PATTERNS = [
     # 1. Broad market wraps, benchmark index chatter
     r"\b(sensex|nifty|closing bell|opening bell|market wrap|d-street|dalal street|bse benchmark)\b",
     # 2. Retail stock tips, recommendations, gossip
-    r"\b(stocks to buy|stocks to watch|stock tips|hot stocks|buzzing stocks|top gainers|top losers)\b",
+    r"\b(stocks to buy|stocks to watch|stock tips|stock picks|top picks|hot stocks|buzzing stocks|top gainers|top losers|bets on)\b",
     r"\b(\d+\s+stocks?\s+(in focus|to watch|to buy|for today))\b",
     r"\b(share price today|share price target|target price|buy or sell|buy sell hold|brokerage (call|view|rating))\b",
     r"\b(top \d+ stocks|multibagger|penny stock|gold price|silver price|petrol price)\b",
@@ -124,7 +124,44 @@ def is_generic_market_noise(title: str) -> bool:
     return any(re.search(pat, t_lower) for pat in NOISE_PATTERNS)
 
 
-def are_near_duplicates(headline_a: str, headline_b: str, threshold: float = 0.55) -> bool:
+def extract_event_signature(title: str, summary: str = "") -> str | None:
+    """Detect corporate and macro event clusters to match stories reported across different publishers."""
+    text = f"{title} {summary}".lower()
+
+    # 1. Quarterly Results & Earnings (e.g., Q1, Q2, Q3, Q4, Net Profit, PAT)
+    q_match = re.search(r"\b(q[1-4]|quarter\s*[1-4])\b", text)
+    quarter = q_match.group(1).replace(" ", "") if q_match else None
+    has_results = bool(re.search(r"\b(results?|earnings?|net\s*profit|pat|loss|nii|ebitda|quarterly)\b", text))
+    if quarter and has_results:
+        return f"{quarter}_results"
+    if has_results and any(w in text for w in ("annual", "full year", "fy2")):
+        return "annual_results"
+
+    # 2. Deals, Contracts, Orders & Tenders
+    if re.search(r"\b(bags?|won|wins?|secures?|contract|order\s*win|epc\s*contract|tender|mou)\b", text):
+        amt_match = re.search(r"rs\s*([0-9,.]+)\s*(cr|crore)?", text)
+        amt_str = amt_match.group(1).replace(",", "") if amt_match else ""
+        return f"order_win_{amt_str}" if amt_str else "order_win"
+
+    # 3. Commercial Offers, Pricing & Festive Schemes
+    if re.search(r"\b(festiv(e|al)\s*(offer|saving|discount|season|benefit)|festival\s*offer)\b", text):
+        return "festive_offer"
+
+    if re.search(r"\b(price\s*hike|hike.*prices?|tariff.*hike)\b", text):
+        return "price_hike"
+
+    # 4. Regulatory, Investigation & Scams (SEBI, RBI, CBI, ED)
+    if re.search(r"\b(cbi|ed\s*raid|sebi\s*order|fraud|lawsuit|investigation|penalty|proclamation)\b", text):
+        return "regulatory_legal"
+
+    # 5. Government Directives & Sovereign Bonuses (e.g. 78-day bonus)
+    if re.search(r"\b(cabinet\s*approves?\b.*\b(bonus|railway)|productivity\s*linked\s*bonus|plb)\b", text):
+        return "cabinet_railway_bonus"
+
+    return None
+
+
+def are_near_duplicates(headline_a: str, headline_b: str, threshold: float = 0.50) -> bool:
     """Check if two headlines represent the exact same story/event across different publishers."""
     fp_a = headline_fingerprint(headline_a)
     fp_b = headline_fingerprint(headline_b)
@@ -132,16 +169,52 @@ def are_near_duplicates(headline_a: str, headline_b: str, threshold: float = 0.5
         return False
     if fp_a == fp_b:
         return True
-    
-    # Token-set overlap (Jaccard similarity on non-stopword tokens)
+
     tokens_a = set(fp_a.split())
     tokens_b = set(fp_b.split())
-    if tokens_a and tokens_b:
-        overlap = len(tokens_a & tokens_b) / min(len(tokens_a), len(tokens_b))
-        if overlap >= 0.50:
+    if not tokens_a or not tokens_b:
+        return False
+
+    # 0. Guard against distinct legal case/order/appeal numbers (e.g. Appeal 7109 vs Appeal 7108)
+    years = {"2022", "2023", "2024", "2025", "2026", "2027"}
+    nums_a = set(re.findall(r"\b\d{3,6}\b", headline_a)) - years
+    nums_b = set(re.findall(r"\b\d{3,6}\b", headline_b)) - years
+    if nums_a and nums_b and not (nums_a & nums_b):
+        return False
+
+    # 1. Match identical event signatures (e.g., Q2 Results, Festive Offer, Railway Bonus)
+    sig_a = extract_event_signature(headline_a)
+    sig_b = extract_event_signature(headline_b)
+    if sig_a and sig_b and sig_a == sig_b:
+        common_tokens = tokens_a & tokens_b
+        meaningful = [t for t in common_tokens if t not in ("shares", "stock", "stocks", "ltd", "limited")]
+        if len(meaningful) >= 2 or len(common_tokens) >= 3:
             return True
 
+    # 2. Guard against stock directional conflict ('shares jump' vs 'shares crash')
+    has_stock_pos_a = bool(re.search(r"\b(shares?|stock)\s+(jump|gain|rise|surge|rally|soar)\b", headline_a.lower()))
+    has_stock_neg_a = bool(re.search(r"\b(shares?|stock)\s+(fall|drop|slump|plunge|down|crash|tumble)\b", headline_a.lower()))
+    has_stock_pos_b = bool(re.search(r"\b(shares?|stock)\s+(jump|gain|rise|surge|rally|soar)\b", headline_b.lower()))
+    has_stock_neg_b = bool(re.search(r"\b(shares?|stock)\s+(fall|drop|slump|plunge|down|crash|tumble)\b", headline_b.lower()))
+    if (has_stock_pos_a and has_stock_neg_b) or (has_stock_neg_a and has_stock_pos_b):
+        return False
+
+    # 3. Guard against different quarters or reporting periods (e.g. Q1 vs Q2)
+    quarter_words = {"q1", "q2", "q3", "q4"}
+    q_a = tokens_a & quarter_words
+    q_b = tokens_b & quarter_words
+    if q_a and q_b and q_a != q_b:
+        return False
+
+    # 4. Standard Jaccard similarity on tokens
+    union_len = len(tokens_a | tokens_b)
+    jaccard = (len(tokens_a & tokens_b) / union_len) if union_len > 0 else 0.0
+    if jaccard >= 0.45:
+        return True
+
+    # 5. SequenceMatcher ratio on sorted token fingerprints
     return SequenceMatcher(None, fp_a, fp_b).ratio() >= threshold
+
 
 
 REPUTED_DOMAINS = {

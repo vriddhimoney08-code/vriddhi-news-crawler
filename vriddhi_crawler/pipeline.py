@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+try:
+    from datetime import UTC
+except ImportError:
+    UTC = timezone.utc
 from typing import Any
 
 from .ai import evaluate_and_summarize, is_gemini_active
@@ -23,6 +27,7 @@ from .matching import Matcher
 from .normalize import (
     are_near_duplicates,
     canonical_url,
+    headline_fingerprint,
     is_generic_market_noise,
     is_reputable_publisher,
     strip_publisher_suffix,
@@ -148,7 +153,8 @@ class Pipeline:
         saved_count = 0
         body_fetches = 0
         company_lookup = {c.id: c for c in companies}
-        recent_stories = get_recent_stories(limit=200)
+        # Retrieve all recent stories (no 8 AM cutoff) so deduplication works across all runs
+        recent_stories = get_recent_stories(limit=2000, mode="all")
 
         now_utc = datetime.now(UTC)
 
@@ -186,28 +192,44 @@ class Pipeline:
                     continue
                 add_fingerprint(url_fp, "url")
 
-            # 3. Resolve target companies
+            # 3. Resolve target companies strictly
             matched_companies: list[Company] = []
             if item.company_ids:
                 matched_companies = [company_lookup[cid] for cid in item.company_ids if cid in company_lookup]
             else:
                 matched_companies = matcher.match_text(item.title)
-                # If body check enabled and no headline match, optionally inspect article page
+                if not matched_companies and item.summary:
+                    matched_companies = matcher.match_text(item.summary)
+                # If body check enabled and no headline/summary match, safely inspect main content
                 if not matched_companies and item.body_check and item.url and body_fetches < 10:
                     try:
                         r = self.fetcher.get(item.url, check_robots=False, delay=0.5, timeout=8)
                         body = matcher.extract_body_text(r.content)
                         if body:
-                            matched_companies = matcher.match_text(body[:3000])
+                            body_matches = matcher.match_text(body[:3000])
+                            # Only accept if exactly 1 company matches and name appears at least twice
+                            if len(body_matches) == 1:
+                                cand = body_matches[0]
+                                if body.lower().count(cand.name.lower()) >= 2:
+                                    matched_companies = [cand]
                         body_fetches += 1
                     except Exception:
                         pass
+
+            # Prioritize companies explicitly named in headline if multiple were found
+            if len(matched_companies) > 1 and item.source_type != "filing":
+                headline_only = matcher.match_text(item.title)
+                if headline_only:
+                    matched_companies = headline_only
 
             # Discard generic multi-company sector wraps and listicles (3+ companies)
             if len(matched_companies) >= 3 and item.source_type != "filing":
                 continue
 
             cleaned_title = strip_publisher_suffix(item.title, item.source_name)
+            if not cleaned_title:
+                continue
+
             grade = matcher.grade_story(cleaned_title, item.summary, item.source_type)
             final_summary = item.summary or ""
 
@@ -227,21 +249,23 @@ class Pipeline:
                 # 4. Check for near-duplicates in recent stories for this company
                 merged = False
                 for existing in recent_stories:
-                    if existing["company_id"] == comp.id and are_near_duplicates(cleaned_title, existing["title"]):
-                        # Merge source into existing story
-                        sources_list = existing.get("sources", [])
-                        if item.url and not any(s.get("url") == item.url for s in sources_list):
-                            sources_list.append({"name": item.source_name, "url": item.url})
-                            existing["sources"] = sources_list
-                            save_story(existing)
-                        merged = True
-                        break
+                    if existing["company_id"] == comp.id:
+                        if are_near_duplicates(cleaned_title, existing["title"]) or (item.url and item.url == existing.get("url")):
+                            # Merge source into existing story
+                            sources_list = existing.get("sources", [])
+                            if item.url and not any(s.get("url") == item.url for s in sources_list):
+                                sources_list.append({"name": item.source_name, "url": item.url})
+                                existing["sources"] = sources_list
+                                save_story(existing)
+                            merged = True
+                            break
 
                 if merged:
                     continue
 
-                # 5. Generate story record
-                story_id = hashlib.sha256(f"{comp.id}:{cleaned_title}:{item.published_at}".encode()).hexdigest()[:16]
+                # 5. Generate story record with deterministic primary key ID
+                fp_key = headline_fingerprint(cleaned_title) or cleaned_title.lower()
+                story_id = hashlib.sha256(f"{comp.id}:{fp_key}".encode()).hexdigest()[:16]
                 story_dict = {
                     "id": story_id,
                     "title": cleaned_title,

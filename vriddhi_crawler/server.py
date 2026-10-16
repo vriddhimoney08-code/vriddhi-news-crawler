@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -74,14 +75,194 @@ def get_stats():
 
 
 @app.get("/api/stories")
-def list_stories(limit: int = 100, company_id: str | None = None, source_type: str | None = None, window_only: bool = True):
-    return get_recent_stories(limit=limit, company_id=company_id, source_type=source_type, window_only=window_only)
+def list_stories(
+    limit: int = 100,
+    company_id: str | None = None,
+    source_type: str | None = None,
+    mode: str = "live",
+    window_only: bool | None = None,
+):
+    return get_recent_stories(
+        limit=limit,
+        company_id=company_id,
+        source_type=source_type,
+        mode=mode,
+        window_only=window_only,
+    )
+
+
+@app.post("/api/stories/cleanup")
+def cleanup_stories():
+    """Run deduplication audit and prune duplicate records from SQLite database."""
+    from .db import cleanup_database_duplicates
+    return cleanup_database_duplicates()
+
+
+# =========================================================================
+# Verified Macro & Sector Intelligence Endpoints
+# =========================================================================
+
+@app.get("/api/macro")
+def list_macro_stories(
+    limit: int = 50,
+    sector: str | None = None,
+    tier: str | None = None,
+    mode: str = "live",
+):
+    from .db import get_macro_stories
+    return get_macro_stories(limit=limit, sector=sector, tier=tier, mode=mode)
+
+
+@app.get("/api/macro/stats")
+def get_macro_statistics():
+    from .db import get_macro_stats
+    return get_macro_stats()
+
+
+@app.get("/api/macro/sectors")
+def list_macro_sectors():
+    from .db import get_macro_sectors
+    return {"sectors": get_macro_sectors()}
+
+
+@app.post("/api/macro/crawl")
+def trigger_macro_crawl(hours: int = 48):
+    """Trigger verified macro crawl across PIB, RBI, SEBI, and official wires."""
+    from .sources.macro import MacroPipeline
+    return MacroPipeline().run_macro_crawl(hours=hours)
+
+
+# =========================================================================
+# Evening Macro & Policy Digest Endpoints
+# =========================================================================
+
+@app.get("/api/macro/digest/meta/{analyst_id}")
+def get_macro_digest_meta(analyst_id: str):
+    """Provide real-time intelligence summary metrics for the selected analyst's evening macro brief."""
+    from .db import get_analyst_macro_sectors, get_macro_stories_for_analyst
+    from .pdf import get_clean_macro_digest_filename
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    tier1_count = sum(1 for s in stories if "Tier 1" in (s.get("impact_grade") or ""))
+    sectors = get_analyst_macro_sectors(analyst_id)
+    pdf_filename = get_clean_macro_digest_filename(analyst.name, ext=".pdf")
+
+    return {
+        "analyst_id": analyst.id,
+        "name": analyst.name,
+        "phone": analyst.phone,
+        "email": analyst.email,
+        "assigned_sectors": sectors,
+        "total_stories": len(stories),
+        "tier1_count": tier1_count,
+        "pdf_name": pdf_filename,
+    }
+
+
+@app.get("/api/macro/digest/preview/{analyst_id}", response_class=HTMLResponse)
+def preview_macro_digest(analyst_id: str):
+    """Render the Post-Market Macro & Policy Briefing HTML for the requested analyst."""
+    from .db import get_macro_stories_for_analyst
+    from .pdf import render_macro_digest_html
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    html_output = render_macro_digest_html(analyst.name, analyst.id, stories)
+
+    return HTMLResponse(
+        content=html_output,
+        status_code=200,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@app.get("/api/macro/digest/download/{analyst_id}")
+def download_macro_digest_pdf(analyst_id: str):
+    """Generate and download the Evening Macro & Policy Briefing PDF."""
+    from .db import get_macro_stories_for_analyst
+    from .pdf import generate_macro_digest
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    file_path, _ = generate_macro_digest(analyst.id, analyst.name, stories)
+
+    media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "text/html"
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=file_path.name,
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_path.name}"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+@app.post("/api/macro/digest/send/{analyst_id}")
+def dispatch_macro_digest(analyst_id: str):
+    """Dispatch Post-Market Evening Macro & Policy Briefing to analyst via Interakt WhatsApp."""
+    from .db import get_macro_stories_for_analyst
+    from .pdf import generate_macro_digest
+    from .whatsapp import send_whatsapp_macro_digest
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    if not stories:
+        return {"status": "no_op", "message": f"No policy updates for {analyst.name} today.", "count": 0}
+
+    file_path, _ = generate_macro_digest(analyst.id, analyst.name, stories)
+
+    public_base = os.getenv("BASE_URL") or get_ngrok_public_url()
+    cb = int(datetime.now().timestamp())
+    public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}" if public_base else None
+
+    wa_result = send_whatsapp_macro_digest(
+        analyst_name=analyst.name,
+        analyst_phone=analyst.phone,
+        stories=stories,
+        pdf_path=file_path,
+        public_pdf_url=public_pdf_url,
+    )
+
+    dispatch_msg = wa_result.get("message", f"Dispatched {len(stories)} policy directives to {analyst.name}")
+    return {
+        "status": wa_result.get("status", "sent"),
+        "mode": wa_result.get("mode", "simulated"),
+        "message": dispatch_msg,
+        "recipient": wa_result.get("recipient"),
+        "file": file_path.name,
+        "count": len(stories),
+    }
+
 
 
 @app.get("/api/watchlist")
 def list_watchlist():
     companies = get_companies()
     return [asdict(c) for c in companies]
+
+
 
 
 @app.get("/api/folders")
@@ -369,6 +550,10 @@ def preview_digest(analyst_id: str):
         raise HTTPException(status_code=404, detail="Analyst not found")
 
     stories = get_unsent_stories_for_analyst(analyst_id)
+    if not stories:
+        from .db import get_sent_stories_for_analyst_today
+        stories = get_sent_stories_for_analyst_today(analyst_id)
+
     html_output = render_digest_html(
         analyst.name,
         stories,
@@ -430,6 +615,10 @@ def download_digest_pdf(analyst_id: str):
         raise HTTPException(status_code=404, detail="Analyst not found")
 
     stories = get_unsent_stories_for_analyst(analyst_id)
+    if not stories:
+        from .db import get_sent_stories_for_analyst_today
+        stories = get_sent_stories_for_analyst_today(analyst_id)
+
     file_path, _ = generate_analyst_digest(analyst.id, analyst.name, stories)
 
     media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "text/html"
@@ -455,6 +644,10 @@ def get_digest_meta(analyst_id: str):
         raise HTTPException(status_code=404, detail="Analyst not found")
 
     stories = get_unsent_stories_for_analyst(analyst_id)
+    if not stories:
+        from .db import get_sent_stories_for_analyst_today
+        stories = get_sent_stories_for_analyst_today(analyst_id)
+
     filings = sum(1 for s in stories if s.get("filing_id") or (s.get("source_type") or "").lower() == "filing")
     grade_a = sum(1 for s in stories if (s.get("grade") or "").upper().startswith("GRADE A"))
     pdf_filename = get_clean_digest_filename(analyst.name, ext=".pdf")
@@ -488,10 +681,10 @@ def simulate_send_digest(analyst_id: str):
     # Generate the physical digest file (PDF or HTML)
     file_path, _ = generate_analyst_digest(analyst.id, analyst.name, stories)
 
-    # Detect live public tunnel URL for direct WhatsApp PDF attachment with cache-buster
-    public_base = get_ngrok_public_url()
+    # Detect live public URL (BASE_URL on GCP / ngrok tunnel) for direct WhatsApp PDF attachment with cache-buster
+    public_base = os.getenv("BASE_URL") or get_ngrok_public_url()
     cb = int(datetime.now().timestamp())
-    public_pdf_url = f"{public_base}/api/digest/file/{file_path.name}?t={cb}" if public_base else None
+    public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}" if public_base else None
 
     # Dispatch via Interakt WhatsApp (or safe simulation if not configured/TEST_MODE)
     wa_result = send_whatsapp_digest(

@@ -53,17 +53,23 @@ def bse_announcements(fetcher: Fetcher, matcher: Matcher, since: datetime, max_p
                 "strType": "C",
                 "subcategory": "-1",
             }
-            if HAS_CURL_CFFI:
-                r = cffi_requests.get(
-                    BSE_API,
-                    params=params,
-                    headers=BSE_HEADERS,
-                    impersonate="chrome120",
-                    timeout=20,
-                )
-            else:
-                r = fetcher.get(BSE_API, params=params, headers=BSE_HEADERS, check_robots=False, delay=1.5)
-            rows = (r.json() or {}).get("Table") or []
+            rows = []
+            try:
+                if HAS_CURL_CFFI:
+                    r = cffi_requests.get(
+                        BSE_API,
+                        params=params,
+                        headers=BSE_HEADERS,
+                        impersonate="chrome120",
+                        timeout=8,
+                    )
+                else:
+                    r = fetcher.get(BSE_API, params=params, headers=BSE_HEADERS, check_robots=False, delay=1.5)
+                if getattr(r, "status_code", 0) == 200:
+                    rows = (r.json() or {}).get("Table") or []
+            except Exception as e:
+                log.warning("BSE query error for %s: %s", ymd, e)
+                break
             if not rows:
                 break
             newest_on_page = None
@@ -134,7 +140,10 @@ def nse_announcements(fetcher: Fetcher, matcher: Matcher, since: datetime) -> li
             delay=1.5,
         )
 
-    data = r.json()
+    try:
+        data = r.json() if getattr(r, "status_code", 0) == 200 else {}
+    except Exception:
+        data = {}
     rows = data if isinstance(data, list) else data.get("data", [])
     out: list[RawItem] = []
     for a in rows:

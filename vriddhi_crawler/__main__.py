@@ -37,6 +37,9 @@ def main():
     # run-daily
     subparsers.add_parser("run-daily", help="Run crawl cycle and immediately dispatch morning digests via WhatsApp")
 
+    # macro-dispatch
+    subparsers.add_parser("macro-dispatch", help="Run macro crawl and dispatch Evening Sectorial Briefings via WhatsApp")
+
     # status
     subparsers.add_parser("status", help="Print operational dashboard stats")
 
@@ -88,6 +91,32 @@ def main():
             file_path, _ = generate_analyst_digest(a.id, a.name, stories)
             res = send_whatsapp_digest(analyst_name=a.name, analyst_phone=a.phone, stories=stories, pdf_path=file_path)
             mark_sent([s["id"] for s in stories], a.id)
+            print(f"[{a.name}] Result: {res.get('status')} -> {res.get('message')}")
+
+    elif args.command == "macro-dispatch":
+        init_db(seed_defaults=True)
+        print("=== [CRON] Starting Evening 5:30 PM Macro & Sector Briefing Cycle ===")
+        from .pipeline import Pipeline
+        from .db import get_analysts, get_macro_stories_for_analyst
+        from .pdf import generate_macro_digest
+        from .whatsapp import send_whatsapp_macro_digest
+
+        print("Crawling macro sources (PIB, RBI, SEBI, official gazettes)...")
+        Pipeline().run_crawl(groups=["macro"], force=True)
+
+        analysts = get_analysts()
+        for a in analysts:
+            stories = get_macro_stories_for_analyst(a.id, hours=24, limit=30)
+            if not stories:
+                print(f"[{a.name}] No policy updates today.")
+                continue
+            file_path, _ = generate_macro_digest(a.id, a.name, stories)
+            res = send_whatsapp_macro_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                stories=stories,
+                pdf_path=file_path,
+            )
             print(f"[{a.name}] Result: {res.get('status')} -> {res.get('message')}")
 
     elif args.command == "status":

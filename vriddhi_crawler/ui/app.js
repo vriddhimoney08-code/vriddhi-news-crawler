@@ -104,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentWatchlistFolder = "ALL";
   let watchlistSearchQuery = "";
-  let availableFolders = ["GAME", "SET", "MATCH"];
+  let availableFolders = ["GAME", "SET", "MATCH", "JUNIOR"];
 
   // Clients & Directory Elements
   const analystsTableBody = document.getElementById("analysts-table-body");
@@ -153,6 +153,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const targetView = document.getElementById(targetId);
       if (targetView) targetView.classList.add("active");
 
+      if (targetId === "view-macro") {
+        loadMacroDesk();
+      }
       if (targetId === "view-digest") {
         loadFullDigestFrame();
       }
@@ -492,6 +495,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (f === "GAME") tagClass = "folder-tag-game";
       else if (f === "SET") tagClass = "folder-tag-set";
       else if (f === "MATCH") tagClass = "folder-tag-match";
+      else if (f === "JUNIOR") tagClass = "folder-tag-junior";
 
       const stockCount = companiesList.filter(c => getCompanyFolders(c).includes(f.toUpperCase())).length;
 
@@ -812,17 +816,48 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  let currentFeedMode = "live";
+
+  // Feed mode tab switcher (Live 24h vs 8 AM Digest vs Last 48h)
+  const modeBtns = document.querySelectorAll(".feed-mode-btn");
+  modeBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      modeBtns.forEach(b => {
+        b.classList.remove("active");
+        b.style.background = "transparent";
+        b.style.borderColor = "var(--border-subtle)";
+        b.style.color = "var(--text-muted)";
+      });
+      btn.classList.add("active");
+      btn.style.background = "rgba(59,130,246,0.2)";
+      btn.style.borderColor = "rgba(59,130,246,0.4)";
+      btn.style.color = "#93c5fd";
+      currentFeedMode = btn.getAttribute("data-mode") || "live";
+      if (currentAnalystId) {
+        loadAnalystStoriesPreview(currentAnalystId);
+      }
+    });
+  });
+
   async function loadAnalystStoriesPreview(analystId) {
     const analyst = analystsList.find(a => a.id === analystId) || { name: analystId };
     const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "");
-    previewFilenameBadge.textContent = `Live PDF Preview (${analyst.name}_${dateStr}.pdf)`;
+    if (previewFilenameBadge) {
+      if (currentFeedMode === "digest") {
+        previewFilenameBadge.textContent = `8 AM Briefing (${analyst.name}_${dateStr}.pdf)`;
+      } else if (currentFeedMode === "48h") {
+        previewFilenameBadge.textContent = `Last 48h Feed (${analyst.name})`;
+      } else {
+        previewFilenameBadge.textContent = `Live Terminal Feed (${analyst.name} • 24h)`;
+      }
+    }
 
     updateActionButtons();
 
-    previewStoriesFeed.innerHTML = `<div class="loading-line">&#9696; Compiling personalized briefing stories...</div>`;
+    previewStoriesFeed.innerHTML = `<div class="loading-line">&#9696; Compiling ${currentFeedMode} stories...</div>`;
 
     try {
-      const res = await fetch(`/api/stories?limit=80`);
+      const res = await fetch(`/api/stories?mode=${currentFeedMode}&limit=120`);
       const all = await res.json();
       
       // Filter for companies assigned to this analyst via folders or direct assignment
@@ -924,7 +959,32 @@ document.addEventListener("DOMContentLoaded", () => {
     btnSendToAll.innerHTML = `<span class="btn-icon">&#128640;</span><span>Send to All Analysts</span>`;
   });
 
-  // 8. Full Daily Digest Desk & Interactive Workstation
+  // 8. Full Daily Digest Desk & Interactive Workstation (Morning & Evening Editions)
+  let currentDigestEdition = "morning"; // 'morning' | 'evening'
+
+  const btnEditionMorning = document.getElementById("btn-edition-morning");
+  const btnEditionEvening = document.getElementById("btn-edition-evening");
+
+  if (btnEditionMorning && btnEditionEvening) {
+    btnEditionMorning.addEventListener("click", () => {
+      if (currentDigestEdition === "morning") return;
+      currentDigestEdition = "morning";
+      btnEditionMorning.classList.add("active");
+      btnEditionEvening.classList.remove("active");
+      showToast("Switched to ☀️ Morning Equity Research Digest (08:00 AM)");
+      loadFullDigestFrame();
+    });
+
+    btnEditionEvening.addEventListener("click", () => {
+      if (currentDigestEdition === "evening") return;
+      currentDigestEdition = "evening";
+      btnEditionEvening.classList.add("active");
+      btnEditionMorning.classList.remove("active");
+      showToast("Switched to 🌙 Evening Post-Market Macro & Policy Briefing (06:30 PM)");
+      loadFullDigestFrame();
+    });
+  }
+
   async function loadFullDigestFrame() {
     if (!digestViewAnalystSelect) return;
 
@@ -934,15 +994,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (digestFrameLoader) digestFrameLoader.style.display = "flex";
 
+    const isEvening = currentDigestEdition === "evening";
+    const previewUrl = isEvening
+      ? `/api/macro/digest/preview/${currentAnalystId}?t=${Date.now()}`
+      : `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+    const metaUrl = isEvening
+      ? `/api/macro/digest/meta/${currentAnalystId}`
+      : `/api/digest/meta/${currentAnalystId}`;
+
     if (fullDigestIframe) {
       fullDigestIframe.onload = () => {
         if (digestFrameLoader) digestFrameLoader.style.display = "none";
       };
-      fullDigestIframe.src = `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+      fullDigestIframe.src = previewUrl;
     }
 
     try {
-      const res = await fetch(`/api/digest/meta/${currentAnalystId}`);
+      const res = await fetch(metaUrl);
       if (res.ok) {
         const meta = await res.json();
 
@@ -951,22 +1019,33 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (digestClientBaskets) {
-          const baskets = meta.assigned_folders && meta.assigned_folders.length > 0
-            ? meta.assigned_folders.join(", ")
-            : "All Stocks";
-          digestClientBaskets.textContent = baskets;
+          if (isEvening) {
+            const secs = meta.assigned_sectors && meta.assigned_sectors.length > 0
+              ? meta.assigned_sectors.join(", ")
+              : "All Sectors";
+            digestClientBaskets.textContent = `Sectors: ${secs}`;
+          } else {
+            const baskets = meta.assigned_folders && meta.assigned_folders.length > 0
+              ? meta.assigned_folders.join(", ")
+              : "All Stocks";
+            digestClientBaskets.textContent = baskets;
+          }
         }
 
         if (digestStoriesCount) {
-          digestStoriesCount.textContent = `${meta.total_stories || 0} Stories`;
+          digestStoriesCount.textContent = isEvening
+            ? `${meta.total_stories || 0} Directives`
+            : `${meta.total_stories || 0} Stories`;
         }
 
         if (digestFilingsCount) {
-          digestFilingsCount.textContent = `${meta.total_filings || 0} Filings`;
+          digestFilingsCount.textContent = isEvening
+            ? `${meta.tier1_count || 0} Tier-1 Sovereign`
+            : `${meta.total_filings || 0} Filings`;
         }
 
         if (digestPdfName) {
-          digestPdfName.textContent = meta.pdf_name || "Client_Date.pdf";
+          digestPdfName.textContent = meta.pdf_name || (isEvening ? "Analyst_Macro_Evening.pdf" : "Client_Date.pdf");
         }
 
         if (digestSelectedAvatar) {
@@ -981,7 +1060,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnReloadDigestFrame) {
     btnReloadDigestFrame.addEventListener("click", () => {
-      showToast("Recompiling fresh daily briefing preview...");
+      showToast(currentDigestEdition === "evening"
+        ? "Recompiling fresh evening policy briefing preview..."
+        : "Recompiling fresh daily briefing preview...");
       loadFullDigestFrame();
     });
   }
@@ -999,25 +1080,40 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnDownloadDigestPdf) {
     btnDownloadDigestPdf.addEventListener("click", () => {
       const filename = digestPdfName ? digestPdfName.textContent.trim() : "";
-      showToast(`Generating and downloading ${filename || "PDF"}...`);
-      triggerSilentDownload(`/api/digest/download/${currentAnalystId}?t=${Date.now()}`, filename);
+      const isEvening = currentDigestEdition === "evening";
+      const downloadUrl = isEvening
+        ? `/api/macro/digest/download/${currentAnalystId}?t=${Date.now()}`
+        : `/api/digest/download/${currentAnalystId}?t=${Date.now()}`;
+      showToast(`Generating and downloading ${filename || (isEvening ? "Evening Macro PDF" : "PDF")}...`);
+      triggerSilentDownload(downloadUrl, filename);
     });
   }
 
   if (btnOpenDigestTab) {
     btnOpenDigestTab.addEventListener("click", () => {
-      window.open(`/api/digest/preview/${currentAnalystId}?t=${Date.now()}`, "_blank");
+      const isEvening = currentDigestEdition === "evening";
+      const openUrl = isEvening
+        ? `/api/macro/digest/preview/${currentAnalystId}?t=${Date.now()}`
+        : `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+      window.open(openUrl, "_blank");
     });
   }
 
   if (btnSendSingleWhatsapp) {
     btnSendSingleWhatsapp.addEventListener("click", async () => {
+      const isEvening = currentDigestEdition === "evening";
       btnSendSingleWhatsapp.disabled = true;
       btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">⏳</span> Sending...`;
-      showToast(`Dispatching 8:00 AM briefing to client...`);
+      showToast(isEvening
+        ? `Dispatching 06:30 PM Evening Policy Briefing to analyst...`
+        : `Dispatching 8:00 AM briefing to client...`);
+
+      const sendEndpoint = isEvening
+        ? `/api/macro/digest/send/${currentAnalystId}`
+        : `/api/digest/simulate-send/${currentAnalystId}`;
 
       try {
-        const res = await fetch(`/api/digest/simulate-send/${currentAnalystId}`, { method: "POST" });
+        const res = await fetch(sendEndpoint, { method: "POST" });
         const data = await res.json();
         if (data.status === "no_op") {
           showToast(data.message || "No unsent stories for this client.", false);
@@ -1025,10 +1121,12 @@ document.addEventListener("DOMContentLoaded", () => {
           showToast(`Briefing dispatched: ${data.message || 'Sent successfully'}`);
           loadStats();
           loadFullDigestFrame();
-          loadAnalystStoriesPreview(currentAnalystId);
+          if (!isEvening) {
+            loadAnalystStoriesPreview(currentAnalystId);
+          }
         }
       } catch (err) {
-        showToast("Error sending briefing to client", true);
+        showToast("Error sending briefing to analyst", true);
       } finally {
         btnSendSingleWhatsapp.disabled = false;
         btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">🚀</span> Send Brief`;
@@ -1142,7 +1240,7 @@ document.addEventListener("DOMContentLoaded", () => {
     availableFolders.forEach(f => {
       const active = currentWatchlistFolder.toUpperCase() === f.toUpperCase() ? "active" : "";
       const cnt = counts[f] || 0;
-      const isCustom = !["GAME", "SET", "MATCH"].includes(f.toUpperCase());
+      const isCustom = !["GAME", "SET", "MATCH", "JUNIOR"].includes(f.toUpperCase());
       html += `
         <button class="folder-tab-btn ${active}" data-folder="${f}">
           <span>${f}</span>
@@ -1616,6 +1714,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (f === "GAME") tagClass = "folder-tag-game";
       else if (f === "SET") tagClass = "folder-tag-set";
       else if (f === "MATCH") tagClass = "folder-tag-match";
+      else if (f === "JUNIOR") tagClass = "folder-tag-junior";
       return `
         <label class="folder-checkbox-tag">
           <input type="checkbox" name="stock_folder" value="${f}" ${isChecked}>
@@ -2329,9 +2428,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const cardStories = document.getElementById("kpi-card-stories");
     if (cardStories) {
       cardStories.addEventListener("click", async () => {
-        openModalWithConfig("📰", "Curated Stories Today", "All live news stories curated across tracked watchlist companies");
+        openModalWithConfig("📰", "Curated Stories (Live 24h)", "All live news stories curated across tracked watchlist companies");
         try {
-          const res = await fetch("/api/stories?limit=300");
+          const res = await fetch("/api/stories?mode=live&limit=300");
           const stories = await res.json();
           currentItems = stories;
           
@@ -2370,9 +2469,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const cardFilings = document.getElementById("kpi-card-filings");
     if (cardFilings) {
       cardFilings.addEventListener("click", async () => {
-        openModalWithConfig("🏛️", "Exchange Filings (BSE & NSE)", "Official disclosures, financial results & regulatory announcements");
+        openModalWithConfig("🏛️", "Exchange Filings (Live 24h)", "Official disclosures, financial results & regulatory announcements");
         try {
-          const res = await fetch("/api/stories?source_type=filing&limit=150");
+          const res = await fetch("/api/stories?source_type=filing&mode=live&limit=150");
           const filings = await res.json();
           currentItems = filings;
 
@@ -2729,9 +2828,274 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // =========================================================================
+  // Macro & Sector Intelligence Desk
+  // =========================================================================
+  let currentMacroMode = "live";
+  let currentMacroSector = "ALL";
+  let currentMacroTier = "ALL";
+  let allMacroStories = [];
+
+  const macroVitalStrip = document.getElementById("macro-vital-strip");
+  const macroSectorChips = document.getElementById("macro-sector-chips");
+  const macroStoriesFeed = document.getElementById("macro-stories-feed");
+  const macroTierSelect = document.getElementById("macro-tier-select");
+  const macroStorySearch = document.getElementById("macro-story-search");
+  const macroCountBadge = document.getElementById("macro-stories-count-badge");
+  const btnTriggerMacroCrawl = document.getElementById("btn-trigger-macro-crawl");
+
+  async function loadMacroDesk() {
+    await Promise.all([loadMacroStats(), loadMacroSectors(), loadMacroStories()]);
+  }
+
+  async function loadMacroStats() {
+    try {
+      const res = await fetch("/api/macro/stats");
+      const data = await res.json();
+      const b = data.benchmarks || {};
+      
+      const statMacro = document.getElementById("stat-macro");
+      if (statMacro) {
+        statMacro.textContent = `${data.total_today ?? 0} Directives`;
+      }
+
+      if (macroVitalStrip) {
+        const cards = Object.values(b).map(item => {
+          const isPos = item.bias === "POSITIVE";
+          const isNeg = item.bias === "NEGATIVE";
+          const changeClass = isPos ? "bias-pos" : (isNeg ? "bias-neg" : "bias-neu");
+          return `
+            <div class="macro-benchmark-card">
+              <span class="macro-bench-label">${item.label}</span>
+              <span class="macro-bench-val">${item.val}</span>
+              <span class="macro-bench-change ${changeClass}">${item.change}</span>
+            </div>
+          `;
+        }).join("");
+        macroVitalStrip.innerHTML = cards;
+      }
+    } catch (e) {
+      console.warn("Failed to load macro stats:", e);
+    }
+  }
+
+  let allMasterSectorsList = [];
+  let sectorFilterQuery = "";
+
+  async function loadMacroSectors() {
+    if (!macroSectorChips) return;
+    try {
+      const res = await fetch("/api/macro/sectors");
+      const data = await res.json();
+      allMasterSectorsList = data.sectors || [];
+      renderMacroSectorPills();
+    } catch (e) {
+      console.warn("Failed to load macro sectors:", e);
+    }
+  }
+
+  function renderMacroSectorPills() {
+    if (!macroSectorChips) return;
+    let filtered = allMasterSectorsList;
+    if (sectorFilterQuery) {
+      const q = sectorFilterQuery.toLowerCase();
+      filtered = allMasterSectorsList.filter(s => s.sector.toLowerCase().includes(q));
+    }
+
+    const totalBadge = document.getElementById("macro-sectors-total-badge");
+    if (totalBadge) {
+      totalBadge.textContent = `${allMasterSectorsList.length} Sectors`;
+    }
+
+    let html = `<button class="macro-sector-pill ${currentMacroSector === 'ALL' ? 'active' : ''}" data-sector="ALL">🌐 All Sectors</button>`;
+    filtered.forEach(s => {
+      const isActive = currentMacroSector === s.sector;
+      const countLabel = s.count > 0 ? ` (${s.count})` : '';
+      html += `<button class="macro-sector-pill ${isActive ? 'active' : ''}" data-sector="${s.sector}" title="${s.sector}">${s.sector}${countLabel}</button>`;
+    });
+
+    if (filtered.length === 0) {
+      html += `<span style="font-size:0.75rem; color:var(--text-dim); padding:6px 10px;">No sectors matching "${sectorFilterQuery}"</span>`;
+    }
+
+    macroSectorChips.innerHTML = html;
+
+    macroSectorChips.querySelectorAll(".macro-sector-pill").forEach(pill => {
+      pill.addEventListener("click", () => {
+        macroSectorChips.querySelectorAll(".macro-sector-pill").forEach(p => p.classList.remove("active"));
+        pill.classList.add("active");
+        currentMacroSector = pill.getAttribute("data-sector") || "ALL";
+        loadMacroStories();
+      });
+    });
+  }
+
+  const macroSectorFilterSearch = document.getElementById("macro-sector-filter-search");
+  if (macroSectorFilterSearch) {
+    macroSectorFilterSearch.addEventListener("input", (e) => {
+      sectorFilterQuery = (e.target.value || "").trim();
+      renderMacroSectorPills();
+    });
+  }
+
+  async function loadMacroStories() {
+    if (!macroStoriesFeed) return;
+    macroStoriesFeed.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);">&#9696; Compiling verified policy directives...</div>`;
+
+    try {
+      const params = new URLSearchParams({
+        mode: currentMacroMode,
+        limit: "80"
+      });
+      if (currentMacroSector && currentMacroSector !== "ALL") params.append("sector", currentMacroSector);
+      if (currentMacroTier && currentMacroTier !== "ALL") params.append("tier", currentMacroTier);
+
+      const res = await fetch(`/api/macro?${params.toString()}`);
+      allMacroStories = await res.json();
+
+      if (macroStorySearch) macroStorySearch.value = "";
+      renderMacroCards(allMacroStories);
+    } catch (e) {
+      macroStoriesFeed.innerHTML = `<div style="color: var(--rose); padding: 24px; text-align: center;">Failed to load macro stories.</div>`;
+    }
+  }
+
+  function renderMacroCards(stories) {
+    if (!macroStoriesFeed) return;
+    if (macroCountBadge) {
+      macroCountBadge.textContent = `${stories.length} Verified Directives`;
+    }
+
+    if (!stories || stories.length === 0) {
+      macroStoriesFeed.innerHTML = `
+        <div style="padding: 48px 24px; text-align: center; color: var(--text-muted); font-style: italic;">
+          No verified government or regulatory directives matching this filter.
+        </div>
+      `;
+      return;
+    }
+
+    macroStoriesFeed.innerHTML = stories.map(s => {
+      const tierClass = (s.impact_grade || "").includes("Tier 1") ? "tier-1" : ((s.impact_grade || "").includes("Tier 2") ? "tier-2" : "tier-3");
+      const biasClass = s.impact_bias === "POSITIVE" ? "bias-pos" : (s.impact_bias === "NEGATIVE" ? "bias-neg" : "bias-neu");
+      const biasLabel = s.impact_bias === "POSITIVE" ? "POSITIVE 🟢" : (s.impact_bias === "NEGATIVE" ? "NEGATIVE 🔴" : "NEUTRAL ⚪");
+      const sectors = (s.sectors || []).map(sec => `<span class="macro-sector-tag">#${sec}</span>`).join(" ");
+      const pubDate = s.published_at ? new Date(s.published_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "Recent";
+
+      return `
+        <div class="macro-story-card">
+          <div class="macro-card-header">
+            <span class="macro-authority-badge">${s.ministry_or_regulator || s.source_authority}</span>
+            <span class="macro-tier-badge ${tierClass}">${s.impact_grade}</span>
+          </div>
+
+          <a class="macro-card-title" href="${s.url || '#'}" target="_blank" rel="noopener">
+            ${s.title}
+          </a>
+
+          <div class="macro-sector-tags">
+            ${sectors}
+          </div>
+
+          <div class="macro-equity-box">
+            <div class="macro-equity-header">
+              <span>📌 Equity Impact:</span>
+              <span class="${biasClass}">${biasLabel}</span>
+            </div>
+            <div class="macro-equity-text">
+              ${s.impact_summary || s.summary}
+            </div>
+          </div>
+
+          <div class="macro-card-footer">
+            <span>📅 ${pubDate} IST</span>
+            <a href="${s.url || '#'}" target="_blank" rel="noopener" style="color: #60a5fa; text-decoration: none; font-weight: 600;">
+              Official Gazette / Document ↗
+            </a>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // Time horizon button tabs
+  document.querySelectorAll(".macro-mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".macro-mode-btn").forEach(b => {
+        b.classList.remove("active");
+        b.style.background = "transparent";
+        b.style.borderColor = "var(--border-subtle)";
+        b.style.color = "var(--text-muted)";
+      });
+      btn.classList.add("active");
+      btn.style.background = "rgba(59,130,246,0.2)";
+      btn.style.borderColor = "rgba(59,130,246,0.4)";
+      btn.style.color = "#93c5fd";
+      currentMacroMode = btn.getAttribute("data-mode") || "live";
+      loadMacroStories();
+    });
+  });
+
+  // Materiality Tier dropdown
+  if (macroTierSelect) {
+    macroTierSelect.addEventListener("change", (e) => {
+      currentMacroTier = e.target.value;
+      loadMacroStories();
+    });
+  }
+
+  // Live macro search
+  if (macroStorySearch) {
+    macroStorySearch.addEventListener("input", (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      if (!q) {
+        renderMacroCards(allMacroStories);
+        return;
+      }
+      const filtered = allMacroStories.filter(s => {
+        const t = (s.title || "").toLowerCase();
+        const m = (s.ministry_or_regulator || "").toLowerCase();
+        const sum = (s.impact_summary || "").toLowerCase();
+        const sec = (s.sectors || []).join(" ").toLowerCase();
+        return t.includes(q) || m.includes(q) || sum.includes(q) || sec.includes(q);
+      });
+      renderMacroCards(filtered);
+    });
+  }
+
+  // Refresh Macro Feeds button
+  if (btnTriggerMacroCrawl) {
+    btnTriggerMacroCrawl.addEventListener("click", async () => {
+      const label = document.getElementById("macro-crawl-btn-text");
+      if (label) label.textContent = "Polling Gazettes & Feeds...";
+      btnTriggerMacroCrawl.disabled = true;
+      try {
+        const res = await fetch("/api/macro/crawl", { method: "POST" });
+        const data = await res.json();
+        showToast(`Macro Crawl Complete: Saved ${data.stories_saved ?? 0} verified releases.`);
+        await loadMacroDesk();
+      } catch (e) {
+        showToast("Macro crawl failed.", true);
+      } finally {
+        if (label) label.textContent = "Refresh Macro Feeds";
+        btnTriggerMacroCrawl.disabled = false;
+      }
+    });
+  }
+
+  // KPI card link to Macro Desk
+  const kpiMacro = document.getElementById("kpi-card-macro");
+  if (kpiMacro) {
+    kpiMacro.addEventListener("click", () => {
+      const navMacro = document.querySelector('[data-view="view-macro"]');
+      if (navMacro) navMacro.click();
+    });
+  }
+
   // Initial Load
   async function initDashboard() {
     loadStats();
+    loadMacroStats();
     loadDeliveryMode();
     await loadFolders();
     await loadWatchlist();

@@ -42,9 +42,9 @@ class Matcher:
 
         for c in self.companies:
             if c.bse_code:
-                self.by_bse[str(c.bse_code).strip()] = c
+                self.by_bse[c.bse_code.strip()] = c
             if c.nse_symbol:
-                self.by_nse[str(c.nse_symbol).strip().upper()] = c
+                self.by_nse[c.nse_symbol.strip().upper()] = c
 
             patterns = []
             for name in c.all_names:

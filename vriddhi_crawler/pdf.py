@@ -169,6 +169,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border: 1px solid #e9d5ff;
   }
 
+  .basket-pill-junior {
+    background: #fdf4ff;
+    color: #a21caf;
+    border: 1px solid #f0abfc;
+  }
+
   .basket-pill-custom {
     background: #f0fdf4;
     color: #065f46;
@@ -207,6 +213,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   .portfolio-banner-match {
     background: linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7c3aed 100%);
+  }
+
+  .portfolio-banner-junior {
+    background: linear-gradient(135deg, #701a75 0%, #86198f 50%, #a21caf 100%);
   }
 
   .portfolio-banner-custom {
@@ -349,6 +359,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .basket-mini-game { background: #d1fae5; color: #065f46; }
   .basket-mini-set { background: #dbeafe; color: #1e40af; }
   .basket-mini-match { background: #ede9fe; color: #6b21a8; }
+  .basket-mini-junior { background: #fae8ff; color: #86198f; }
   .basket-mini-custom { background: #e0f2fe; color: #0369a1; }
   .basket-mini-watchlist { background: #f1f5f9; color: #475569; }
 
@@ -682,6 +693,8 @@ def _get_basket_theme(name: str) -> tuple[str, str]:
         return "set", "💎"
     if clean == "MATCH":
         return "match", "⚡"
+    if clean == "JUNIOR":
+        return "junior", "🚀"
     if "WATCHLIST" in clean or "DIRECT" in clean:
         return "watchlist", "🎯"
     return "custom", "📁"
@@ -941,3 +954,423 @@ def generate_analyst_digest(analyst_id: str, analyst_name: str, stories: list[di
     except Exception as e:  # noqa: BLE001
         log.info("WeasyPrint direct compilation not active (%s); using HTML digest fallback", e)
         return html_file, html_content
+
+
+MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ analyst_name }}_Macro_Evening_{{ date_str_file }}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+  @page {
+    size: A4;
+    margin: 10mm 10mm 10mm 10mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #94a3b8;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #0f172a;
+    background-color: #f8fafc;
+    line-height: 1.5;
+    margin: 0;
+    padding: 8px;
+    font-size: 9pt;
+  }
+
+  .masthead {
+    background: linear-gradient(135deg, #090d16 0%, #111827 60%, #06241a 100%);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+    color: #ffffff;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .brand-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  }
+
+  .brand-title {
+    font-size: 16pt;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: #10b981;
+  }
+
+  .brand-subtitle {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #94a3b8;
+    margin-top: 2px;
+    font-weight: 600;
+  }
+
+  .analyst-badge {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: #f8fafc;
+  }
+
+  .meta-sub-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 8pt;
+    color: #94a3b8;
+  }
+
+  /* Benchmark Grid */
+  .benchmark-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .benchmark-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .bm-label {
+    font-size: 6.5pt;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.5px;
+  }
+
+  .bm-val {
+    font-size: 10.5pt;
+    font-weight: 800;
+    color: #0f172a;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 2px 0;
+  }
+
+  .bm-chg {
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .chg-pos { background: #dcfce7; color: #15803d; }
+  .chg-neg { background: #fee2e2; color: #b91c1c; }
+  .chg-neu { background: #f1f5f9; color: #475569; }
+
+  /* Section Headings */
+  .section-heading {
+    font-size: 10pt;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 14px 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 4px;
+  }
+
+  /* Story Cards */
+  .macro-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    page-break-inside: avoid;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .card-top-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .auth-tag {
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 2.5px 7px;
+    border-radius: 4px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .sector-highlight-badge {
+    font-size: 7pt;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1.5px solid #6366f1;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 2px rgba(99, 102, 241, 0.12);
+  }
+
+  .sector-highlight-badge .sec-label {
+    font-size: 5.5pt;
+    font-weight: 800;
+    color: #4f46e5;
+    background: #e0e7ff;
+    padding: 1px 4px;
+    border-radius: 2px;
+    letter-spacing: 0.5px;
+  }
+
+  .tier-tag {
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 2.5px 7px;
+    border-radius: 4px;
+  }
+
+  .tier-1 { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+  .tier-2 { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+
+  .story-title {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
+  .story-title a {
+    color: #0f172a;
+    text-decoration: none;
+  }
+
+  .impact-strip {
+    background: #f8fafc;
+    border-left: 3px solid #10b981;
+    padding: 4px 8px;
+    font-size: 8pt;
+    color: #334155;
+    border-radius: 0 4px 4px 0;
+    margin-top: 4px;
+  }
+
+  .impact-strip-neg { border-left-color: #ef4444; }
+  .impact-strip-neu { border-left-color: #64748b; }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 7pt;
+    color: #64748b;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid #f1f5f9;
+  }
+</style>
+</head>
+<body>
+
+<!-- Masthead -->
+<div class="masthead">
+  <div class="brand-row">
+    <div>
+      <div class="brand-title">&#127963; VRIDDHI MONEY</div>
+      <div class="brand-subtitle">POST-MARKET MACRO &amp; REGULATORY POLICY BRIEFING</div>
+    </div>
+    <div class="analyst-badge">
+      &#128100; {{ analyst_name }} &bull; {{ sectors_label }}
+    </div>
+  </div>
+  <div class="meta-sub-row">
+    <div>Date: <strong>{{ date_str }} (Evening Wrap)</strong></div>
+    <div>{{ total_items }} Verified Policy Directives &bull; {{ tier1_count }} Sovereign/Tier-1</div>
+  </div>
+</div>
+
+<!-- Benchmarks Strip -->
+<div class="benchmark-grid">
+  {% for k, bm in benchmarks.items() %}
+  <div class="benchmark-box">
+    <div class="bm-label">{{ bm.label }}</div>
+    <div class="bm-val">{{ bm.val }}</div>
+    <span class="bm-chg {% if bm.bias == 'POSITIVE' %}chg-pos{% elif bm.bias == 'NEGATIVE' %}chg-neg{% else %}chg-neu{% endif %}">
+      {{ bm.change }}
+    </span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Section: Verified Directives -->
+<div class="section-heading">&#128220; Institutional &amp; Sector Directives</div>
+
+{% if not stories %}
+<div class="macro-card" style="text-align: center; color: #64748b; padding: 24px;">
+  No new policy gazettes or directives for this sector window today.
+</div>
+{% endif %}
+
+{% for s in stories %}
+<div class="macro-card">
+  <div class="card-top">
+    <div class="card-top-left">
+      <span class="auth-tag">{{ s.source_authority or 'GOVERNMENT GAZETTE' }}</span>
+      {% if s.sectors %}
+        {% for sec in s.sectors %}
+        <span class="sector-highlight-badge"><span class="sec-label">SECTOR</span>{{ sec }}</span>
+        {% endfor %}
+      {% else %}
+        <span class="sector-highlight-badge"><span class="sec-label">SECTOR</span>GENERAL_MACRO</span>
+      {% endif %}
+    </div>
+    <span class="tier-tag {% if 'Tier 1' in s.impact_grade %}tier-1{% else %}tier-2{% endif %}">
+      {{ s.impact_grade }}
+    </span>
+  </div>
+
+  <div class="story-title">
+    <a href="{{ s.url }}" target="_blank">{{ s.title }}</a>
+  </div>
+
+  {% if s.impact_summary %}
+  <div class="impact-strip {% if s.impact_bias == 'NEGATIVE' %}impact-strip-neg{% elif s.impact_bias == 'NEUTRAL' %}impact-strip-neu{% endif %}">
+    <strong>Impact:</strong> {{ s.impact_summary }}
+  </div>
+  {% endif %}
+
+  <div class="card-footer">
+    <span>{{ s.ministry_or_regulator or 'Ministry / Regulatory Board' }}</span>
+    <a href="{{ s.url }}" target="_blank" style="color: #0284c7; text-decoration: none; font-weight: 600;">Official Gazette &rarr;</a>
+  </div>
+</div>
+{% endfor %}
+
+</body>
+</html>
+"""
+
+
+def get_clean_macro_digest_filename(analyst_name: str, ext: str = ".pdf") -> str:
+    now = datetime.now(IST)
+    date_str = now.strftime("%d-%m-%Y")
+    words = [w for w in analyst_name.strip().split() if w]
+    sanitized_words = ["".join(c for c in w if c.isalnum() or c == "_") for w in words]
+    clean_name = "_".join(w for w in sanitized_words if w) or "Client"
+    return f"{clean_name}_Macro_Evening_{date_str}{ext}"
+
+
+def render_macro_digest_html(
+    analyst_name: str,
+    analyst_id: str,
+    stories: list[dict],
+    benchmarks: dict | None = None,
+    date_str: str | None = None,
+) -> str:
+    """Render the HTML digest for the Post-Market Macro & Policy Briefing."""
+    from jinja2 import Template
+    from .db import fetch_live_benchmarks, get_analyst_macro_sectors
+
+    if not date_str:
+        date_str = datetime.now(IST).strftime("%d %b %Y")
+
+    if not benchmarks:
+        benchmarks = fetch_live_benchmarks()
+
+    sectors = get_analyst_macro_sectors(analyst_id)
+    sectors_label = "All Sectors" if "ALL" in [s.upper() for s in sectors] else ", ".join(sectors[:2])
+    if len(sectors) > 2 and sectors_label != "All Sectors":
+        sectors_label += f" +{len(sectors)-2}"
+
+    date_str_file = datetime.now(IST).strftime("%d-%m-%Y")
+    tier1_count = sum(1 for s in stories if "Tier 1" in (s.get("impact_grade") or ""))
+
+    # Ensure each story has its parsed sectors list
+    import json
+    for s in stories:
+        if not s.get("sectors"):
+            try:
+                s["sectors"] = [sec.strip().upper() for sec in json.loads(s.get("sectors_json") or "[]")]
+            except Exception:
+                s["sectors"] = []
+
+    template = Template(MACRO_HTML_TEMPLATE)
+    return template.render(
+        analyst_name=analyst_name,
+        sectors_label=sectors_label,
+        date_str=date_str,
+        date_str_file=date_str_file,
+        total_items=len(stories),
+        tier1_count=tier1_count,
+        benchmarks=benchmarks,
+        stories=stories,
+    )
+
+
+def generate_macro_digest(analyst_id: str, analyst_name: str, stories: list[dict]) -> tuple[Path, str]:
+    """Generate both an HTML digest and high-definition PDF for the Evening Macro Briefing."""
+    html_content = render_macro_digest_html(analyst_name, analyst_id, stories)
+
+    html_filename = get_clean_macro_digest_filename(analyst_name, ext=".html")
+    pdf_filename = get_clean_macro_digest_filename(analyst_name, ext=".pdf")
+
+    html_file = DIGESTS_DIR / html_filename
+    html_file.write_text(html_content, encoding="utf-8")
+
+    pdf_file = DIGESTS_DIR / pdf_filename
+
+    # 1. Try native browser headless print-to-pdf
+    if generate_pdf_via_browser(html_file, pdf_file):
+        log.info("Compiled fresh Macro PDF via native browser: %s (size: %s bytes)", pdf_file, pdf_file.stat().st_size)
+        return pdf_file, html_content
+
+    # 2. Attempt WeasyPrint if available
+    try:
+        import weasyprint  # type: ignore[import-untyped]
+        weasyprint.HTML(string=html_content).write_pdf(str(pdf_file))
+        return pdf_file, html_content
+    except Exception as e:
+        log.info("WeasyPrint direct compilation fallback (%s)", e)
+        return html_file, html_content
+

@@ -6,9 +6,17 @@ import sys
 
 from .config import PORT
 from .controlpanel import create_starter_excel
-from .db import get_analysts, get_dashboard_stats, get_unsent_stories_for_analyst, init_db
-from .pdf import generate_analyst_digest
+from .db import (
+    get_analysts,
+    get_dashboard_stats,
+    get_macro_stories_for_analyst,
+    get_unsent_stories_for_analyst,
+    init_db,
+    mark_sent,
+)
+from .pdf import generate_analyst_digest, generate_macro_digest
 from .pipeline import Pipeline
+from .whatsapp import send_whatsapp_digest, send_whatsapp_macro_digest
 
 
 def main():
@@ -78,8 +86,6 @@ def main():
             print(f"Crawl complete: Found {c_res['items_found']}, Saved {c_res['stories_saved']} fresh stories.")
 
         print("=== [CRON] Dispatching Morning Digests via WhatsApp ===")
-        from .db import mark_sent
-        from .whatsapp import send_whatsapp_digest
 
         analysts = get_analysts()
         for a in analysts:
@@ -96,9 +102,6 @@ def main():
     elif args.command == "macro-dispatch":
         init_db(seed_defaults=True)
         print("=== [CRON] Starting Evening 5:30 PM Macro & Sector Briefing Cycle ===")
-        from .db import get_analysts, get_macro_stories_for_analyst
-        from .pdf import generate_macro_digest
-        from .whatsapp import send_whatsapp_macro_digest
 
         print("Crawling macro sources (PIB, RBI, SEBI, official gazettes)...")
         Pipeline().run_crawl(groups=["macro"], force=True)

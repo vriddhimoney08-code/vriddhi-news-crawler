@@ -1060,14 +1060,11 @@ def get_macro_stats(db_path: Path = DB_PATH) -> dict:
 
 
 DEFAULT_ANALYST_SECTORS: dict[str, list[str]] = {
-    "rahul": ["BANKS", "CAPITAL MARKETS", "FINANCE", "GENERAL_MACRO"],
-    "siddhesh": ["CONSTRUCTION", "REALTY", "POWER", "AEROSPACE & DEFENSE", "TRANSPORT INFRASTRUCTURE", "GENERAL_MACRO"],
-    "kk": ["CAPITAL MARKETS", "BANKS", "IT - SERVICES", "GENERAL_MACRO"],
-    "jash": ["CONSTRUCTION", "REALTY", "POWER", "OIL", "GAS", "GENERAL_MACRO"],
-    "aashish": ["AGRICULTURAL FOOD & OTHER PRODUCTS", "PHARMACEUTICALS & BIOTECHNOLOGY", "FERROUS METALS", "GENERAL_MACRO"],
+    "siddhesh": ["ALL"],
+    "kk": ["ALL"],
+    "jash": ["ALL"],
+    "aashish": ["ALL"],
     "aditya": ["ALL"],
-    "priya": ["IT - SERVICES", "TELECOM - SERVICES", "GENERAL_MACRO"],
-    "amit": ["BANKS", "FINANCE", "GENERAL_MACRO"],
 }
 
 

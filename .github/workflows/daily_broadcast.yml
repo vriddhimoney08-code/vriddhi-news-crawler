@@ -65,6 +65,7 @@ jobs:
           INTERAKT_TEMPLATE: vriddhi_daily_digest_49
           INTERAKT_MACRO_TEMPLATE: vriddhi_daily_digest_49
           TEST_MODE: "no"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Starting 9:00 AM Morning Companies News Broadcast..."
           python -m vriddhi_crawler run-daily
@@ -82,6 +83,7 @@ jobs:
           INTERAKT_TEMPLATE: vriddhi_daily_digest_49
           INTERAKT_MACRO_TEMPLATE: vriddhi_daily_digest_49
           TEST_MODE: "no"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Starting 5:30 PM Evening Sectorial & Macro News Broadcast..."
           python -m vriddhi_crawler macro-dispatch

@@ -60,28 +60,76 @@ def build_highlights_text(stories: list[dict[str, Any]]) -> str:
     return clean
 
 
+_PDF_CDN_CACHE: dict[str, str] = {}
+
+
 def upload_pdf_to_cdn(pdf_path: Path | None) -> str | None:
     """Upload research scorecard PDF to a fast public CDN returning a direct application/pdf binary stream."""
     if not pdf_path or not Path(pdf_path).exists() or Path(pdf_path).suffix.lower() != ".pdf":
         return None
+
+    pdf_p = Path(pdf_path)
+    cache_key = f"{pdf_p.resolve()}_{pdf_p.stat().st_mtime}"
+    if cache_key in _PDF_CDN_CACHE:
+        return _PDF_CDN_CACHE[cache_key]
+
+    fname = pdf_p.name
+
+    # 1. Primary: Direct application/pdf binary stream upload via Catbox CDN
     try:
         import requests
-        fname = Path(pdf_path).name
-        # Direct application/pdf binary stream upload via Catbox CDN
-        with open(pdf_path, "rb") as f:
+        with open(pdf_p, "rb") as f:
             res = requests.post(
                 "https://catbox.moe/user/api.php",
                 data={"reqtype": "fileupload"},
                 files={"fileToUpload": (fname, f, "application/pdf")},
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-                timeout=30,
+                timeout=25,
             )
         if res.status_code == 200 and res.text.strip().startswith("http"):
             cdn_url = res.text.strip()
             log.info("Uploaded direct binary PDF to Catbox CDN: %s", cdn_url)
+            _PDF_CDN_CACHE[cache_key] = cdn_url
             return cdn_url
     except Exception as e:
-        log.warning("Could not upload PDF to CDN (%s); falling back to default media URL", e)
+        log.warning("Catbox CDN upload failed (%s), trying secondary providers...", e)
+
+    # 2. Secondary: GitHub Release Asset if running inside GitHub Actions
+    gh_token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+    gh_repo = os.getenv("GITHUB_REPOSITORY", "vriddhimoney08-code/vriddhi-news-crawler")
+    if gh_token and gh_repo:
+        try:
+            import requests
+            gh_headers = {
+                "Authorization": f"Bearer {gh_token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "VriddhiCrawler",
+            }
+            # Look up release ID for latest-digests tag
+            r_rel = requests.get(f"https://api.github.com/repos/{gh_repo}/releases/tags/latest-digests", headers=gh_headers, timeout=10)
+            if r_rel.status_code == 200:
+                rel_id = r_rel.json().get("id")
+                # Upload asset
+                with open(pdf_p, "rb") as f:
+                    up_res = requests.post(
+                        f"https://uploads.github.com/repos/{gh_repo}/releases/{rel_id}/assets?name={fname}",
+                        headers={
+                            "Authorization": f"Bearer {gh_token}",
+                            "Content-Type": "application/pdf",
+                            "Accept": "application/vnd.github.v3+json",
+                            "User-Agent": "VriddhiCrawler",
+                        },
+                        data=f.read(),
+                        timeout=30,
+                    )
+                if up_res.status_code in (200, 201):
+                    gh_asset_url = up_res.json().get("browser_download_url")
+                    log.info("Uploaded PDF to GitHub Release asset: %s", gh_asset_url)
+                    _PDF_CDN_CACHE[cache_key] = gh_asset_url
+                    return gh_asset_url
+        except Exception as gh_err:
+            log.warning("GitHub Release asset upload failed: %s", gh_err)
+
     return None
 
 
@@ -180,12 +228,13 @@ def send_whatsapp_digest(
 
     header_values = []
     if doc_header:
+        cdn_link = upload_pdf_to_cdn(pdf_path) if pdf_path else None
         base_url = (os.getenv("BASE_URL") or "").rstrip("/")
         fallback_server_url = f"{base_url}/api/digest/file/{pdf_filename}" if (base_url and pdf_filename) else None
         doc_link = (
             public_pdf_url
+            or cdn_link
             or fallback_server_url
-            or upload_pdf_to_cdn(pdf_path)
             or "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
         )
         header_values.append(doc_link)
@@ -400,12 +449,13 @@ def send_whatsapp_macro_digest(
 
     header_values = []
     if doc_header:
+        cdn_link = upload_pdf_to_cdn(pdf_path) if pdf_path else None
         base_url = (os.getenv("BASE_URL") or "").rstrip("/")
         fallback_server_url = f"{base_url}/api/digest/file/{pdf_filename}" if (base_url and pdf_filename) else None
         doc_link = (
             public_pdf_url
+            or cdn_link
             or fallback_server_url
-            or upload_pdf_to_cdn(pdf_path)
             or "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
         )
         header_values.append(doc_link)

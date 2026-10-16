@@ -104,7 +104,8 @@ def main():
         print("=== [CRON] Starting Evening 5:30 PM Macro & Sector Briefing Cycle ===")
 
         print("Crawling macro sources (PIB, RBI, SEBI, official gazettes)...")
-        Pipeline().run_crawl(groups=["macro"], force=True)
+        from .sources.macro import MacroPipeline
+        MacroPipeline().run_macro_crawl(hours=48)
 
         analysts = get_analysts()
         for a in analysts:

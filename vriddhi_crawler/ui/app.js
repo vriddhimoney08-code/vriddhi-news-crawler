@@ -314,6 +314,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
       renderAnalystsTable();
       updateActionButtons();
+
+      // Update Scheduled Target Audience Badges
+      const topbarTargetCount = document.getElementById("topbar-client-target-count");
+      if (topbarTargetCount) topbarTargetCount.textContent = analystsList.length;
+
+      const bannerActiveCount = document.getElementById("banner-active-count");
+      if (bannerActiveCount) bannerActiveCount.textContent = `${analystsList.length} Active`;
+
+      const bannerClientNames = document.getElementById("banner-client-names-list");
+      if (bannerClientNames && analystsList.length) {
+        bannerClientNames.textContent = analystsList.map(a => a.name).join(", ");
+      }
     } catch (err) {
       console.error("Analysts fetch error", err);
     }
@@ -468,21 +480,234 @@ document.addEventListener("DOMContentLoaded", () => {
     }).join("");
   }
 
-  window.sendBriefToClient = async (id) => {
+  // ---------------------------------------------------------------------------
+  // WhatsApp Intelligence Dispatch Confirmation System
+  // ---------------------------------------------------------------------------
+  const modalDispatchConfirm = document.getElementById("modal-dispatch-confirm");
+  const btnCloseConfirmModal = document.getElementById("btn-close-confirm-modal");
+  const btnCancelConfirmModal = document.getElementById("btn-cancel-confirm-modal");
+  const btnExecuteConfirmModal = document.getElementById("btn-execute-confirm-modal");
+  const confirmModeBadge = document.getElementById("confirm-mode-badge");
+  const confirmEditionBadge = document.getElementById("confirm-edition-badge");
+  const confirmModeDesc = document.getElementById("confirm-mode-desc");
+  const confirmRecipientCount = document.getElementById("confirm-recipient-count");
+  const confirmRecipientsList = document.getElementById("confirm-recipients-list");
+  const confirmModalTitle = document.getElementById("confirm-modal-title");
+  const confirmModalSubtitle = document.getElementById("confirm-modal-subtitle");
+
+  let pendingDispatchAction = null;
+
+  function closeConfirmModal() {
+    if (modalDispatchConfirm) {
+      modalDispatchConfirm.classList.remove("open");
+    }
+    pendingDispatchAction = null;
+    if (btnExecuteConfirmModal) {
+      btnExecuteConfirmModal.disabled = false;
+      btnExecuteConfirmModal.style.display = "inline-flex";
+      btnExecuteConfirmModal.innerHTML = `<span>🚀 Confirm &amp; Dispatch</span>`;
+    }
+  }
+
+  if (btnCloseConfirmModal) btnCloseConfirmModal.addEventListener("click", closeConfirmModal);
+  if (btnCancelConfirmModal) btnCancelConfirmModal.addEventListener("click", closeConfirmModal);
+  if (modalDispatchConfirm) {
+    modalDispatchConfirm.addEventListener("click", (e) => {
+      if (e.target === modalDispatchConfirm) closeConfirmModal();
+    });
+  }
+
+  if (btnExecuteConfirmModal) {
+    btnExecuteConfirmModal.addEventListener("click", async () => {
+      if (!pendingDispatchAction) {
+        closeConfirmModal();
+        return;
+      }
+      btnExecuteConfirmModal.disabled = true;
+      btnExecuteConfirmModal.innerHTML = `<span>⏳ Dispatching...</span>`;
+      try {
+        await pendingDispatchAction();
+      } catch (err) {
+        console.error("Dispatch execution failed:", err);
+      } finally {
+        closeConfirmModal();
+      }
+    });
+  }
+
+  /**
+   * Prompts user with a crystal-clear confirmation modal detailing exact recipients & mode
+   */
+  function showDispatchConfirmation({ mode, edition = "morning", analystIds = [], isInspection = false, execute = null }) {
+    if (!modalDispatchConfirm) return;
+
+    // Resolve clients
+    const recipients = analystIds
+      .map(id => analystsList.find(a => a.id === id) || { id, name: id, phone: "--", folders: [], macro_sectors: [] });
+
+    const count = recipients.length;
+    if (count === 0 && !isInspection) {
+      showToast("Please select at least one client first.", true);
+      return;
+    }
+
+    pendingDispatchAction = execute;
+
+    // Edition label
+    if (confirmEditionBadge) {
+      if (edition === "evening") {
+        confirmEditionBadge.textContent = "🌙 Evening Macro Briefing (6:30 PM)";
+        confirmEditionBadge.className = "edition-badge edition-evening";
+      } else if (edition === "both") {
+        confirmEditionBadge.textContent = "☀️ Morning (8:30 AM) & 🌙 Evening (6:30 PM)";
+        confirmEditionBadge.className = "edition-badge edition-both";
+      } else {
+        confirmEditionBadge.textContent = "☀️ Morning Equity Digest (8:00 AM)";
+        confirmEditionBadge.className = "edition-badge edition-morning";
+      }
+    }
+
+    if (isInspection) {
+      if (confirmModalTitle) confirmModalTitle.textContent = "Automated Schedule Distribution List";
+      if (confirmModalSubtitle) confirmModalSubtitle.textContent = "Every scheduled run delivers tailored intelligence to all active clients below";
+      if (confirmModeBadge) {
+        confirmModeBadge.textContent = `👥 TARGET AUDIENCE: ALL ${count} REGISTERED CLIENTS`;
+        confirmModeBadge.className = "confirm-badge badge-mode-all";
+      }
+      if (confirmModeDesc) {
+        confirmModeDesc.innerHTML = `Automated timers (8:30 AM &amp; 4:55 PM IST) automatically broadcast customized WhatsApp scorecards to <strong>all ${count} registered clients</strong> listed below:`;
+      }
+      if (btnExecuteConfirmModal) btnExecuteConfirmModal.style.display = "none";
+      if (btnCancelConfirmModal) btnCancelConfirmModal.textContent = "Close Inspection";
+    } else if (mode === "single") {
+      const singleName = recipients[0] ? recipients[0].name : "Selected Client";
+      const shortName = singleName.split(" ")[0];
+      if (confirmModalTitle) confirmModalTitle.textContent = "Confirm Single Client WhatsApp Dispatch";
+      if (confirmModalSubtitle) confirmModalSubtitle.textContent = "Review recipient before triggering real-time delivery";
+      if (confirmModeBadge) {
+        confirmModeBadge.textContent = "👤 SINGLE CLIENT DISPATCH (1 RECIPIENT ONLY)";
+        confirmModeBadge.className = "confirm-badge badge-mode-single";
+      }
+      if (confirmModeDesc) {
+        confirmModeDesc.innerHTML = `You are about to dispatch a tailored briefing to <strong>1 single client</strong>: <span style="color: #6ee7b7; font-weight: 700;">${singleName}</span>. Other clients in your directory will NOT receive this message.`;
+      }
+      if (btnExecuteConfirmModal) {
+        btnExecuteConfirmModal.style.display = "inline-flex";
+        btnExecuteConfirmModal.innerHTML = `<span>🚀 Confirm &amp; Send to ${shortName}</span>`;
+      }
+      if (btnCancelConfirmModal) btnCancelConfirmModal.textContent = "✕ Cancel";
+    } else if (mode === "all" || count === analystsList.length) {
+      if (confirmModalTitle) confirmModalTitle.textContent = "Confirm Broadcast to All Clients";
+      if (confirmModalSubtitle) confirmModalSubtitle.textContent = "Review all recipients before launching batch WhatsApp delivery";
+      if (confirmModeBadge) {
+        confirmModeBadge.textContent = `🌐 BROADCAST TO ALL REGISTERED CLIENTS (${count} RECIPIENTS)`;
+        confirmModeBadge.className = "confirm-badge badge-mode-all";
+      }
+      if (confirmModeDesc) {
+        confirmModeDesc.innerHTML = `You are about to broadcast customized WhatsApp scorecards to <strong>ALL ${count} registered clients</strong> in your directory. Each client receives their own assigned portfolio &amp; macro sector stories.`;
+      }
+      if (btnExecuteConfirmModal) {
+        btnExecuteConfirmModal.style.display = "inline-flex";
+        btnExecuteConfirmModal.innerHTML = `<span>🚀 Confirm &amp; Dispatch to All ${count} Clients</span>`;
+      }
+      if (btnCancelConfirmModal) btnCancelConfirmModal.textContent = "✕ Cancel";
+    } else {
+      if (confirmModalTitle) confirmModalTitle.textContent = "Confirm Multi-Client Batch Dispatch";
+      if (confirmModalSubtitle) confirmModalSubtitle.textContent = "Review selected recipients before launching delivery";
+      if (confirmModeBadge) {
+        confirmModeBadge.textContent = `👥 BATCH MULTI-CLIENT DISPATCH (${count} RECIPIENTS)`;
+        confirmModeBadge.className = "confirm-badge badge-mode-multi";
+      }
+      if (confirmModeDesc) {
+        confirmModeDesc.innerHTML = `You are about to dispatch briefings to <strong>${count} selected clients</strong>. Unselected clients will NOT receive this message.`;
+      }
+      if (btnExecuteConfirmModal) {
+        btnExecuteConfirmModal.style.display = "inline-flex";
+        btnExecuteConfirmModal.innerHTML = `<span>🚀 Confirm &amp; Dispatch to ${count} Clients</span>`;
+      }
+      if (btnCancelConfirmModal) btnCancelConfirmModal.textContent = "✕ Cancel";
+    }
+
+    if (confirmRecipientCount) confirmRecipientCount.textContent = count;
+
+    if (confirmRecipientsList) {
+      confirmRecipientsList.innerHTML = recipients.map((r, idx) => {
+        const folders = Array.isArray(r.folders) && r.folders.length ? r.folders : ["Core Portfolio", "Junior Portfolio"];
+        const sectors = Array.isArray(r.macro_sectors) && r.macro_sectors.length ? r.macro_sectors : ["ALL"];
+        const phoneDisplay = r.phone ? (r.phone.startsWith("+") ? r.phone : `+${r.phone}`) : "No phone number";
+        const initial = r.name ? r.name.charAt(0).toUpperCase() : "?";
+
+        return `
+          <div class="confirm-recipient-card">
+            <div class="confirm-card-left">
+              <div class="recipient-avatar-circle">${initial}</div>
+              <div class="recipient-info">
+                <div class="recipient-name-row">
+                  <span class="recipient-name">${idx + 1}. ${r.name}</span>
+                  <span class="recipient-phone-tag"><span class="wa-dot">●</span> ${phoneDisplay}</span>
+                </div>
+                <div class="recipient-coverage-row">
+                  <span class="cov-tag">💼 Baskets: ${folders.join(", ")}</span>
+                  <span class="cov-tag">🏛️ Macro: ${sectors.join(", ")}</span>
+                </div>
+              </div>
+            </div>
+            <div class="confirm-card-right">
+              <span class="badge-ready-dispatch">✓ Verified</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    modalDispatchConfirm.classList.add("open");
+  }
+
+  // Inspect Target Audience Triggers
+  const btnInspectTargets = document.getElementById("btn-inspect-broadcast-targets");
+  if (btnInspectTargets) {
+    btnInspectTargets.addEventListener("click", () => {
+      showDispatchConfirmation({
+        mode: "all",
+        edition: "both",
+        analystIds: analystsList.map(a => a.id),
+        isInspection: true
+      });
+    });
+  }
+
+  const topbarScheduleTargetItem = document.getElementById("topbar-schedule-target-item");
+  if (topbarScheduleTargetItem) {
+    topbarScheduleTargetItem.addEventListener("click", () => {
+      showDispatchConfirmation({
+        mode: "all",
+        edition: "both",
+        analystIds: analystsList.map(a => a.id),
+        isInspection: true
+      });
+    });
+  }
+
+  window.sendBriefToClient = (id) => {
     const a = analystsList.find(x => x.id === id);
     const clientName = a ? a.name : id;
-    if (!confirm(`Dispatch morning WhatsApp briefing to ${clientName} now?`)) return;
-
-    try {
-      const res = await fetch(`/api/digest/simulate-send/${id}`, { method: "POST" });
-      const data = await res.json();
-      showToast(data.message || `Briefing sent to ${clientName}!`);
-      loadStats();
-      loadAnalystStoriesPreview(currentAnalystId);
-      loadLogs();
-    } catch (err) {
-      showToast("Dispatch error", true);
-    }
+    showDispatchConfirmation({
+      mode: "single",
+      edition: "morning",
+      analystIds: [id],
+      execute: async () => {
+        try {
+          const res = await fetch(`/api/digest/simulate-send/${id}`, { method: "POST" });
+          const data = await res.json();
+          showToast(data.message || `Briefing sent to ${clientName}!`);
+          loadStats();
+          loadAnalystStoriesPreview(currentAnalystId);
+          loadLogs();
+        } catch (err) {
+          showToast("Dispatch error", true);
+        }
+      }
+    });
   };
 
   window.editAnalyst = (id) => {
@@ -991,72 +1216,92 @@ document.addEventListener("DOMContentLoaded", () => {
     if (digestNav) digestNav.click();
   });
 
-  btnSendTestWa.addEventListener("click", async () => {
+  btnSendTestWa.addEventListener("click", () => {
     if (dispatchMode === "single") {
-      btnSendTestWa.disabled = true;
-      btnSendTestWa.innerHTML = `<span>&#9696; Dispatching...</span>`;
+      showDispatchConfirmation({
+        mode: "single",
+        edition: "morning",
+        analystIds: [currentAnalystId],
+        execute: async () => {
+          btnSendTestWa.disabled = true;
+          btnSendTestWa.innerHTML = `<span>&#9696; Dispatching...</span>`;
 
-      try {
-        const res = await fetch(`/api/digest/simulate-send/${currentAnalystId}`, { method: "POST" });
-        const data = await res.json();
-        showToast(data.message || `Test dispatch complete!`);
-        loadStats();
-        loadAnalystStoriesPreview(currentAnalystId);
-        loadLogs();
-      } catch (err) {
-        showToast("Dispatch error", true);
-      } finally {
-        btnSendTestWa.disabled = false;
-        btnSendTestWa.innerHTML = `<span class="btn-icon">&#128242;</span><span id="send-wa-btn-label">Send WA</span>`;
-        updateActionButtons();
-      }
+          try {
+            const res = await fetch(`/api/digest/simulate-send/${currentAnalystId}`, { method: "POST" });
+            const data = await res.json();
+            showToast(data.message || `Briefing dispatched to client!`);
+            loadStats();
+            loadAnalystStoriesPreview(currentAnalystId);
+            loadLogs();
+          } catch (err) {
+            showToast("Dispatch error", true);
+          } finally {
+            btnSendTestWa.disabled = false;
+            btnSendTestWa.innerHTML = `<span class="btn-icon">&#128242;</span><span id="send-wa-btn-label">Send WA</span>`;
+            updateActionButtons();
+          }
+        }
+      });
     } else {
       // Multiple Mode
       if (selectedAnalystIds.size === 0) {
-        showToast("Please select at least one analyst above.", true);
+        showToast("Please select at least one client above.", true);
         return;
       }
-      btnSendTestWa.disabled = true;
-      btnSendTestWa.innerHTML = `<span>&#9696; Sending to ${selectedAnalystIds.size} analysts...</span>`;
+      showDispatchConfirmation({
+        mode: selectedAnalystIds.size === analystsList.length ? "all" : "multiple",
+        edition: "morning",
+        analystIds: Array.from(selectedAnalystIds),
+        execute: async () => {
+          btnSendTestWa.disabled = true;
+          btnSendTestWa.innerHTML = `<span>&#9696; Sending to ${selectedAnalystIds.size} clients...</span>`;
 
-      try {
-        const res = await fetch("/api/digest/send-multiple", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ analyst_ids: Array.from(selectedAnalystIds) })
-        });
-        const data = await res.json();
-        showToast(`Dispatched custom scorecards to ${data.total} selected analysts!`);
-        loadStats();
-        loadAnalystStoriesPreview(currentAnalystId);
-        loadLogs();
-      } catch (err) {
-        showToast("Multi-dispatch error", true);
-      } finally {
-        btnSendTestWa.disabled = false;
-        btnSendTestWa.innerHTML = `<span class="btn-icon">&#128242;</span><span id="send-wa-btn-label">Send WA to Selected</span>`;
-        updateActionButtons();
-      }
+          try {
+            const res = await fetch("/api/digest/send-multiple", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ analyst_ids: Array.from(selectedAnalystIds) })
+            });
+            const data = await res.json();
+            showToast(`Dispatched custom scorecards to ${data.total} selected clients!`);
+            loadStats();
+            loadAnalystStoriesPreview(currentAnalystId);
+            loadLogs();
+          } catch (err) {
+            showToast("Multi-dispatch error", true);
+          } finally {
+            btnSendTestWa.disabled = false;
+            btnSendTestWa.innerHTML = `<span class="btn-icon">&#128242;</span><span id="send-wa-btn-label">Send WA to Selected</span>`;
+            updateActionButtons();
+          }
+        }
+      });
     }
   });
 
-  btnSendToAll.addEventListener("click", async () => {
-    if (!confirm("Dispatch morning digest to all analysts now?")) return;
-    btnSendToAll.disabled = true;
-    btnSendToAll.textContent = "Sending to all...";
+  btnSendToAll.addEventListener("click", () => {
+    showDispatchConfirmation({
+      mode: "all",
+      edition: "morning",
+      analystIds: analystsList.map(a => a.id),
+      execute: async () => {
+        btnSendToAll.disabled = true;
+        btnSendToAll.textContent = "Sending to all...";
 
-    for (const a of analystsList) {
-      try {
-        await fetch(`/api/digest/simulate-send/${a.id}`, { method: "POST" });
-      } catch (e) {}
-    }
+        for (const a of analystsList) {
+          try {
+            await fetch(`/api/digest/simulate-send/${a.id}`, { method: "POST" });
+          } catch (e) {}
+        }
 
-    showToast("Morning digests sent to all analysts! Sent ledger updated.");
-    loadStats();
-    loadAnalystStoriesPreview(currentAnalystId);
-    loadLogs();
-    btnSendToAll.disabled = false;
-    btnSendToAll.innerHTML = `<span class="btn-icon">&#128640;</span><span>Send to All Analysts</span>`;
+        showToast("Morning digests sent to all clients! Sent ledger updated.");
+        loadStats();
+        loadAnalystStoriesPreview(currentAnalystId);
+        loadLogs();
+        btnSendToAll.disabled = false;
+        btnSendToAll.innerHTML = `<span class="btn-icon">&#128640;</span><span>Send to All Clients</span>`;
+      }
+    });
   });
 
   // 8. Full Daily Digest Desk & Interactive Workstation (Morning & Evening Editions)
@@ -1200,37 +1445,44 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (btnSendSingleWhatsapp) {
-    btnSendSingleWhatsapp.addEventListener("click", async () => {
+    btnSendSingleWhatsapp.addEventListener("click", () => {
       const isEvening = currentDigestEdition === "evening";
-      btnSendSingleWhatsapp.disabled = true;
-      btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">⏳</span> Sending...`;
-      showToast(isEvening
-        ? `Dispatching 06:30 PM Evening Policy Briefing to analyst...`
-        : `Dispatching 8:00 AM briefing to client...`);
+      showDispatchConfirmation({
+        mode: "single",
+        edition: isEvening ? "evening" : "morning",
+        analystIds: [currentAnalystId],
+        execute: async () => {
+          btnSendSingleWhatsapp.disabled = true;
+          btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">⏳</span> Sending...`;
+          showToast(isEvening
+            ? `Dispatching 06:30 PM Evening Policy Briefing to client...`
+            : `Dispatching 8:00 AM briefing to client...`);
 
-      const sendEndpoint = isEvening
-        ? `/api/macro/digest/send/${currentAnalystId}`
-        : `/api/digest/simulate-send/${currentAnalystId}`;
+          const sendEndpoint = isEvening
+            ? `/api/macro/digest/send/${currentAnalystId}`
+            : `/api/digest/simulate-send/${currentAnalystId}`;
 
-      try {
-        const res = await fetch(sendEndpoint, { method: "POST" });
-        const data = await res.json();
-        if (data.status === "no_op") {
-          showToast(data.message || "No unsent stories for this client.", false);
-        } else {
-          showToast(`Briefing dispatched: ${data.message || 'Sent successfully'}`);
-          loadStats();
-          loadFullDigestFrame();
-          if (!isEvening) {
-            loadAnalystStoriesPreview(currentAnalystId);
+          try {
+            const res = await fetch(sendEndpoint, { method: "POST" });
+            const data = await res.json();
+            if (data.status === "no_op") {
+              showToast(data.message || "No unsent stories for this client.", false);
+            } else {
+              showToast(`Briefing dispatched: ${data.message || 'Sent successfully'}`);
+              loadStats();
+              loadFullDigestFrame();
+              if (!isEvening) {
+                loadAnalystStoriesPreview(currentAnalystId);
+              }
+            }
+          } catch (err) {
+            showToast("Error sending briefing to client", true);
+          } finally {
+            btnSendSingleWhatsapp.disabled = false;
+            btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">🚀</span> Send Brief`;
           }
         }
-      } catch (err) {
-        showToast("Error sending briefing to analyst", true);
-      } finally {
-        btnSendSingleWhatsapp.disabled = false;
-        btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">🚀</span> Send Brief`;
-      }
+      });
     });
   }
 

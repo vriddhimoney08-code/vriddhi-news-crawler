@@ -81,7 +81,7 @@ jobs:
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}
           BASE_URL: ${{ secrets.BASE_URL }}
           INTERAKT_TEMPLATE: vriddhi_daily_digest_49
-          INTERAKT_MACRO_TEMPLATE: vriddhi_daily_digest_49
+          INTERAKT_MACRO_TEMPLATE: vriddhi_evening_macro_01
           TEST_MODE: "no"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

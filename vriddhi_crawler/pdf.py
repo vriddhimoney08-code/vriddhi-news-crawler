@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import DIGESTS_DIR, IST
@@ -488,6 +488,46 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     text-align: center;
     letter-spacing: 0.3px;
   }
+  /* 8. 24-Hour Coverage Window Notice */
+  .coverage-window-banner {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #0284c7;
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+  .coverage-icon {
+    font-size: 13pt;
+    line-height: 1;
+    margin-top: 1px;
+  }
+  .coverage-content {
+    flex: 1;
+  }
+  .coverage-title {
+    font-size: 8pt;
+    font-weight: 800;
+    color: #0369a1;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .coverage-details {
+    font-size: 8pt;
+    color: #334155;
+    line-height: 1.4;
+  }
+  .coverage-note {
+    font-size: 7.2pt;
+    color: #64748b;
+    font-style: italic;
+    margin-top: 2px;
+  }
 </style>
 </head>
 <body>
@@ -510,6 +550,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <span>{{ date_str }}</span>
       <span>&bull;</span>
       <span style="color:#10b981;font-weight:700;">{{ total_items }} Stories ({{ total_filings }} Filings)</span>
+    </div>
+  </div>
+</div>
+
+<!-- 24-Hour Coverage Window Notice -->
+<div class="coverage-window-banner">
+  <div class="coverage-icon">&#128338;</div>
+  <div class="coverage-content">
+    <div class="coverage-title">Intelligence Coverage Window &bull; Last 24 Hours</div>
+    <div class="coverage-details">
+      <strong>Timeframe:</strong> {{ coverage_window_start }} &mdash; {{ coverage_window_end }} &bull; 
+      <strong>Scope:</strong> BSE / NSE Corporate Announcements, Disclosures &amp; Verified Financial Press
+    </div>
+    <div class="coverage-note">
+      * All updates in this scorecard were published within the last 24 hours. Tracked companies with no entries had zero material disclosures during this cycle.
     </div>
   </div>
 </div>
@@ -865,7 +920,11 @@ def render_digest_html(
                 })
 
     assigned_folders_str = ", ".join(assigned_folders) if assigned_folders else "Direct Watchlist"
-    date_str_file = datetime.now(IST).strftime("%d-%m-%Y")
+    now_ist = datetime.now(IST)
+    date_str_file = now_ist.strftime("%d-%m-%Y")
+    window_start = now_ist - timedelta(hours=24)
+    coverage_window_start = window_start.strftime("%d-%b-%Y %I:%M %p IST")
+    coverage_window_end = now_ist.strftime("%d-%b-%Y %I:%M %p IST")
 
     template = Template(HTML_TEMPLATE)
     return template.render(
@@ -873,6 +932,8 @@ def render_digest_html(
         assigned_folders_str=assigned_folders_str,
         date_str=date_str,
         date_str_file=date_str_file,
+        coverage_window_start=coverage_window_start,
+        coverage_window_end=coverage_window_end,
         total_items=len(stories),
         total_filings=total_filings,
         scorecard=scorecard,
@@ -1209,6 +1270,46 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
     padding-top: 4px;
     border-top: 1px solid #f1f5f9;
   }
+
+  .coverage-window-banner {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #0284c7;
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+  .coverage-icon {
+    font-size: 13pt;
+    line-height: 1;
+    margin-top: 1px;
+  }
+  .coverage-content {
+    flex: 1;
+  }
+  .coverage-title {
+    font-size: 8pt;
+    font-weight: 800;
+    color: #0369a1;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .coverage-details {
+    font-size: 8pt;
+    color: #334155;
+    line-height: 1.4;
+  }
+  .coverage-note {
+    font-size: 7.2pt;
+    color: #64748b;
+    font-style: italic;
+    margin-top: 2px;
+  }
 </style>
 </head>
 <body>
@@ -1227,6 +1328,21 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
   <div class="meta-sub-row">
     <div>Date: <strong>{{ date_str }} (Evening Wrap)</strong></div>
     <div>{{ total_items }} Verified Policy Directives &bull; {{ tier1_count }} Sovereign/Tier-1</div>
+  </div>
+</div>
+
+<!-- 24-Hour Policy Coverage Window Notice -->
+<div class="coverage-window-banner">
+  <div class="coverage-icon">&#128338;</div>
+  <div class="coverage-content">
+    <div class="coverage-title">Post-Market Policy Window &bull; Last 24 Hours</div>
+    <div class="coverage-details">
+      <strong>Timeframe:</strong> {{ coverage_window_start }} &mdash; {{ coverage_window_end }} &bull; 
+      <strong>Scope:</strong> RBI, SEBI, PIB, Official Gazettes &amp; Sector Directives
+    </div>
+    <div class="coverage-note">
+      * Real-time regulatory &amp; macroeconomic circulars verified over the last 24-hour cycle.
+    </div>
   </div>
 </div>
 
@@ -1323,7 +1439,11 @@ def render_macro_digest_html(
     if len(sectors) > 2 and sectors_label != "All Sectors":
         sectors_label += f" +{len(sectors)-2}"
 
-    date_str_file = datetime.now(IST).strftime("%d-%m-%Y")
+    now_ist = datetime.now(IST)
+    date_str_file = now_ist.strftime("%d-%m-%Y")
+    window_start = now_ist - timedelta(hours=24)
+    coverage_window_start = window_start.strftime("%d-%b-%Y %I:%M %p IST")
+    coverage_window_end = now_ist.strftime("%d-%b-%Y %I:%M %p IST")
     tier1_count = sum(1 for s in stories if "Tier 1" in (s.get("impact_grade") or ""))
 
     # Ensure each story has its parsed sectors list
@@ -1341,6 +1461,8 @@ def render_macro_digest_html(
         sectors_label=sectors_label,
         date_str=date_str,
         date_str_file=date_str_file,
+        coverage_window_start=coverage_window_start,
+        coverage_window_end=coverage_window_end,
         total_items=len(stories),
         tier1_count=tier1_count,
         benchmarks=benchmarks,

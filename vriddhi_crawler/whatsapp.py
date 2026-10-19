@@ -462,7 +462,7 @@ def send_whatsapp_macro_digest(
         header_values.append(doc_link)
 
     candidates = [template_name]
-    for alt in ["vriddhi_daily_digest_49", "vriddhi_daily_digest_48", "vriddhi_daily_digest"]:
+    for alt in ["vriddhi_evening_macro_01", "vriddhi_daily_digest_49", "vriddhi_daily_digest"]:
         if alt not in candidates:
             candidates.append(alt)
 

@@ -65,7 +65,7 @@ class Pipeline:
             # BSE
             sources_checked += 1
             try:
-                bse_items = exchanges.bse_announcements(self.fetcher, matcher, since=since, max_pages=3)
+                bse_items = exchanges.bse_announcements(self.fetcher, matcher, since=since, max_pages=25)
                 raw_items.extend(bse_items)
             except Exception as e:
                 msg = f"BSE announcements failed: {e}"
@@ -119,9 +119,11 @@ class Pipeline:
                 try:
                     g_items = search.google_news(self.fetcher, comp, GOOGLE_NEWS_EDITIONS, since, errors)
                     for item in g_items:
-                        # Strictly verify that the headline explicitly mentions this company or alias
-                        headline_matches = matcher.match_text(item.title)
-                        if any(m.id == comp.id for m in headline_matches):
+                        # Strictly verify that the headline or summary explicitly mentions this company or alias
+                        matched = any(m.id == comp.id for m in matcher.match_text(item.title))
+                        if not matched and item.summary:
+                            matched = any(m.id == comp.id for m in matcher.match_text(item.summary))
+                        if matched:
                             item.company_ids = [comp.id]
                             raw_items.append(item)
                 except Exception as e:
@@ -234,7 +236,8 @@ class Pipeline:
             final_summary = item.summary or ""
 
             # Drop non-material Grade C news if not an official filing or rating
-            if item.source_type != "filing" and grade == "Grade C" and not is_gemini_active():
+            # But do NOT drop stories specifically targeted for our watchlist companies unless identified as noise
+            if item.source_type != "filing" and grade == "Grade C" and not is_gemini_active() and not item.company_ids:
                 continue
 
             for comp in matched_companies:

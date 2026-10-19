@@ -35,7 +35,7 @@ def google_news(fetcher: Fetcher, company: Company, editions: list[str], since: 
     for q in default_queries(company):
         for ed in editions:
             lang = ed.split("-")[0]
-            url = (f"https://news.google.com/rss/search?q={quote_plus(q + ' when:1d')}"
+            url = (f"https://news.google.com/rss/search?q={quote_plus(q + ' when:2d')}"
                    f"&hl={ed}&gl=IN&ceid=IN:{lang}")
             try:
                 r = fetcher.get(url, check_robots=False, delay=1.5)
@@ -54,11 +54,12 @@ def google_news(fetcher: Fetcher, company: Company, editions: list[str], since: 
                     publisher = str(getattr(src, "title"))
                 raw_title = str(e.get("title") or "")
                 title = strip_publisher_suffix(clean_text(raw_title), publisher)
+                summary = clean_text(str(e.get("summary") or e.get("description") or ""))
                 raw_link = e.get("link")
                 link_str: str | None = str(raw_link) if raw_link is not None else None
                 if not is_reputable_publisher(publisher, link_str, "news"):
                     continue
-                out.append(RawItem(source_name=publisher, source_type="news", title=title, url=link_str,
+                out.append(RawItem(source_name=publisher, source_type="news", title=title, summary=summary, url=link_str,
                                    published_at=pub, lang=lang))
     return out
 

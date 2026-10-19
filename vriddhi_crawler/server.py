@@ -256,6 +256,124 @@ def dispatch_macro_digest(analyst_id: str):
     }
 
 
+# =========================================================================
+# Direct External Cron Webhook Endpoints (cron-job.org / Webhook triggers)
+# =========================================================================
+@app.api_route("/api/cron/evening-broadcast", methods=["GET", "POST"])
+def trigger_cron_evening_broadcast():
+    """Triggered by cron-job.org for Evening Macro & Policy Briefing broadcast to all active clients."""
+    from .db import get_analysts, get_macro_stories_for_analyst
+    from .pdf import generate_macro_digest
+    from .sources.macro import MacroPipeline
+    from .whatsapp import send_whatsapp_macro_digest
+
+    log.info("[CRON] Starting Evening Policy & Macro Broadcast to all active clients...")
+    try:
+        MacroPipeline().run_macro_crawl(hours=48)
+    except Exception as e:
+        log.warning("[CRON] Macro crawl warning: %s", e)
+
+    analysts = get_analysts()
+    results = []
+    public_base = os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io"
+
+    for a in analysts:
+        stories = get_macro_stories_for_analyst(a.id, hours=24, limit=30)
+        if not stories:
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "no_updates"})
+            continue
+
+        try:
+            file_path, _ = generate_macro_digest(a.id, a.name, stories)
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
+
+            wa_result = send_whatsapp_macro_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                stories=stories,
+                pdf_path=file_path,
+                public_pdf_url=public_pdf_url,
+            )
+            results.append({
+                "id": a.id,
+                "name": a.name,
+                "phone": a.phone,
+                "count": len(stories),
+                "status": wa_result.get("status", "sent"),
+                "message": wa_result.get("message")
+            })
+        except Exception as err:
+            log.error("[CRON] Failed to send evening macro brief to %s: %s", a.name, err)
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": "error", "error": str(err)})
+
+    sent_count = len([r for r in results if r["status"] == "sent"])
+    log.info("[CRON] Evening Broadcast complete. Sent to %d / %d clients.", sent_count, len(analysts))
+
+    return {
+        "status": "success",
+        "broadcast": "evening_macro_briefing",
+        "total_clients": len(analysts),
+        "dispatched_count": sent_count,
+        "results": results
+    }
+
+
+@app.api_route("/api/cron/morning-broadcast", methods=["GET", "POST"])
+def trigger_cron_morning_broadcast():
+    """Triggered by cron-job.org for Morning Company News broadcast to all active clients."""
+    from .db import get_analysts, get_unsent_stories_for_analyst, mark_sent
+    from .pdf import generate_analyst_digest
+    from .pipeline import Pipeline
+    from .whatsapp import send_whatsapp_digest
+
+    log.info("[CRON] Starting Morning Companies News Broadcast to all active clients...")
+    try:
+        Pipeline().run_crawl(groups=["exchanges", "publishers", "search"])
+    except Exception as e:
+        log.warning("[CRON] Morning crawl warning: %s", e)
+
+    analysts = get_analysts()
+    results = []
+
+    for a in analysts:
+        stories = get_unsent_stories_for_analyst(a.id)
+        if not stories:
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "ledger_clean"})
+            continue
+
+        try:
+            file_path, _ = generate_analyst_digest(a.id, a.name, stories)
+            wa_result = send_whatsapp_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                stories=stories,
+                pdf_path=file_path
+            )
+            mark_sent([s["id"] for s in stories], a.id)
+            results.append({
+                "id": a.id,
+                "name": a.name,
+                "phone": a.phone,
+                "count": len(stories),
+                "status": wa_result.get("status", "sent"),
+                "message": wa_result.get("message")
+            })
+        except Exception as err:
+            log.error("[CRON] Failed to send morning digest to %s: %s", a.name, err)
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": "error", "error": str(err)})
+
+    sent_count = len([r for r in results if r["status"] == "sent"])
+    log.info("[CRON] Morning Broadcast complete. Sent to %d / %d clients.", sent_count, len(analysts))
+
+    return {
+        "status": "success",
+        "broadcast": "morning_companies_briefing",
+        "total_clients": len(analysts),
+        "dispatched_count": sent_count,
+        "results": results
+    }
+
 
 @app.get("/api/watchlist")
 def list_watchlist():

@@ -3,13 +3,11 @@ import json
 
 DEFAULT_ANALYSTS = [
     ('siddhesh', 'Siddhesh', '7900084773', 'siddheshambukar24@gmail.com', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
+    ('kalpesh', 'Kalpesh', '9930923005', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
+    ('jash', 'Jash', '8879428842', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
+    ('aashish', 'Aashish', '9011052765', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
+    ('aditya', 'Aditya', '9823763316', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
 ]
-
-# Other team members (kept on standby, disabled for now):
-# ('kk', 'KK', '9930923005', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
-# ('jash', 'JASH', '8879428842', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
-# ('aashish', 'AASHISH', '9011052765', '', '[]', json.dumps(['GAME', 'SET', 'MATCH', 'JUNIOR'])),
-# ('aditya', 'Aditya', '9823763316', '', '[]', json.dumps(['DEMO'])),
 
 DEFAULT_COMPANIES = [   (   'tatamotors',
         'TATA Motors',

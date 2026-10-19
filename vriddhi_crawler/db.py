@@ -165,13 +165,13 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
 
 
 def _seed_data(conn: sqlite3.Connection):
-    # Remove dummy legacy placeholder analysts
+    # Only keep Siddhesh active for now
     try:
-        conn.execute("DELETE FROM analysts WHERE id IN ('rahul', 'priya', 'amit')")
+        conn.execute("DELETE FROM analysts WHERE id != 'siddhesh'")
     except Exception:
         pass
 
-    # Upsert default analysts so all 5 team members always exist
+    # Upsert default analysts (only Siddhesh currently active)
     try:
         from .seed_data import DEFAULT_ANALYSTS
         for a in DEFAULT_ANALYSTS:

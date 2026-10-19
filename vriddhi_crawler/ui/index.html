@@ -971,11 +971,17 @@
         <form id="form-add-stock" class="modal-form">
           <div class="input-block">
             <label>Company Name *</label>
-            <input type="text" id="input-comp-name" required placeholder="e.g. Bharat Electronics Ltd">
+            <input type="text" id="input-comp-name" required placeholder="e.g. Tata Motors Ltd">
           </div>
-          <div class="input-block">
-            <label>NSE Symbol</label>
-            <input type="text" id="input-comp-nse" placeholder="e.g. BEL">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="input-block">
+              <label>NSE Symbol</label>
+              <input type="text" id="input-comp-nse" placeholder="e.g. TATAMOTORS">
+            </div>
+            <div class="input-block">
+              <label>BSE Code <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+              <input type="text" id="input-comp-bse" placeholder="e.g. 500570">
+            </div>
           </div>
           <div class="input-block">
             <label>Assign to Baskets / Portfolios</label>
@@ -1013,9 +1019,15 @@
             <label>Company Name *</label>
             <input type="text" id="edit-comp-name" required placeholder="e.g. Bharat Electronics Ltd">
           </div>
-          <div class="input-block">
-            <label>NSE Symbol</label>
-            <input type="text" id="edit-comp-nse" placeholder="e.g. BEL">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="input-block">
+              <label>NSE Symbol</label>
+              <input type="text" id="edit-comp-nse" placeholder="e.g. BEL">
+            </div>
+            <div class="input-block">
+              <label>BSE Code <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+              <input type="text" id="edit-comp-bse" placeholder="e.g. 500049">
+            </div>
           </div>
           <div class="input-block">
             <label>Assign to Baskets / Portfolios</label>
@@ -1257,6 +1269,6 @@
 
   </div>
 
-  <script src="/static/app.js?v=4.2"></script>
+  <script src="/static/app.js?v=4.3"></script>
 </body>
 </html>

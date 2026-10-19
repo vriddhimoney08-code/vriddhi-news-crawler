@@ -2106,10 +2106,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   formAddStock.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const name = document.getElementById("input-comp-name").value.trim();
-    const nse = document.getElementById("input-comp-nse").value.trim().toUpperCase();
-    const bse = document.getElementById("input-comp-bse").value.trim();
-    const aliases = document.getElementById("input-comp-aliases").value.split(",").map(s => s.trim()).filter(Boolean);
+    const nameInput = document.getElementById("input-comp-name");
+    const nseInput = document.getElementById("input-comp-nse");
+    const bseInput = document.getElementById("input-comp-bse");
+
+    const name = (nameInput ? nameInput.value : "").trim();
+    const nse = (nseInput ? nseInput.value : "").trim().toUpperCase();
+    const bse = (bseInput ? bseInput.value : "").trim();
+
+    if (!name) {
+      showToast("Please enter a company name.", true);
+      return;
+    }
     
     // Checked baskets
     const checkedFolderBoxes = document.querySelectorAll('input[name="stock_folder"]:checked');
@@ -2119,12 +2127,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const checkedBoxes = document.querySelectorAll('input[name="stock_assigned_analyst"]:checked');
     const assignedAnalystIds = Array.from(checkedBoxes).map(cb => cb.value);
 
+    // Unique clean ID
+    const baseId = (nse || name).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "stock";
+    let finalId = baseId;
+    if (companiesList.some(c => c.id === finalId)) {
+      finalId = `${baseId}_${Date.now().toString().slice(-4)}`;
+    }
+
     const payload = {
-      id: name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16),
+      id: finalId,
       name,
       nse_symbol: nse,
-      bse_code: "",
-      aliases: [name, nse].filter(Boolean),
+      bse_code: bse,
+      aliases: [name, nse, bse].filter(Boolean),
       search_queries: [`"${name}"`],
       folder: folders.join(", "),
       folders: folders,
@@ -2141,14 +2156,15 @@ document.addEventListener("DOMContentLoaded", () => {
         showToast(`Added ${name} to baskets: ${folders.join(", ") || "ALL"}!`);
         modalAddStock.classList.remove("open");
         formAddStock.reset();
-        await loadAnalysts(); // Keep analysts' stock lists synchronized
         await loadWatchlist();
+        await loadAnalysts(); // Keep analysts' stock lists synchronized
         loadStats();
       } else {
-        showToast("Error adding stock", true);
+        const err = await res.json().catch(() => ({}));
+        showToast(err.detail || "Error adding stock", true);
       }
     } catch (err) {
-      showToast("Error adding company", true);
+      showToast("Network error adding company", true);
     }
   });
 
@@ -2160,6 +2176,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (editCompId) editCompId.value = comp.id;
     if (editCompName) editCompName.value = comp.name;
     if (editCompNse) editCompNse.value = comp.nse_symbol || "";
+    const editCompBse = document.getElementById("edit-comp-bse");
+    if (editCompBse) editCompBse.value = comp.bse_code || "";
 
     const modalTitle = document.getElementById("edit-stock-modal-title");
     if (modalTitle) modalTitle.textContent = `Edit Stock: ${comp.name}`;
@@ -2226,6 +2244,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const comp = companiesList.find(c => c.id === id);
       const name = editCompName.value.trim();
       const nse = (editCompNse.value || "").trim().toUpperCase();
+      const editCompBse = document.getElementById("edit-comp-bse");
+      const bse = editCompBse ? editCompBse.value.trim() : (comp ? (comp.bse_code || "") : "");
 
       const checkedFolderBoxes = document.querySelectorAll('input[name="edit_stock_folder"]:checked');
       const folders = Array.from(checkedFolderBoxes).map(cb => cb.value.trim().toUpperCase()).filter(Boolean);
@@ -2237,8 +2257,8 @@ document.addEventListener("DOMContentLoaded", () => {
         id,
         name,
         nse_symbol: nse,
-        bse_code: comp ? (comp.bse_code || "") : "",
-        aliases: comp ? (comp.aliases || [name, nse].filter(Boolean)) : [name, nse].filter(Boolean),
+        bse_code: bse,
+        aliases: comp ? (comp.aliases || [name, nse, bse].filter(Boolean)) : [name, nse, bse].filter(Boolean),
         search_queries: [`"${name}"`],
         folder: folders.join(", "),
         folders,

@@ -145,6 +145,12 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
         except Exception:
             pass
 
+        # Safe migration for macro_sectors column on analysts
+        try:
+            conn.execute("ALTER TABLE analysts ADD COLUMN macro_sectors TEXT DEFAULT '[\"ALL\"]'")
+        except Exception:
+            pass
+
         # Seed default folders if empty
         try:
             fc = conn.execute("SELECT count(*) FROM folders").fetchone()[0]
@@ -333,13 +339,15 @@ def get_analysts(db_path: Path = DB_PATH) -> list[Analyst]:
         for r in rows:
             keys = r.keys()
             flds = json.loads(r["assigned_folders"] or "[]") if "assigned_folders" in keys and r["assigned_folders"] else []
+            sectors = json.loads(r["macro_sectors"] or '["ALL"]') if "macro_sectors" in keys and r["macro_sectors"] else ["ALL"]
             out.append(Analyst(
                 id=r["id"],
                 name=r["name"],
                 phone=r["phone"],
                 email=r["email"] or "",
                 assigned_companies=json.loads(r["assigned_companies"] or "[]"),
-                assigned_folders=flds
+                assigned_folders=flds,
+                macro_sectors=sectors,
             ))
         return out
 
@@ -347,16 +355,18 @@ def get_analysts(db_path: Path = DB_PATH) -> list[Analyst]:
 def save_analyst(a: Analyst, db_path: Path = DB_PATH):
     with get_connection(db_path) as conn:
         folders_json = json.dumps(getattr(a, "assigned_folders", []))
+        sectors_json = json.dumps(getattr(a, "macro_sectors", ["ALL"]))
         conn.execute("""
-        INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders, macro_sectors)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             phone=excluded.phone,
             email=excluded.email,
             assigned_companies=excluded.assigned_companies,
-            assigned_folders=excluded.assigned_folders
-        """, (a.id, a.name, a.phone, a.email, json.dumps(a.assigned_companies), folders_json))
+            assigned_folders=excluded.assigned_folders,
+            macro_sectors=excluded.macro_sectors
+        """, (a.id, a.name, a.phone, a.email, json.dumps(a.assigned_companies), folders_json, sectors_json))
 
 
 def delete_analyst(aid: str, db_path: Path = DB_PATH):
@@ -1068,8 +1078,17 @@ DEFAULT_ANALYST_SECTORS: dict[str, list[str]] = {
 }
 
 
-def get_analyst_macro_sectors(analyst_id: str) -> list[str]:
-    """Return the designated macro sectors for an analyst (or ALL if unassigned)."""
+def get_analyst_macro_sectors(analyst_id: str, db_path: Path = DB_PATH) -> list[str]:
+    """Return the designated macro sectors for an analyst from database (or ALL if unassigned)."""
+    try:
+        with get_connection(db_path) as conn:
+            row = conn.execute("SELECT macro_sectors FROM analysts WHERE id = ?", (analyst_id,)).fetchone()
+            if row and row["macro_sectors"]:
+                res = json.loads(row["macro_sectors"])
+                if isinstance(res, list) and res:
+                    return [s.strip().upper() for s in res if s.strip()]
+    except Exception:
+        pass
     aid = (analyst_id or "").strip().lower()
     return DEFAULT_ANALYST_SECTORS.get(aid, ["ALL"])
 

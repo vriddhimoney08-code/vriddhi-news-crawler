@@ -105,6 +105,15 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentWatchlistFolder = "ALL";
   let watchlistSearchQuery = "";
   let availableFolders = ["GAME", "SET", "MATCH", "JUNIOR"];
+  let availableMacroSectors = [
+    "ALL", "AEROSPACE & DEFENSE", "AUTOMOBILES", "AUTO COMPONENTS", "BANKS",
+    "CAPITAL MARKETS", "CEMENT & CEMENT PRODUCTS", "CHEMICALS & PETROCHEMICALS",
+    "CONSTRUCTION", "CONSUMABLE FUELS", "CONSUMER DURABLES", "DIVERSIFIED FMCG",
+    "FINANCE", "FINANCIAL TECHNOLOGY (FINTECH)", "GAS", "HEALTHCARE SERVICES",
+    "INSURANCE", "IT - SERVICES", "IT - SOFTWARE", "IT - HARDWARE",
+    "METALS & MINING", "OIL", "PETROLEUM PRODUCTS", "PHARMACEUTICALS & BIOTECHNOLOGY",
+    "POWER", "REALTY", "RETAILING", "TELECOM - SERVICES", "TRANSPORT SERVICES", "GENERAL_MACRO"
+  ];
 
   // Clients & Directory Elements
   const analystsTableBody = document.getElementById("analysts-table-body");
@@ -268,8 +277,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function loadMacroSectors() {
+    try {
+      const res = await fetch("/api/macro-sectors");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length) {
+          availableMacroSectors = data;
+        }
+      }
+    } catch (e) {
+      console.warn("Using default macro sectors list", e);
+    }
+  }
+
   async function loadAnalysts() {
     try {
+      await loadMacroSectors();
       const res = await fetch("/api/analysts");
       analystsList = await res.json();
 
@@ -383,6 +407,11 @@ document.addEventListener("DOMContentLoaded", () => {
           }).join(" ")
         : `<span class="badge-unassigned" onclick="window.editAnalyst('${a.id}')" title="Click to assign portfolio baskets">+ Assign Baskets</span>`;
 
+      const sectors = a.macro_sectors || ["ALL"];
+      const sectorsDisplay = sectors.includes("ALL")
+        ? `<span class="sector-tag sector-tag-all" onclick="window.editAnalyst('${a.id}')" title="Evening Briefing covers all macro sectors">🌐 All Macro Sectors</span>`
+        : sectors.slice(0, 2).map(s => `<span class="sector-tag" onclick="window.editAnalyst('${a.id}')" title="Evening sector: ${s}">${s}</span>`).join(" ") + (sectors.length > 2 ? `<span class="sector-tag" style="background:rgba(255,255,255,0.06);color:var(--text-dim);border:none;" onclick="window.editAnalyst('${a.id}')">+${sectors.length - 2}</span>` : "");
+
       return `
         <tr class="client-row" data-client-id="${a.id}">
           <!-- Column 1: Client / Recipient -->
@@ -399,11 +428,14 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
           </td>
 
-          <!-- Column 2: Portfolio Coverage -->
+          <!-- Column 2: Portfolio & Macro Sector Coverage -->
           <td>
             <div class="client-coverage-cell">
+              <div style="font-size: 0.66rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.3px;">Morning Baskets:</div>
               <div class="client-baskets-row">${foldersDisplay}</div>
-              <span class="client-stocks-count-badge">📊 ${stockCount} Stocks Tracked</span>
+              <div style="font-size: 0.66rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.3px; margin-top: 5px;">Evening Macro Sectors:</div>
+              <div class="client-sectors-row">${sectorsDisplay}</div>
+              <span class="client-stocks-count-badge" style="margin-top: 4px;">📊 ${stockCount} Stocks Tracked</span>
             </div>
           </td>
 
@@ -462,6 +494,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("input-analyst-phone").value = a.phone;
     document.getElementById("input-analyst-email").value = a.email || "";
     renderAnalystFoldersCheckboxes(a.assigned_folders || []);
+    renderAnalystSectorsCheckboxes(a.macro_sectors || ["ALL"]);
     modalAddAnalyst.classList.add("open");
   };
 
@@ -511,18 +544,81 @@ document.addEventListener("DOMContentLoaded", () => {
     }).join("");
   }
 
+  function renderAnalystSectorsCheckboxes(assigned = ["ALL"]) {
+    const container = document.getElementById("analyst-sectors-checkboxes");
+    if (!container) return;
+    if (!availableMacroSectors.length) {
+      container.innerHTML = `<span style="font-size:0.78rem; color:var(--text-dim);">No sectors available.</span>`;
+      return;
+    }
+    const assignedUpper = (assigned || []).map(s => String(s).toUpperCase());
+    const hasAll = assignedUpper.includes("ALL");
+
+    container.innerHTML = availableMacroSectors.map(sec => {
+      const isAllItem = sec === "ALL";
+      const isChecked = hasAll ? (isAllItem ? 'checked' : '') : (assignedUpper.includes(sec.toUpperCase()) ? 'checked' : '');
+      const label = isAllItem ? "🌐 ALL SECTORS & SOVEREIGN DIRECTIVES (Default)" : sec;
+
+      return `
+        <label class="sector-checkbox-card">
+          <div class="sector-checkbox-left">
+            <input type="checkbox" name="assigned_macro_sector" value="${sec}" ${isChecked} onchange="window.handleSectorCheckboxChange(this)">
+            <span style="font-size:0.78rem; font-weight:${isAllItem ? '700' : '500'}; color:${isAllItem ? '#6ee7b7' : '#e2e8f0'};">${label}</span>
+          </div>
+        </label>
+      `;
+    }).join("");
+  }
+
+  window.handleSectorCheckboxChange = (changedCb) => {
+    const allCb = document.querySelector('input[name="assigned_macro_sector"][value="ALL"]');
+    const otherCbs = Array.from(document.querySelectorAll('input[name="assigned_macro_sector"]:not([value="ALL"])'));
+    
+    if (changedCb.value === "ALL") {
+      if (changedCb.checked) {
+        otherCbs.forEach(cb => { cb.checked = false; });
+      }
+    } else {
+      if (changedCb.checked && allCb) {
+        allCb.checked = false;
+      }
+      const anyChecked = otherCbs.some(cb => cb.checked);
+      if (!anyChecked && allCb) {
+        allCb.checked = true;
+      }
+    }
+  };
+
   // Analyst Modal Logic
   const btnOpenAddAnalyst = document.getElementById("btn-open-add-analyst");
   const modalAddAnalyst = document.getElementById("modal-add-analyst");
   const btnCloseAnalystModal = document.getElementById("btn-close-analyst-modal");
   const btnCancelAnalystModal = document.getElementById("btn-cancel-analyst-modal");
   const formAddAnalyst = document.getElementById("form-add-analyst");
+  const btnSectorsSelectAll = document.getElementById("btn-sectors-select-all");
+  const btnSectorsClearAll = document.getElementById("btn-sectors-clear-all");
+
+  if (btnSectorsSelectAll) {
+    btnSectorsSelectAll.addEventListener("click", () => {
+      const allCb = document.querySelector('input[name="assigned_macro_sector"][value="ALL"]');
+      const otherCbs = Array.from(document.querySelectorAll('input[name="assigned_macro_sector"]:not([value="ALL"])'));
+      if (allCb) allCb.checked = true;
+      otherCbs.forEach(cb => { cb.checked = false; });
+    });
+  }
+
+  if (btnSectorsClearAll) {
+    btnSectorsClearAll.addEventListener("click", () => {
+      document.querySelectorAll('input[name="assigned_macro_sector"]').forEach(cb => { cb.checked = false; });
+    });
+  }
 
   btnOpenAddAnalyst.addEventListener("click", () => {
     document.getElementById("analyst-modal-title").textContent = "Add New Client";
     formAddAnalyst.reset();
     document.getElementById("input-analyst-id").value = "";
     renderAnalystFoldersCheckboxes([]);
+    renderAnalystSectorsCheckboxes(["ALL"]);
     modalAddAnalyst.classList.add("open");
   });
 
@@ -544,6 +640,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const checkedBoxes = document.querySelectorAll('input[name="assigned_folder"]:checked');
     const assignedFolders = Array.from(checkedBoxes).map(cb => cb.value);
 
+    const checkedSectorBoxes = document.querySelectorAll('input[name="assigned_macro_sector"]:checked');
+    const assignedSectors = Array.from(checkedSectorBoxes).map(cb => cb.value);
+
     // Preserve existing directly assigned stocks
     const existing = analystsList.find(x => x.id === id);
     const assignedCompanies = existing ? (existing.assigned_companies || []) : [];
@@ -554,7 +653,8 @@ document.addEventListener("DOMContentLoaded", () => {
       phone,
       email,
       assigned_companies: assignedCompanies,
-      assigned_folders: assignedFolders
+      assigned_folders: assignedFolders,
+      macro_sectors: assignedSectors.length ? assignedSectors : ["ALL"]
     };
 
     try {

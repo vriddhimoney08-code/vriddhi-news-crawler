@@ -1058,8 +1058,20 @@
           </div>
           <div class="input-block">
             <label>Assign Portfolio Baskets (Morning briefing coverage)</label>
-            <div id="analyst-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 140px;">
+            <div id="analyst-folders-checkboxes" class="checkbox-scroll-box" style="max-height: 120px;">
               <!-- Populated dynamically via JS: GAME, SET, MATCH, etc. -->
+            </div>
+          </div>
+          <div class="input-block">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="margin: 0;">Assign Macro &amp; Policy Sectors (Evening briefing coverage)</label>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" id="btn-sectors-select-all" class="btn-micro-action" style="background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer;">All Sectors</button>
+                <button type="button" id="btn-sectors-clear-all" class="btn-micro-action" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-default); color: var(--text-muted); padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer;">Clear</button>
+              </div>
+            </div>
+            <div id="analyst-sectors-checkboxes" class="checkbox-scroll-box" style="max-height: 150px;">
+              <!-- Populated dynamically via JS -->
             </div>
           </div>
           <div class="modal-bottom">

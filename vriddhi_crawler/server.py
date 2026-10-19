@@ -428,11 +428,29 @@ class AnalystCreate(BaseModel):
     email: str = ""
     assigned_companies: list[str] = []
     assigned_folders: list[str] = []
+    macro_sectors: list[str] = ["ALL"]
 
 
 @app.get("/api/analysts")
 def list_analysts():
     return [asdict(a) for a in get_analysts()]
+
+
+@app.get("/api/macro-sectors")
+def list_macro_sectors():
+    try:
+        from .macro_ai import SECTOR_KEYWORDS
+        keys = sorted(list(SECTOR_KEYWORDS.keys()))
+        return ["ALL"] + keys
+    except Exception:
+        return [
+            "ALL", "BANKS", "FINANCE", "FINANCIAL TECHNOLOGY (FINTECH)", "CAPITAL MARKETS",
+            "INSURANCE", "AUTOMOBILES", "AUTO COMPONENTS", "AEROSPACE & DEFENSE",
+            "POWER", "OIL", "GAS", "PETROLEUM PRODUCTS", "PHARMACEUTICALS & BIOTECHNOLOGY",
+            "HEALTHCARE SERVICES", "IT - SERVICES", "IT - SOFTWARE", "IT - HARDWARE",
+            "TELECOM - SERVICES", "REALTY", "CONSTRUCTION", "CEMENT & CEMENT PRODUCTS",
+            "FERROUS METALS", "CHEMICALS & PETROCHEMICALS", "DIVERSIFIED FMCG", "GENERAL_MACRO"
+        ]
 
 
 @app.post("/api/analysts")
@@ -444,7 +462,8 @@ def create_or_update_analyst(item: AnalystCreate):
         phone=item.phone.strip(),
         email=item.email.strip(),
         assigned_companies=item.assigned_companies,
-        assigned_folders=item.assigned_folders
+        assigned_folders=item.assigned_folders,
+        macro_sectors=item.macro_sectors or ["ALL"]
     )
     save_analyst(analyst)
     return {"status": "ok", "analyst": asdict(analyst)}

@@ -39,14 +39,20 @@ def main():
     preview_parser = subparsers.add_parser("preview", help="Render PDFs/HTML digests into data/digests/")
     preview_parser.add_argument("--only", type=str, help="Analyst name")
 
-    # dispatch
-    subparsers.add_parser("dispatch", help="Send morning digests via WhatsApp to analysts")
+    # dispatch / digest
+    dispatch_parser = subparsers.add_parser("dispatch", help="Send morning digests via WhatsApp to analysts")
+    dispatch_parser.add_argument("--send-whatsapp", action="store_true", help="Flag for cron compatibility")
+    digest_parser = subparsers.add_parser("digest", help="Alias for dispatch")
+    digest_parser.add_argument("--send-whatsapp", action="store_true", help="Flag for cron compatibility")
 
     # run-daily
     subparsers.add_parser("run-daily", help="Run crawl cycle and immediately dispatch morning digests via WhatsApp")
 
-    # macro-dispatch
-    subparsers.add_parser("macro-dispatch", help="Run macro crawl and dispatch Evening Sectorial Briefings via WhatsApp")
+    # macro-dispatch / macro-digest
+    macro_disp = subparsers.add_parser("macro-dispatch", help="Run macro crawl and dispatch Evening Sectorial Briefings via WhatsApp")
+    macro_disp.add_argument("--send-whatsapp", action="store_true", help="Flag for cron compatibility")
+    macro_dig = subparsers.add_parser("macro-digest", help="Alias for macro-dispatch")
+    macro_dig.add_argument("--send-whatsapp", action="store_true", help="Flag for cron compatibility")
 
     # status
     subparsers.add_parser("status", help="Print operational dashboard stats")
@@ -78,10 +84,10 @@ def main():
             path, _ = generate_analyst_digest(a.id, a.name, stories)
             print(f"Generated digest for {a.name} ({len(stories)} stories): {path}")
 
-    elif args.command in ("dispatch", "run-daily"):
+    elif args.command in ("dispatch", "run-daily", "digest"):
         init_db(seed_defaults=True)
-        if args.command == "run-daily":
-            print("=== [CRON] Starting Daily 8:00 AM Crawl Cycle ===")
+        if args.command in ("run-daily", "digest"):
+            print("=== [CRON] Starting Daily Crawl Cycle before Morning Dispatch ===")
             c_res = Pipeline().run_crawl(groups=["exchanges", "publishers", "search"])
             print(f"Crawl complete: Found {c_res['items_found']}, Saved {c_res['stories_saved']} fresh stories.")
 
@@ -99,7 +105,7 @@ def main():
             mark_sent([s["id"] for s in stories], a.id)
             print(f"[{a.name}] Result: {res.get('status')} -> {res.get('message')}")
 
-    elif args.command == "macro-dispatch":
+    elif args.command in ("macro-dispatch", "macro-digest"):
         init_db(seed_defaults=True)
         print("=== [CRON] Starting Evening 5:30 PM Macro & Sector Briefing Cycle ===")
 

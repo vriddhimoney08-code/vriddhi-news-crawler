@@ -176,24 +176,13 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
 
 
 def _seed_data(conn: sqlite3.Connection):
-    # Only keep Siddhesh active for now
-    try:
-        conn.execute("DELETE FROM analysts WHERE id != 'siddhesh'")
-    except Exception:
-        pass
-
-    # Upsert default analysts (only Siddhesh currently active)
+    # Seed default analysts if missing (never delete existing or custom clients)
     try:
         from .seed_data import DEFAULT_ANALYSTS
         for a in DEFAULT_ANALYSTS:
             conn.execute("""
-            INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders)
+            INSERT OR IGNORE INTO analysts (id, name, phone, email, assigned_companies, assigned_folders)
             VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name=excluded.name,
-                phone=excluded.phone,
-                email=excluded.email,
-                assigned_folders=excluded.assigned_folders
             """, a)
     except Exception as e:
         log.warning("Seeding default analysts failed: %s", e)

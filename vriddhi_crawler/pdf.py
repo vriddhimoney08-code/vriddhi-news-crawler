@@ -922,9 +922,12 @@ def render_digest_html(
     assigned_folders_str = ", ".join(assigned_folders) if assigned_folders else "Direct Watchlist"
     now_ist = datetime.now(IST)
     date_str_file = now_ist.strftime("%d-%m-%Y")
-    window_start = now_ist - timedelta(hours=24)
-    coverage_window_start = window_start.strftime("%d-%b-%Y %I:%M %p IST")
-    coverage_window_end = now_ist.strftime("%d-%b-%Y %I:%M %p IST")
+    
+    # Anchored 24h market window for Morning Scorecard: Yesterday 08:00 AM IST to Today 08:00 AM IST
+    today_8am = now_ist.replace(hour=8, minute=0, second=0, microsecond=0)
+    yesterday_8am = today_8am - timedelta(days=1)
+    coverage_window_start = yesterday_8am.strftime("%d-%b-%Y 08:00 AM IST")
+    coverage_window_end = today_8am.strftime("%d-%b-%Y 08:00 AM IST")
 
     template = Template(HTML_TEMPLATE)
     return template.render(
@@ -1441,9 +1444,12 @@ def render_macro_digest_html(
 
     now_ist = datetime.now(IST)
     date_str_file = now_ist.strftime("%d-%m-%Y")
-    window_start = now_ist - timedelta(hours=24)
-    coverage_window_start = window_start.strftime("%d-%b-%Y %I:%M %p IST")
-    coverage_window_end = now_ist.strftime("%d-%b-%Y %I:%M %p IST")
+    
+    # Anchored 24h market window for Evening Macro Briefing: Yesterday 05:00 PM IST to Today 05:00 PM IST
+    today_5pm = now_ist.replace(hour=17, minute=0, second=0, microsecond=0)
+    yesterday_5pm = today_5pm - timedelta(days=1)
+    coverage_window_start = yesterday_5pm.strftime("%d-%b-%Y 05:00 PM IST")
+    coverage_window_end = today_5pm.strftime("%d-%b-%Y 05:00 PM IST")
     tier1_count = sum(1 for s in stories if "Tier 1" in (s.get("impact_grade") or ""))
 
     # Ensure each story has its parsed sectors list

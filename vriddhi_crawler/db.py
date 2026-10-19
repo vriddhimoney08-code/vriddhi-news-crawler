@@ -20,9 +20,10 @@ log = logging.getLogger(__name__)
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 
@@ -167,7 +168,11 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
         # Always sync seed companies so code edits in db.py reflect in SQLite
         if seed_defaults:
             _seed_data(conn)
+
+    try:
         migrate_legacy_macro_sectors(db_path)
+    except Exception as e:
+        log.warning("migrate_legacy_macro_sectors skipped: %s", e)
 
 
 def _seed_data(conn: sqlite3.Connection):

@@ -17,6 +17,7 @@ import feedparser  # type: ignore[import-untyped]
 
 from ..db import get_live_window, purge_macro_archive_stories, save_macro_story
 from ..http import Fetcher
+from ..macro_ai import classify_macro_with_ai
 from ..normalize import (
     clean_text,
     is_paywalled_url,

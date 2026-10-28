@@ -30,7 +30,9 @@ Content snippet: {summary}
 
 Determine:
 1. Is this a material event for equity research (earnings, regulatory/SEBI action, corporate disclosure, M&A, large order win, debt default, credit rating change, senior management change, capex)?
-2. Or is it noise (generic market wrap like 'Sensex rises', clickbait broker tip, retail stock gossip, algorithm price update)?
+2. Or is it noise (generic market wrap like 'Sensex rises', clickbait broker tip, retail stock gossip, algorithm price update, paid PR wire, sponsored advertorial, or promotional marketing)?
+
+If the story is a promotional PR wire, sponsored content, or marketing advertorial, strictly mark "is_material": false, "grade": "Grade C", and "score": 1.
 
 Respond strictly in JSON format:
 {{
@@ -53,17 +55,26 @@ def evaluate_and_summarize(company_name: str, headline: str, summary: str = "") 
             "executive_summary": summary[:250] if summary else headline
         }
 
-    prompt = PROMPT_TEMPLATE.format(
-        company_name=company_name,
-        headline=headline,
-        summary=summary or "No additional snippet provided."
-    )
+    from .db import get_ai_prompt
+    cfg = get_ai_prompt("equity_summary") or {}
+    template = cfg.get("prompt_text") or PROMPT_TEMPLATE
+    model_name = cfg.get("model") or "gemini-1.5-flash"
+    temperature = float(cfg.get("temperature", 0.2))
+    max_tokens = int(cfg.get("max_tokens", 400))
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={key}"
+    prompt = template
+    for tag, val in [
+        ("{company_name}", company_name),
+        ("{headline}", headline),
+        ("{summary}", summary or "No additional snippet provided.")
+    ]:
+        prompt = prompt.replace(tag, val)
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens, "responseMimeType": "application/json"}
     }
 
     try:

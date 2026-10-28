@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -29,13 +29,18 @@ from .db import (
     get_dashboard_stats,
     get_folders,
     get_recent_stories,
+    get_source,
     get_sources,
     get_unsent_stories_for_analyst,
     init_db,
     mark_sent,
+    record_dispatch_run,
+    get_dispatch_runs,
+    clear_sent_ledger,
     save_analyst,
     save_company,
     toggle_source_status,
+    update_source,
 )
 from .http import Fetcher
 from .pdf import generate_analyst_digest, get_clean_digest_filename, render_digest_html
@@ -120,16 +125,23 @@ def get_macro_statistics():
 
 
 @app.get("/api/macro/sectors")
-def list_macro_sectors():
+def list_macro_sectors(mode: str = "live"):
     from .db import get_macro_sectors
-    return {"sectors": get_macro_sectors()}
+    return {"sectors": get_macro_sectors(mode=mode)}
 
 
 @app.post("/api/macro/crawl")
-def trigger_macro_crawl(hours: int = 48):
+def trigger_macro_crawl(hours: int = 24):
     """Trigger verified macro crawl across PIB, RBI, SEBI, and official wires."""
     from .sources.macro import MacroPipeline
     return MacroPipeline().run_macro_crawl(hours=hours)
+
+
+@app.post("/api/macro/reclassify")
+def reclassify_macro():
+    """Reclassify existing macro database using the 61-sector taxonomy and purge noise."""
+    from .db import reclassify_and_clean_macro_stories
+    return reclassify_and_clean_macro_stories()
 
 
 # =========================================================================
@@ -147,7 +159,7 @@ def get_macro_digest_meta(analyst_id: str):
     if not analyst:
         raise HTTPException(status_code=404, detail="Analyst not found")
 
-    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=100)
     tier1_count = sum(1 for s in stories if "Tier 1" in (s.get("impact_grade") or ""))
     sectors = get_analyst_macro_sectors(analyst_id)
     pdf_filename = get_clean_macro_digest_filename(analyst.name, ext=".pdf")
@@ -175,7 +187,7 @@ def preview_macro_digest(analyst_id: str):
     if not analyst:
         raise HTTPException(status_code=404, detail="Analyst not found")
 
-    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=100)
     html_output = render_macro_digest_html(analyst.name, analyst.id, stories)
 
     return HTMLResponse(
@@ -200,7 +212,7 @@ def download_macro_digest_pdf(analyst_id: str):
     if not analyst:
         raise HTTPException(status_code=404, detail="Analyst not found")
 
-    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=100)
     file_path, _ = generate_macro_digest(analyst.id, analyst.name, stories)
 
     media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "text/html"
@@ -227,7 +239,7 @@ def dispatch_macro_digest(analyst_id: str):
     if not analyst:
         raise HTTPException(status_code=404, detail="Analyst not found")
 
-    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=30)
+    stories = get_macro_stories_for_analyst(analyst_id, hours=24, limit=100)
     if not stories:
         return {"status": "no_op", "message": f"No policy updates for {analyst.name} today.", "count": 0}
 
@@ -260,25 +272,37 @@ def dispatch_macro_digest(analyst_id: str):
 # Direct External Cron Webhook Endpoints (cron-job.org / Webhook triggers)
 # =========================================================================
 @app.api_route("/api/cron/evening-broadcast", methods=["GET", "POST"])
-def trigger_cron_evening_broadcast():
-    """Triggered by cron-job.org for Evening Macro & Policy Briefing broadcast to all active clients."""
-    from .db import get_analysts, get_macro_stories_for_analyst
+def trigger_cron_evening_broadcast(run_crawl: bool = True):
+    """Triggered by cron-job.org or manual admin dispatch for Evening Macro Briefing."""
+    from .db import get_analysts, get_macro_stories_for_analyst, record_dispatch_run
     from .pdf import generate_macro_digest
     from .sources.macro import MacroPipeline
     from .whatsapp import send_whatsapp_macro_digest
 
-    log.info("[CRON] Starting Evening Policy & Macro Broadcast to all active clients...")
-    try:
-        MacroPipeline().run_macro_crawl(hours=48)
-    except Exception as e:
-        log.warning("[CRON] Macro crawl warning: %s", e)
+    is_active_setting = os.getenv("EVENING_DISPATCH_ACTIVE", "yes").strip().lower() in ("yes", "true", "1")
+    if not is_active_setting:
+        log.warning("[CRON] Evening Policy & Macro Broadcast is PAUSED in scheduler settings. Skipping dispatch.")
+        record_dispatch_run("evening_macro", recipients_count=0, stories_count=0, status="PAUSED", details=[{"status": "paused", "msg": "Delivery paused in scheduler"}])
+        return {
+            "status": "paused",
+            "message": "Evening Macro & Policy Briefing broadcast is currently PAUSED in scheduler settings.",
+            "dispatched_count": 0
+        }
 
-    analysts = get_analysts()
+    log.info("[CRON] Starting Evening Policy & Macro Broadcast to active clients...")
+    if run_crawl:
+        try:
+            MacroPipeline().run_macro_crawl(hours=48)
+        except Exception as e:
+            log.warning("[CRON] Macro crawl warning: %s", e)
+
+    all_analysts = get_analysts()
+    active_analysts = [a for a in all_analysts if getattr(a, "is_active", True)]
     results = []
     public_base = os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io"
 
-    for a in analysts:
-        stories = get_macro_stories_for_analyst(a.id, hours=24, limit=30)
+    for a in active_analysts:
+        stories = get_macro_stories_for_analyst(a.id, hours=24, limit=100)
         if not stories:
             results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "no_updates"})
             continue
@@ -308,35 +332,53 @@ def trigger_cron_evening_broadcast():
             results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": "error", "error": str(err)})
 
     sent_count = len([r for r in results if r["status"] == "sent"])
-    log.info("[CRON] Evening Broadcast complete. Sent to %d / %d clients.", sent_count, len(analysts))
+    total_stories = sum(r["count"] for r in results)
+    run_status = "COMPLETED" if sent_count > 0 else ("CLEAN" if all(r["status"] == "no_updates" for r in results) else "PARTIAL")
+
+    record_dispatch_run("evening_macro", recipients_count=sent_count, stories_count=total_stories, status=run_status, details=results)
+    log.info("[CRON] Evening Broadcast complete. Sent to %d / %d active clients.", sent_count, len(active_analysts))
 
     return {
         "status": "success",
         "broadcast": "evening_macro_briefing",
-        "total_clients": len(analysts),
+        "total_clients": len(active_analysts),
         "dispatched_count": sent_count,
         "results": results
     }
 
 
 @app.api_route("/api/cron/morning-broadcast", methods=["GET", "POST"])
-def trigger_cron_morning_broadcast():
-    """Triggered by cron-job.org for Morning Company News broadcast to all active clients."""
-    from .db import get_analysts, get_unsent_stories_for_analyst, mark_sent
+def trigger_cron_morning_broadcast(run_crawl: bool = False):
+    """Triggered by cron-job.org or manual admin dispatch for Morning Company News."""
+    from .db import get_analysts, get_unsent_stories_for_analyst, mark_sent, record_dispatch_run
     from .pdf import generate_analyst_digest
     from .pipeline import Pipeline
     from .whatsapp import send_whatsapp_digest
 
-    log.info("[CRON] Starting Morning Companies News Broadcast to all active clients...")
-    try:
-        Pipeline().run_crawl(groups=["exchanges", "publishers", "search"])
-    except Exception as e:
-        log.warning("[CRON] Morning crawl warning: %s", e)
+    is_active_setting = os.getenv("MORNING_DISPATCH_ACTIVE", "yes").strip().lower() in ("yes", "true", "1")
+    if not is_active_setting:
+        log.warning("[CRON] Morning Companies News Broadcast is PAUSED in scheduler settings. Skipping dispatch.")
+        record_dispatch_run("morning_digest", recipients_count=0, stories_count=0, status="PAUSED", details=[{"status": "paused", "msg": "Delivery paused in scheduler"}])
+        return {
+            "status": "paused",
+            "message": "Morning Equity News broadcast is currently PAUSED in scheduler settings.",
+            "dispatched_count": 0
+        }
 
-    analysts = get_analysts()
+    log.info("[CRON] Starting Morning Companies News Broadcast to active clients...")
+    if run_crawl:
+        try:
+            # Fast crawl for pre-broadcast: exchanges and active publishers (background crontab handles heavy search loops)
+            Pipeline().run_crawl(groups=["exchanges", "publishers"])
+        except Exception as e:
+            log.warning("[CRON] Morning crawl warning: %s", e)
+
+    all_analysts = get_analysts()
+    active_analysts = [a for a in all_analysts if getattr(a, "is_active", True)]
     results = []
+    public_base = os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io"
 
-    for a in analysts:
+    for a in active_analysts:
         stories = get_unsent_stories_for_analyst(a.id)
         if not stories:
             results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "ledger_clean"})
@@ -344,13 +386,18 @@ def trigger_cron_morning_broadcast():
 
         try:
             file_path, _ = generate_analyst_digest(a.id, a.name, stories)
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
+
             wa_result = send_whatsapp_digest(
                 analyst_name=a.name,
                 analyst_phone=a.phone,
                 stories=stories,
-                pdf_path=file_path
+                pdf_path=file_path,
+                public_pdf_url=public_pdf_url,
             )
-            mark_sent([s["id"] for s in stories], a.id)
+            if wa_result.get("status") in ("sent", "simulated"):
+                mark_sent([s["id"] for s in stories], a.id)
             results.append({
                 "id": a.id,
                 "name": a.name,
@@ -364,12 +411,16 @@ def trigger_cron_morning_broadcast():
             results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": "error", "error": str(err)})
 
     sent_count = len([r for r in results if r["status"] == "sent"])
-    log.info("[CRON] Morning Broadcast complete. Sent to %d / %d clients.", sent_count, len(analysts))
+    total_stories = sum(r["count"] for r in results)
+    run_status = "COMPLETED" if sent_count > 0 else ("CLEAN" if all(r["status"] == "ledger_clean" for r in results) else "PARTIAL")
+
+    record_dispatch_run("morning_digest", recipients_count=sent_count, stories_count=total_stories, status=run_status, details=results)
+    log.info("[CRON] Morning Broadcast complete. Sent to %d / %d active clients.", sent_count, len(active_analysts))
 
     return {
         "status": "success",
         "broadcast": "morning_companies_briefing",
-        "total_clients": len(analysts),
+        "total_clients": len(active_analysts),
         "dispatched_count": sent_count,
         "results": results
     }
@@ -414,6 +465,7 @@ class CompanyCreate(BaseModel):
     folder: str = ""
     folders: list[str] = []
     assigned_analyst_ids: list[str] | None = None
+    is_active: bool = True
 
 
 class CompanyFolderUpdate(BaseModel):
@@ -441,7 +493,7 @@ def add_watchlist_company(item: CompanyCreate):
         analyst_names=item.analyst_names,
         folder=", ".join(flds),
         folders=flds,
-        is_active=True
+        is_active=item.is_active
     )
     save_company(comp)
 
@@ -539,6 +591,196 @@ def remove_watchlist_company(company_id: str):
     return {"status": "deleted"}
 
 
+@app.get("/api/watchlist/export")
+def export_watchlist_csv():
+    """Export complete watchlist as a clean CSV file."""
+    import csv
+    import io
+    companies = get_companies(include_inactive=True)
+    all_analysts = get_analysts()
+
+    comp_analysts: dict[str, list[str]] = {}
+    for a in all_analysts:
+        for cid in a.assigned_companies:
+            comp_analysts.setdefault(cid, []).append(a.name)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Company Name", "NSE Symbol", "BSE Code",
+        "Baskets", "Aliases", "Search Queries", "Assigned Clients", "Status"
+    ])
+    for c in companies:
+        c_flds = getattr(c, "folders", []) or ([c.folder] if c.folder else [])
+        assigned_names = comp_analysts.get(c.id, [])
+        writer.writerow([
+            c.id,
+            c.name,
+            c.nse_symbol,
+            c.bse_code,
+            ", ".join(c_flds),
+            ", ".join(c.aliases),
+            ", ".join(c.search_queries),
+            ", ".join(assigned_names),
+            "Active" if c.is_active else "Paused"
+        ])
+
+    today_str = datetime.now().strftime("%Y%m%d")
+    filename = f"vriddhi_watchlist_{today_str}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.get("/api/watchlist/{company_id}")
+def get_watchlist_company(company_id: str):
+    """Retrieve complete metadata for a single company."""
+    comps = {c.id: c for c in get_companies(include_inactive=True)}
+    comp = comps.get(company_id)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Company not found")
+    all_analysts = get_analysts()
+    assigned_aids = [a.id for a in all_analysts if comp.id in a.assigned_companies]
+    res = asdict(comp)
+    res["assigned_analyst_ids"] = assigned_aids
+    return res
+
+
+class BatchWatchlistAction(BaseModel):
+    action: str  # "assign_folder", "remove_folder", "assign_analyst", "delete", "toggle_active"
+    company_ids: list[str]
+    value: str | None = None
+
+
+@app.post("/api/watchlist/batch")
+def batch_watchlist_action(req: BatchWatchlistAction):
+    """Execute bulk operations across selected companies."""
+    cids = set(req.company_ids)
+    if not cids:
+        return {"status": "no_op", "count": 0}
+
+    all_comps = {c.id: c for c in get_companies(include_inactive=True)}
+    all_analysts = get_analysts()
+
+    if req.action == "delete":
+        for cid in cids:
+            delete_company(cid)
+            for a in all_analysts:
+                if cid in a.assigned_companies:
+                    a.assigned_companies.remove(cid)
+                    save_analyst(a)
+        return {"status": "ok", "message": f"Deleted {len(cids)} companies", "count": len(cids)}
+
+    elif req.action == "assign_folder":
+        folder = (req.value or "").strip().upper()
+        if not folder:
+            raise HTTPException(status_code=400, detail="Folder value required")
+        for cid in cids:
+            comp = all_comps.get(cid)
+            if comp:
+                cur_flds = [f.upper() for f in (getattr(comp, "folders", []) or ([comp.folder] if comp.folder else []))]
+                if folder not in cur_flds:
+                    cur_flds.append(folder)
+                comp.folders = cur_flds
+                comp.folder = ", ".join(cur_flds)
+                save_company(comp)
+        return {"status": "ok", "message": f"Added basket '{folder}' to {len(cids)} companies", "count": len(cids)}
+
+    elif req.action == "remove_folder":
+        folder = (req.value or "").strip().upper()
+        if not folder:
+            raise HTTPException(status_code=400, detail="Folder value required")
+        for cid in cids:
+            comp = all_comps.get(cid)
+            if comp:
+                cur_flds = [f.upper() for f in (getattr(comp, "folders", []) or ([comp.folder] if comp.folder else []))]
+                if folder in cur_flds:
+                    cur_flds.remove(folder)
+                comp.folders = cur_flds
+                comp.folder = ", ".join(cur_flds)
+                save_company(comp)
+        return {"status": "ok", "message": f"Removed basket '{folder}' from {len(cids)} companies", "count": len(cids)}
+
+    elif req.action == "assign_analyst":
+        aid = (req.value or "").strip()
+        analyst = next((a for a in all_analysts if a.id == aid), None)
+        if not analyst:
+            raise HTTPException(status_code=404, detail="Client not found")
+        updated = False
+        for cid in cids:
+            if cid not in analyst.assigned_companies:
+                analyst.assigned_companies.append(cid)
+                updated = True
+        if updated:
+            save_analyst(analyst)
+        return {"status": "ok", "message": f"Assigned {len(cids)} stocks to {analyst.name}", "count": len(cids)}
+
+    elif req.action == "toggle_active":
+        target_state = str(req.value).lower() in ("1", "true", "active", "yes")
+        with get_connection() as conn:
+            for cid in cids:
+                conn.execute("UPDATE companies SET is_active = ? WHERE id = ?", (1 if target_state else 0, cid))
+            conn.commit()
+        state_label = "Activated" if target_state else "Paused"
+        return {"status": "ok", "message": f"{state_label} {len(cids)} companies", "count": len(cids)}
+
+    raise HTTPException(status_code=400, detail="Unknown batch action")
+
+
+class BulkImportCompany(BaseModel):
+    name: str
+    nse_symbol: str = ""
+    bse_code: str = ""
+    folder: str = ""
+    folders: list[str] = []
+    aliases: list[str] = []
+
+
+class BulkImportRequest(BaseModel):
+    items: list[BulkImportCompany]
+
+
+@app.post("/api/watchlist/import")
+def import_watchlist_bulk(req: BulkImportRequest):
+    """Import batch of companies."""
+    import re
+    added = 0
+    for it in req.items:
+        name = it.name.strip()
+        if not name:
+            continue
+        cid = re.sub(r"[^a-z0-9]", "", name.lower())
+        flds = [f.strip().upper() for f in it.folders if f.strip()]
+        if not flds and it.folder:
+            flds = [f.strip().upper() for f in it.folder.split(",") if f.strip()]
+        if not flds:
+            flds = ["GAME"]
+
+        aliases = [a.strip() for a in it.aliases if a.strip()]
+        if name not in aliases:
+            aliases.insert(0, name)
+        if it.nse_symbol and it.nse_symbol not in aliases:
+            aliases.append(it.nse_symbol.strip().upper())
+
+        comp = Company(
+            id=cid,
+            name=name,
+            nse_symbol=(it.nse_symbol or "").strip().upper(),
+            bse_code=(it.bse_code or "").strip(),
+            aliases=aliases,
+            search_queries=[f'"{name}"'],
+            analyst_names=[],
+            folder=", ".join(flds),
+            folders=flds,
+            is_active=True
+        )
+        save_company(comp)
+        added += 1
+    return {"status": "ok", "imported": added}
+
+
 class AnalystCreate(BaseModel):
     id: str = ""
     name: str
@@ -547,6 +789,7 @@ class AnalystCreate(BaseModel):
     assigned_companies: list[str] = []
     assigned_folders: list[str] = []
     macro_sectors: list[str] = ["ALL"]
+    is_active: bool = True
 
 
 @app.get("/api/analysts")
@@ -581,10 +824,45 @@ def create_or_update_analyst(item: AnalystCreate):
         email=item.email.strip(),
         assigned_companies=item.assigned_companies,
         assigned_folders=item.assigned_folders,
-        macro_sectors=item.macro_sectors or ["ALL"]
+        macro_sectors=item.macro_sectors or ["ALL"],
+        is_active=item.is_active
     )
     save_analyst(analyst)
     return {"status": "ok", "analyst": asdict(analyst)}
+
+
+@app.post("/api/analysts/{analyst_id}/toggle-status")
+def toggle_analyst_status(analyst_id: str):
+    """Toggle client broadcast delivery status (Active vs Paused)."""
+    analysts = {a.id: a for a in get_analysts()}
+    a = analysts.get(analyst_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="Client not found")
+    a.is_active = not getattr(a, "is_active", True)
+    save_analyst(a)
+    return {"status": "ok", "id": analyst_id, "is_active": a.is_active}
+
+
+@app.post("/api/analysts/{analyst_id}/test-ping")
+def test_ping_analyst(analyst_id: str):
+    """Send an immediate test WhatsApp verification message to a single client."""
+    analysts = {a.id: a for a in get_analysts()}
+    a = analysts.get(analyst_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="Client not found")
+    from .whatsapp import send_whatsapp_digest
+    sample_story = [{
+        "company_name": "Vriddhi Intelligence Desk",
+        "title": "Gateway Connectivity Test: Automated Briefings Active",
+        "grade": "Grade A"
+    }]
+    res = send_whatsapp_digest(
+        analyst_name=a.name,
+        analyst_phone=a.phone,
+        stories=sample_story,
+        pdf_path=None
+    )
+    return res
 
 
 @app.delete("/api/analysts/{analyst_id}")
@@ -619,6 +897,138 @@ def remove_source(source_id: int):
     return {"status": "deleted", "id": source_id}
 
 
+@app.get("/api/sources/{source_id}")
+def get_single_source(source_id: int):
+    s = get_source(source_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Source feed not found")
+    return s
+
+
+@app.put("/api/sources/{source_id}")
+def update_existing_source(source_id: int, source_data: dict):
+    s = get_source(source_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Source feed not found")
+    if not source_data.get("name") or not source_data.get("url"):
+        raise HTTPException(status_code=400, detail="Source name and URL are required")
+    update_source(source_id, source_data)
+    return {"status": "updated", "id": source_id}
+
+
+# =========================================================================
+# Automated Scheduler & Broadcast Controls
+# =========================================================================
+@app.get("/api/scheduler/status")
+def get_scheduler_status():
+    """Return scheduler configuration, next execution countdowns, active clients, and recent dispatch runs."""
+    import os
+    from datetime import datetime, time
+    from zoneinfo import ZoneInfo
+    from dotenv import load_dotenv
+    from .config import PROJECT_ROOT
+
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+    ist = ZoneInfo("Asia/Kolkata")
+    now_ist = datetime.now(ist)
+
+    morning_time = os.getenv("MORNING_DISPATCH_TIME", "08:30").strip()
+    morning_active = os.getenv("MORNING_DISPATCH_ACTIVE", "yes").strip().lower() in ("yes", "true", "1")
+    evening_time = os.getenv("EVENING_DISPATCH_TIME", "17:15").strip()
+    evening_active = os.getenv("EVENING_DISPATCH_ACTIVE", "yes").strip().lower() in ("yes", "true", "1")
+    crawl_interval = int(os.getenv("CRAWL_INTERVAL_MINUTES", "30"))
+
+    def compute_next_run(time_str: str) -> str:
+        try:
+            parts = [int(p) for p in time_str.split(":")]
+            target_time = time(parts[0], parts[1])
+            target_dt = now_ist.replace(hour=target_time.hour, minute=target_time.minute, second=0, microsecond=0)
+            if target_dt <= now_ist:
+                from datetime import timedelta
+                target_dt += timedelta(days=1)
+                prefix = "Tomorrow"
+            else:
+                prefix = "Today"
+            return f"{prefix}, {target_dt.strftime('%I:%M %p IST')}"
+        except Exception:
+            return f"Scheduled daily at {time_str} IST"
+
+    all_analysts = get_analysts()
+    active_analysts = [a for a in all_analysts if getattr(a, "is_active", True)]
+    recent_runs = get_dispatch_runs(15)
+
+    return {
+        "morning_time": morning_time,
+        "morning_active": morning_active,
+        "evening_time": evening_time,
+        "evening_active": evening_active,
+        "crawl_interval_minutes": crawl_interval,
+        "next_morning_run": compute_next_run(morning_time) if morning_active else "Delivery Paused",
+        "next_evening_run": compute_next_run(evening_time) if evening_active else "Delivery Paused",
+        "active_clients_count": len(active_analysts),
+        "total_clients_count": len(all_analysts),
+        "recent_runs": recent_runs
+    }
+
+
+@app.post("/api/scheduler/save")
+def save_scheduler_settings(payload: dict):
+    """Save broadcast dispatch times and active states to .env."""
+    import re
+    from .config import PROJECT_ROOT
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.exists():
+        raise HTTPException(status_code=500, detail=".env file missing")
+
+    content = env_path.read_text(encoding="utf-8")
+
+    def update_var(txt: str, key: str, val: str) -> str:
+        pattern = rf"^{key}\s*=.*$"
+        if re.search(pattern, txt, flags=re.MULTILINE):
+            return re.sub(pattern, f"{key}={val}", txt, flags=re.MULTILINE)
+        else:
+            return txt + f"\n{key}={val}"
+
+    if "morning_time" in payload and payload["morning_time"]:
+        content = update_var(content, "MORNING_DISPATCH_TIME", str(payload["morning_time"]).strip())
+
+    if "morning_active" in payload:
+        val = "yes" if payload["morning_active"] else "no"
+        content = update_var(content, "MORNING_DISPATCH_ACTIVE", val)
+
+    if "evening_time" in payload and payload["evening_time"]:
+        content = update_var(content, "EVENING_DISPATCH_TIME", str(payload["evening_time"]).strip())
+
+    if "evening_active" in payload:
+        val = "yes" if payload["evening_active"] else "no"
+        content = update_var(content, "EVENING_DISPATCH_ACTIVE", val)
+
+    if "crawl_interval_minutes" in payload:
+        content = update_var(content, "CRAWL_INTERVAL_MINUTES", str(int(payload["crawl_interval_minutes"])))
+
+    env_path.write_text(content, encoding="utf-8")
+    return {"status": "ok", "message": "Scheduler settings updated and persisted"}
+
+
+@app.post("/api/scheduler/trigger-morning")
+def manual_trigger_morning(crawl: bool = False):
+    """Manual on-demand trigger of the 8:00 AM Equity Digest broadcast."""
+    return trigger_cron_morning_broadcast(run_crawl=crawl)
+
+
+@app.post("/api/scheduler/trigger-evening")
+def manual_trigger_evening(crawl: bool = False):
+    """Manual on-demand trigger of the 6:30 PM Macro Briefing broadcast."""
+    return trigger_cron_evening_broadcast(run_crawl=crawl)
+
+
+@app.post("/api/scheduler/clear-ledger")
+def manual_clear_sent_ledger():
+    """Clear sent stories ledger so test dispatches can be executed."""
+    count = clear_sent_ledger()
+    return {"status": "ok", "cleared_records": count, "message": f"Cleared {count} ledger records"}
+
+
 @app.post("/api/sources/ping")
 def ping_source(req: dict):
     url = req.get("url")
@@ -646,6 +1056,198 @@ def ping_source(req: dict):
             "latency_ms": latency_ms,
             "bytes": 0,
             "msg": str(e)[:120]
+        }
+
+
+# =========================================================================
+# Phase 3: Story Editorial & Manual Overrides
+# =========================================================================
+@app.get("/api/stories/{story_id}")
+def get_story_details(story_id: str):
+    from .db import get_story
+    story = get_story(story_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    return story
+
+
+@app.put("/api/stories/{story_id}")
+def edit_story(story_id: str, payload: dict):
+    from .db import get_story, update_story
+    story = get_story(story_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    if not payload.get("title"):
+        raise HTTPException(status_code=400, detail="Story title is required")
+    update_story(story_id, payload)
+    return {"status": "ok", "id": story_id, "message": "Story updated successfully"}
+
+
+@app.delete("/api/stories/{story_id}")
+def remove_story(story_id: str):
+    from .db import get_story, delete_story
+    story = get_story(story_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    delete_story(story_id)
+    return {"status": "ok", "id": story_id, "message": "Story deleted"}
+
+
+@app.post("/api/stories/manual")
+def add_manual_story(payload: dict):
+    from .db import create_manual_story
+    if not payload.get("title") or not payload.get("company_id"):
+        raise HTTPException(status_code=400, detail="Company and title are required")
+    sid = create_manual_story(payload)
+    return {"status": "ok", "id": sid, "message": "Breaking story published to intelligence desk"}
+
+
+@app.get("/api/macro/{story_id}")
+def get_macro_story_details(story_id: str):
+    from .db import get_macro_story
+    story = get_macro_story(story_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Macro story not found")
+    return story
+
+
+@app.put("/api/macro/{story_id}")
+def edit_macro_story(story_id: str, payload: dict):
+    from .db import get_macro_story, update_macro_story
+    story = get_macro_story(story_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Macro story not found")
+    if not payload.get("title"):
+        raise HTTPException(status_code=400, detail="Directive title is required")
+    update_macro_story(story_id, payload)
+    return {"status": "ok", "id": story_id, "message": "Macro directive updated successfully"}
+
+
+@app.delete("/api/macro/{story_id}")
+def remove_macro_story(story_id: str):
+    from .db import get_macro_story, delete_macro_story
+    story = get_macro_story(story_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Macro story not found")
+    delete_macro_story(story_id)
+    return {"status": "ok", "id": story_id, "message": "Macro directive deleted"}
+
+
+@app.post("/api/macro/manual")
+def add_manual_macro_story(payload: dict):
+    from .db import create_manual_macro_story
+    if not payload.get("title"):
+        raise HTTPException(status_code=400, detail="Title is required")
+    sid = create_manual_macro_story(payload)
+    return {"status": "ok", "id": sid, "message": "Manual macro policy directive published"}
+
+
+# =========================================================================
+# Phase 3: AI Prompt Engineering & Studio
+# =========================================================================
+@app.get("/api/ai/prompts")
+def list_ai_prompts():
+    from .db import get_ai_prompts
+    return get_ai_prompts()
+
+
+@app.get("/api/ai/prompts/{prompt_id}")
+def get_single_ai_prompt(prompt_id: str):
+    from .db import get_ai_prompt
+    p = get_ai_prompt(prompt_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Prompt template not found")
+    return p
+
+
+@app.post("/api/ai/prompts/{prompt_id}")
+def update_ai_prompt(prompt_id: str, payload: dict):
+    from .db import save_ai_prompt
+    prompt_text = payload.get("prompt_text", "").strip()
+    if not prompt_text:
+        raise HTTPException(status_code=400, detail="Prompt template cannot be empty")
+    model = payload.get("model", "gemini-1.5-flash")
+    temperature = float(payload.get("temperature", 0.2))
+    max_tokens = int(payload.get("max_tokens", 400))
+    save_ai_prompt(prompt_id, prompt_text, model=model, temperature=temperature, max_tokens=max_tokens)
+    return {"status": "ok", "id": prompt_id, "message": "Prompt template saved & active"}
+
+
+@app.post("/api/ai/prompts/{prompt_id}/reset")
+def reset_single_ai_prompt(prompt_id: str):
+    from .db import reset_ai_prompt
+    res = reset_ai_prompt(prompt_id)
+    return {"status": "ok", "prompt": res, "message": "Prompt template reset to factory default"}
+
+
+@app.post("/api/ai/test-prompt")
+def test_ai_prompt(payload: dict):
+    from .ai import get_gemini_key
+    key = get_gemini_key()
+    if not key:
+        raise HTTPException(status_code=400, detail="Gemini API Key is missing in Settings / .env")
+
+    prompt_text = payload.get("prompt_text", "")
+    model = payload.get("model", "gemini-1.5-flash")
+    temperature = float(payload.get("temperature", 0.2))
+    max_tokens = int(payload.get("max_tokens", 400))
+
+    company = payload.get("sample_company", "Reliance Industries")
+    headline = payload.get("sample_headline", "Reliance Jio achieves record 500M subscriber milestone with nationwide 5G rollout")
+    summary = payload.get("sample_snippet", "Jio Platforms added 12 million subscribers in the latest quarter with ARPU climbing to 182 rupees.")
+    authority = payload.get("sample_authority", "Reserve Bank of India")
+
+    # Safe variable replacement without breaking on JSON schema curly braces
+    formatted_prompt = prompt_text
+    for tag, val in [
+        ("{company_name}", company),
+        ("{headline}", headline),
+        ("{summary}", summary),
+        ("{authority}", authority),
+        ("{title}", headline),
+        ("{snippet}", summary),
+    ]:
+        formatted_prompt = formatted_prompt.replace(tag, str(val))
+
+    import time
+    import requests
+    t0 = time.time()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    req_body = {
+        "contents": [{"parts": [{"text": formatted_prompt}]}],
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens, "responseMimeType": "application/json"}
+    }
+
+    try:
+        res = requests.post(url, json=req_body, timeout=12)
+        latency_ms = int((time.time() - t0) * 1000)
+        if res.status_code == 200:
+            data = res.json()
+            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            parsed = None
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                pass
+            return {
+                "status": "ok",
+                "latency_ms": latency_ms,
+                "model": model,
+                "raw_text": raw,
+                "parsed": parsed
+            }
+        else:
+            return {
+                "status": "error",
+                "latency_ms": latency_ms,
+                "http_code": res.status_code,
+                "message": res.text[:300]
+            }
+    except Exception as err:
+        return {
+            "status": "error",
+            "latency_ms": int((time.time() - t0) * 1000),
+            "message": str(err)
         }
 
 

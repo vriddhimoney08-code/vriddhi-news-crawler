@@ -20,12 +20,10 @@ on:
           - 'evening_sectorial_broadcast'
           - 'both'
 
-  # 3. Native GitHub Actions Cron (UTC times for IST):
-  #    03:30 UTC = 09:00 AM IST (Daily - 7 Days a Week)
-  #    12:00 UTC = 05:30 PM IST (Daily - 7 Days a Week)
-  schedule:
-    - cron: '30 3 * * *'
-    - cron: '0 12 * * *'
+  # 3. Native GitHub Actions Cron (Disabled in favor of GCP Server Crontab)
+  # schedule:
+  #   - cron: '30 3 * * *'
+  #   - cron: '0 12 * * *'
 
 jobs:
   broadcast:
@@ -61,7 +59,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}
-          BASE_URL: ${{ secrets.BASE_URL }}
+          BASE_URL: ${{ secrets.BASE_URL || 'https://35.244.60.224.sslip.io' }}
           INTERAKT_TEMPLATE: vriddhi_daily_digest_49
           INTERAKT_MACRO_TEMPLATE: vriddhi_daily_digest_49
           TEST_MODE: "no"
@@ -79,7 +77,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}
-          BASE_URL: ${{ secrets.BASE_URL }}
+          BASE_URL: ${{ secrets.BASE_URL || 'https://35.244.60.224.sslip.io' }}
           INTERAKT_TEMPLATE: vriddhi_daily_digest_49
           INTERAKT_MACRO_TEMPLATE: vriddhi_evening_macro_01
           TEST_MODE: "no"

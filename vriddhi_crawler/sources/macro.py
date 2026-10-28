@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 try:
     from datetime import UTC
@@ -13,30 +15,44 @@ from urllib.parse import quote_plus
 
 import feedparser  # type: ignore[import-untyped]
 
-from ..db import get_live_window, save_macro_story
+from ..db import get_live_window, purge_macro_archive_stories, save_macro_story
 from ..http import Fetcher
-from ..macro_ai import classify_macro_with_ai
-from ..normalize import clean_text, strip_publisher_suffix
+from ..normalize import (
+    clean_text,
+    is_paywalled_url,
+    is_sponsored_or_pr,
+    resolve_news_url,
+    strip_publisher_suffix,
+)
 from .base import parse_date
 
 log = logging.getLogger(__name__)
 
 
-def extract_ministry_from_title(title: str, text: str = "") -> str:
+def extract_ministry_from_title(title: str, text: str = "", default: str = "Government of India") -> str:
     """Detect official Indian Ministry or Regulator from announcement text."""
     combined = f"{title} {text}".lower()
     ministry_map = [
         ("Cabinet / PMO", [r"\bcabinet\b", r"\bpmo\b", r"\bprime minister\b", r"\bunion cabinet\b"]),
         ("Ministry of Finance", [r"\bministry of finance\b", r"\bfinmin\b", r"\bgst\b", r"\bincome tax\b", r"\brevenue\b", r"\bexpenditure\b"]),
-        ("Ministry of Commerce & Industry", [r"\bcommerce\b", r"\bindustry\b", r"\btrade\b", r"\bexport\b", r"\bimport\b", r"\banti-dumping\b", r"\bpli\b"]),
-        ("Ministry of Defense", [r"\bdefense\b", r"\bdefence\b", r"\bdac\b", r"\barmy\b", r"\bnavy\b", r"\bair force\b", r"\bdrdo\b"]),
-        ("Ministry of Railways", [r"\brailway\b", r"\brailways\b", r"\bvande bharat\b", r"\btracks\b", r"\blocos\b"]),
-        ("Ministry of Power & MNRE", [r"\bpower\b", r"\belectricity\b", r"\brenewable\b", r"\bsolar\b", r"\bgreen hydrogen\b"]),
-        ("Ministry of Petroleum & Natural Gas", [r"\bpetroleum\b", r"\bnatural gas\b", r"\bcrude\b", r"\boil\b", r"\brefining\b"]),
-        ("Ministry of Road Transport (MoRTH)", [r"\bmorth\b", r"\bhighway\b", r"\bnhai\b", r"\broad transport\b", r"\bexpressway\b"]),
-        ("Ministry of Chemicals & Fertilizers", [r"\bchemical\b", r"\bchemicals\b", r"\bfertilizer\b", r"\bfertilizers\b", r"\burea\b"]),
+        ("Ministry of Commerce & Industry", [r"\bcommerce\b", r"\bindustry\b", r"\bdpiit\b", r"\btrade\b", r"\bexport\b", r"\bimport\b", r"\banti-dumping\b", r"\bpli\b"]),
+        ("Ministry of Heavy Industries", [r"\bheavy industries\b", r"\bautomotive\b", r"\bautomobile\b", r"\be-bus\b", r"\bfame\b", r"\bpm e-drive\b", r"\bvehicle scrappage\b"]),
+        ("Ministry of Power & MNRE", [r"\bministry of power\b", r"\bmnre\b", r"\brenewable energy\b", r"\bpower\b", r"\belectricity\b", r"\bsolar\b", r"\bgreen hydrogen\b", r"\bdiscom\b"]),
+        ("Ministry of Petroleum & Natural Gas", [r"\bpetroleum\b", r"\bnatural gas\b", r"\bcrude\b", r"\boil\b", r"\brefining\b", r"\blng\b"]),
+        ("Ministry of Road Transport (MoRTH)", [r"\bmorth\b", r"\broad transport\b", r"\bhighway\b", r"\bnhai\b", r"\bexpressway\b"]),
+        ("Ministry of Steel", [r"\bministry of steel\b", r"\bsteel\b", r"\biron ore\b", r"\bsafeguard duty\b", r"\bmelt and pour\b"]),
+        ("Ministry of Mines", [r"\bministry of mines\b", r"\bcritical minerals\b", r"\bmineral auction\b", r"\blithium\b", r"\bbauxite\b"]),
+        ("Ministry of Coal", [r"\bministry of coal\b", r"\bcoal auction\b", r"\bcommercial coal\b", r"\bcoal block\b"]),
+        ("Ministry of Chemicals & Fertilizers", [r"\bchemicals & fertilizers\b", r"\bchemical\b", r"\bchemicals\b", r"\bfertilizer\b", r"\bfertilizers\b", r"\burea\b", r"\bdap\b", r"\bpetrochemical\b"]),
+        ("Ministry of Electronics & IT (MeitY)", [r"\bmeity\b", r"\belectronics & it\b", r"\bsemiconductor\b", r"\bchip\b", r"\bindia semiconductor mission\b", r"\bit hardware pli\b"]),
+        ("Ministry of Communications (DoT)", [r"\bdepartment of telecommunications\b", r"\bdot\b", r"\btelecom\b", r"\btrai\b", r"\b5g\b", r"\bspectrum\b"]),
+        ("Ministry of Civil Aviation", [r"\bcivil aviation\b", r"\bdgca\b", r"\bairport\b", r"\bairports\b"]),
+        ("Ministry of Housing & Urban Affairs", [r"\bhousing and urban affairs\b", r"\bmohua\b", r"\bpmay\b", r"\brera\b", r"\burban infrastructure\b"]),
         ("Ministry of Agriculture", [r"\bagriculture\b", r"\bfarmer\b", r"\bmsp\b", r"\bkisan\b"]),
-        ("Ministry of Heavy Industries", [r"\bheavy industries\b", r"\bautomotive\b", r"\bfame\b", r"\be-bus\b"]),
+        ("Ministry of Defense", [r"\bdefense\b", r"\bdefence\b", r"\bdac\b", r"\barmy\b", r"\bnavy\b", r"\bair force\b", r"\bdrdo\b", r"\bidex\b"]),
+        ("Ministry of Railways", [r"\brailway\b", r"\brailways\b", r"\bvande bharat\b", r"\btracks\b", r"\blocos\b"]),
+        ("Ministry of Consumer Affairs & Food", [r"\bconsumer affairs\b", r"\bfood and public distribution\b", r"\bfssai\b", r"\bedible oil\b"]),
+        ("Ministry of Textiles", [r"\bministry of textiles\b", r"\btextile\b", r"\btextiles\b", r"\bpm mitra\b", r"\bjute\b"]),
         ("Reserve Bank of India (RBI)", [r"\brbi\b", r"\breserve bank\b", r"\bmonetary policy\b", r"\brepo\b"]),
         ("Securities & Exchange Board (SEBI)", [r"\bsebi\b", r"\bsecurities and exchange\b", r"\bf&o\b", r"\bmutual fund\b"]),
         ("MoSPI (National Statistics)", [r"\bmospi\b", r"\bcpi\b", r"\bwholesale price\b", r"\biip\b", r"\bgdp\b"]),
@@ -45,7 +61,7 @@ def extract_ministry_from_title(title: str, text: str = "") -> str:
     for name, pats in ministry_map:
         if any(re.search(p, combined) for p in pats):
             return name
-    return "Government of India"
+    return default
 
 
 class MacroPipeline:
@@ -54,10 +70,16 @@ class MacroPipeline:
     def __init__(self, fetcher: Fetcher | None = None):
         self.fetcher = fetcher or Fetcher()
 
-    def run_macro_crawl(self, hours: int = 48) -> dict[str, Any]:
+    def run_macro_crawl(self, hours: int = 24) -> dict[str, Any]:
         """Ingest official government releases and regulatory circulars across all sectors."""
         now_utc = datetime.now(UTC)
         since = now_utc - timedelta(hours=hours)
+
+        # Purge legacy factsheets or stale PRIDs from db if any
+        try:
+            purge_macro_archive_stories()
+        except Exception as p_err:
+            log.debug("purge_macro_archive_stories error: %s", p_err)
 
         raw_items: list[dict[str, Any]] = []
         errors: list[str] = []
@@ -105,6 +127,11 @@ class MacroPipeline:
         seen_fingerprints = {s["id"] for s in existing_stories}
 
         for item in raw_items:
+            # Strict date enforcement: drop undated news so old archived items never enter with today's date
+            pub_at = item.get("published_at")
+            if not pub_at:
+                continue
+
             clean_title = clean_text(strip_publisher_suffix(item["title"]))
             if not clean_title or len(clean_title) < 15:
                 continue
@@ -143,6 +170,10 @@ class MacroPipeline:
                 authority=item["ministry_or_regulator"]
             )
 
+            # Skip non-material/routine non-economic noise (greetings, sports awards, festivals)
+            if not classified.get("is_material", True):
+                continue
+
             story_record = {
                 "id": fp,
                 "title": clean_title,
@@ -154,7 +185,7 @@ class MacroPipeline:
                 "impact_grade": classified.get("impact_grade", "Tier 2 (Sector Impact)"),
                 "impact_bias": classified.get("impact_bias", "NEUTRAL"),
                 "impact_summary": classified.get("impact_summary", clean_title),
-                "published_at": item.get("published_at") or now_utc.isoformat(),
+                "published_at": pub_at,
             }
 
             save_macro_story(story_record)
@@ -169,37 +200,115 @@ class MacroPipeline:
         }
 
     def _fetch_pib(self, since: datetime) -> list[dict[str, Any]]:
-        """Fetch verified press releases from Government of India (pib.gov.in)."""
+        """Fetch verified press releases from Government of India (pib.gov.in) across key sectors."""
         items: list[dict[str, Any]] = []
-        url = "https://news.google.com/rss/search?q=site:pib.gov.in+when:2d&hl=en-IN&gl=IN&ceid=IN:en"
-        try:
-            r = self.fetcher.get(url, check_robots=False, delay=1.0)
-            fp = feedparser.parse(r.content)
-            for e in fp.entries:
-                pub = parse_date(str(e.get("published", "")))
-                if pub and pub < since:
-                    continue
-                title = clean_text(str(e.get("title", "")))
-                title = strip_publisher_suffix(title, "pib.gov.in")
-                title = strip_publisher_suffix(title, "PIB")
-                summary = clean_text(str(e.get("summary", "")))
-                link = str(e.get("link", ""))
-                ministry = extract_ministry_from_title(title, summary)
-                items.append({
-                    "title": title,
-                    "summary": summary,
-                    "url": link,
-                    "source_authority": "PIB_GOV",
-                    "ministry_or_regulator": ministry,
-                    "published_at": pub.isoformat() if pub else None
-                })
-        except Exception as e:
-            log.warning("PIB fetch error: %s", e)
+        queries = [
+            "site:pib.gov.in (Cabinet OR Finance OR Commerce OR DPIIT OR Tax OR GST OR Subsidy OR PLI)",
+            "site:pib.gov.in (Heavy Industries OR Automobile OR EV OR Steel OR Mining OR Minerals OR Fertilizer OR Chemical)",
+            "site:pib.gov.in (Power OR Electricity OR Petroleum OR Natural Gas OR Solar OR Green Hydrogen OR Renewable)",
+            "site:pib.gov.in (Highway OR NHAI OR Telecom OR 5G OR Defense OR DAC OR Railway OR Aviation OR Port)",
+            "site:pib.gov.in (MSP OR Agriculture OR Pharma OR Semiconductor OR IT OR Software OR Electronics)"
+        ]
+        now_utc = datetime.now(UTC)
+        seen_urls: set[str] = set()
+        for q in queries:
+            url = f"https://news.google.com/rss/search?q={quote_plus(q)}+when:2d&hl=en-IN&gl=IN&ceid=IN:en"
+            try:
+                r = self.fetcher.get(url, check_robots=False, delay=0.3)
+                fp = feedparser.parse(r.content)
+                for e in fp.entries:
+                    link = str(e.get("link", ""))
+                    if link in seen_urls:
+                        continue
+                    seen_urls.add(link)
+
+                    feed_pub = parse_date(str(e.get("published", "")))
+                    if not feed_pub or feed_pub < since or (feed_pub - now_utc) > timedelta(hours=2):
+                        continue
+
+                    raw_title = clean_text(str(e.get("title", "")))
+                    title = strip_publisher_suffix(raw_title, "pib.gov.in")
+                    title = strip_publisher_suffix(title, "PIB")
+                    title_lower = title.lower()
+
+                    # 1. Reject static factsheets, blogs, backgrounders, or known non-breaking explainer banners
+                    if any(x in title_lower for x in [
+                        "factsheet details", "blogdescription", "pib backgrounder",
+                        "upi: transforming india's payment", "financial inclusion in india",
+                        "india's gdp performance", "indias gdp performance",
+                        "india's first hydrogen-powered train", "paimana: strengthening",
+                        "the prevention of insults to national honour", "fcra: foreign contribution",
+                        "semiconductor and ai revolution", "ncw women helpline",
+                        "pm chairs ccs meeting", "environmental economic accounts"
+                    ]):
+                        continue
+
+                    # 2. Decode Google News redirect URL to obtain true destination
+                    real_url = resolve_news_url(link)
+
+                    # 3. Reject non-press-release PIB document types (static factsheets, blog posts, backgrounders)
+                    if any(x in real_url for x in ["FactsheetDetails.aspx", "blogsdescr.aspx", "BackgrounderDetail.aspx"]):
+                        continue
+
+                    # 3b. Reject paywalled links
+                    if is_paywalled_url(real_url):
+                        continue
+
+                    # 4. Strict PRID and Official Date Verification
+                    prid_m = re.search(r'PRID=(\d+)', real_url, re.I)
+                    pub = feed_pub
+                    if prid_m:
+                        prid = prid_m.group(1)
+                        # PRID sequence sanity: reject ancient archived PRIDs directly
+                        # (e.g. PRID 2291992 is 34,000 releases behind active PRIDs > 2325000)
+                        if int(prid) < 2324000:
+                            log.debug("Dropping ancient archived PIB PRID %s: %s", prid, title)
+                            continue
+
+                        canonical_url = f"https://pib.gov.in/PressReleasePage.aspx?PRID={prid}"
+                        # Fetch true official publication date from PIB release page
+                        true_pub = None
+                        try:
+                            r_pib = self.fetcher.get(canonical_url, check_robots=False, timeout=4)
+                            if r_pib.status_code == 200:
+                                dm = re.search(r'Posted\s+On:\s*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{4}(?:\s+[0-9]{1,2}:[0-9]{2}\s*[AP]M)?)', r_pib.text, re.I)
+                                if dm:
+                                    true_pub = parse_date(dm.group(1).strip(), assume_ist=True)
+                        except Exception as ex:
+                            log.debug("PIB date check failed for PRID %s: %s", prid, ex)
+
+                        if true_pub:
+                            if true_pub < since or (true_pub - now_utc) > timedelta(hours=2):
+                                # Stale release from prior months/weeks re-indexed by Google News
+                                log.debug("Dropping stale PIB release %s (official date %s): %s", prid, true_pub, title)
+                                continue
+                            pub = true_pub
+
+                        link = canonical_url
+                    else:
+                        # Non-PRID PIB URL (e.g. portal root or un-decoded redirect)
+                        if "pib.gov.in" in real_url and not any(k in real_url for k in ["PressRelease", "PressRelese"]):
+                            continue
+                        link = real_url
+
+                    summary = clean_text(str(e.get("summary", "")))
+                    ministry = extract_ministry_from_title(title, summary)
+                    items.append({
+                        "title": title,
+                        "summary": summary,
+                        "url": link,
+                        "source_authority": "PIB_GOV",
+                        "ministry_or_regulator": ministry,
+                        "published_at": pub.isoformat()
+                    })
+            except Exception as e:
+                log.warning("PIB fetch error for query '%s': %s", q, e)
         return items
 
     def _fetch_rbi(self, since: datetime) -> list[dict[str, Any]]:
         """Fetch official Reserve Bank of India press releases and notifications."""
         items: list[dict[str, Any]] = []
+        now_utc = datetime.now(UTC)
         # Direct RBI RSS
         direct_url = "https://rbi.org.in/pressreleases_rss.xml"
         try:
@@ -207,7 +316,9 @@ class MacroPipeline:
             fp = feedparser.parse(r.content)
             for e in fp.entries:
                 pub = parse_date(str(e.get("published", "")))
-                if pub and pub < since:
+                if not pub or pub < since:
+                    continue
+                if (pub - now_utc) > timedelta(hours=2):
                     continue
                 title = clean_text(str(e.get("title", "")))
                 summary = clean_text(str(e.get("summary", "")))
@@ -218,7 +329,7 @@ class MacroPipeline:
                     "url": link,
                     "source_authority": "RBI",
                     "ministry_or_regulator": "Reserve Bank of India (RBI)",
-                    "published_at": pub.isoformat() if pub else None
+                    "published_at": pub.isoformat()
                 })
         except Exception:
             pass
@@ -230,7 +341,9 @@ class MacroPipeline:
             fp = feedparser.parse(r.content)
             for e in fp.entries:
                 pub = parse_date(str(e.get("published", "")))
-                if pub and pub < since:
+                if not pub or pub < since:
+                    continue
+                if (pub - now_utc) > timedelta(hours=2):
                     continue
                 title = strip_publisher_suffix(clean_text(str(e.get("title", ""))))
                 if "tenders" in title.lower():
@@ -238,10 +351,10 @@ class MacroPipeline:
                 items.append({
                     "title": title,
                     "summary": clean_text(str(e.get("summary", ""))),
-                    "url": str(e.get("link", "")),
+                    "url": resolve_news_url(str(e.get("link", ""))),
                     "source_authority": "RBI",
                     "ministry_or_regulator": "Reserve Bank of India (RBI)",
-                    "published_at": pub.isoformat() if pub else None
+                    "published_at": pub.isoformat()
                 })
         except Exception:
             pass
@@ -251,13 +364,16 @@ class MacroPipeline:
     def _fetch_sebi(self, since: datetime) -> list[dict[str, Any]]:
         """Fetch official SEBI circulars and board decisions."""
         items: list[dict[str, Any]] = []
+        now_utc = datetime.now(UTC)
         direct_url = "https://www.sebi.gov.in/sebirss.xml"
         try:
             r = self.fetcher.get(direct_url, check_robots=False, delay=1.0)
             fp = feedparser.parse(r.content)
             for e in fp.entries:
                 pub = parse_date(str(e.get("published", "")))
-                if pub and pub < since:
+                if not pub or pub < since:
+                    continue
+                if (pub - now_utc) > timedelta(hours=2):
                     continue
                 title = clean_text(str(e.get("title", "")))
                 items.append({
@@ -266,41 +382,61 @@ class MacroPipeline:
                     "url": str(e.get("link", "")),
                     "source_authority": "SEBI",
                     "ministry_or_regulator": "Securities & Exchange Board (SEBI)",
-                    "published_at": pub.isoformat() if pub else None
+                    "published_at": pub.isoformat()
                 })
         except Exception:
             pass
         return items
 
     def _fetch_economy_wires(self, since: datetime) -> list[dict[str, Any]]:
-        """Fetch verified Tier-1 financial macro/policy wire items."""
+        """Fetch verified Tier-1 financial macro/policy wire items across industries."""
         items: list[dict[str, Any]] = []
+        now_utc = datetime.now(UTC)
         wire_urls = [
             ("Mint Economy", "https://www.livemint.com/rss/economy"),
-            ("ET Economy", "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms")
+            ("Mint Industry", "https://www.livemint.com/rss/industry"),
+            ("ET Economy", "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms"),
+            ("ET Energy Power", "https://energy.economictimes.indiatimes.com/rss/power"),
+            ("ET Infra", "https://infra.economictimes.indiatimes.com/rss/topstories"),
+            ("ET Telecom", "https://telecom.economictimes.indiatimes.com/rss/topstories"),
+            ("Google Auto Policy", f"https://news.google.com/rss/search?q={quote_plus('(Automobile OR EV OR FAME) policy India')}+when:2d&hl=en-IN&gl=IN&ceid=IN:en"),
         ]
         for source_name, url in wire_urls:
             try:
-                r = self.fetcher.get(url, check_robots=False, delay=1.0)
+                r = self.fetcher.get(url, check_robots=False, delay=0.4)
                 fp = feedparser.parse(r.content)
                 for e in fp.entries:
                     pub = parse_date(str(e.get("published", "")))
-                    if pub and pub < since:
+                    if not pub or pub < since:
+                        continue
+                    if (pub - now_utc) > timedelta(hours=2):
                         continue
                     raw_title = clean_text(str(e.get("title", "")))
                     title = strip_publisher_suffix(raw_title, source_name)
-                    # Filter out opinion columns and clickbait
-                    if any(w in title.lower() for w in ["opinion:", "view:", "editorial", "why is", "here's why", "podcast"]):
+                    # Filter out opinion columns, clickbait, celebrity gossip, personal property leases, and exams
+                    title_l = title.lower()
+                    if any(w in title_l for w in [
+                        "opinion:", "view:", "editorial", "why is", "here's why", "podcast",
+                        "lease out", "leases out", "leased out", "sq ft", "sqft", "square feet",
+                        "hall of fame", "recruitment", "admit card", "answer key", "cutoff marks",
+                        "horoscope", "bollywood", "celebrity"
+                    ]):
                         continue
                     summary = clean_text(str(e.get("summary", "")))
+                    wire_url = resolve_news_url(str(e.get("link", "")))
+
+                    # Filter out paywalled subscription stories and sponsored advertorials
+                    if is_paywalled_url(wire_url) or is_sponsored_or_pr(title, wire_url):
+                        continue
+
                     items.append({
                         "title": title,
                         "summary": summary,
-                        "url": str(e.get("link", "")),
+                        "url": wire_url,
                         "source_authority": "FINANCIAL_WIRE",
-                        "ministry_or_regulator": extract_ministry_from_title(title, summary),
-                        "published_at": pub.isoformat() if pub else None
+                        "ministry_or_regulator": extract_ministry_from_title(title, summary, default="Financial Wire"),
+                        "published_at": pub.isoformat()
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Wire fetch error for '%s': %s", source_name, e)
         return items

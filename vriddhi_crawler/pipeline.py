@@ -29,7 +29,9 @@ from .normalize import (
     canonical_url,
     headline_fingerprint,
     is_generic_market_noise,
+    is_paywalled_url,
     is_reputable_publisher,
+    is_sponsored_or_pr,
     strip_publisher_suffix,
 )
 from .sources import exchanges, publishers, search
@@ -161,12 +163,16 @@ class Pipeline:
         now_utc = datetime.now(UTC)
 
         for item in items:
-            # 0a. Strict Tier-1 Institutional Publisher Filter: drop ScanX and unverified scrapers
+            # 0a. Strict Tier-1 Institutional Publisher Filter: drop ScanX, PR wires, and unverified scrapers
             if not is_reputable_publisher(item.source_name, item.url, item.source_type):
                 continue
 
-            # 0b. Drop generic market wrap noise immediately
-            if item.source_type != "filing" and is_generic_market_noise(item.title):
+            # 0b. Drop paywalled subscription links (e.g. ET Prime, Mint Premium, BS Premium)
+            if item.source_type != "filing" and is_paywalled_url(item.url):
+                continue
+
+            # 0c. Drop generic market wrap noise, paid PR, and advertorials immediately
+            if item.source_type != "filing" and (is_generic_market_noise(item.title) or is_sponsored_or_pr(item.title, item.url)):
                 continue
 
             # 0b. Strict 24-hour freshness filter: drop older news or news without a publication date
@@ -259,7 +265,17 @@ class Pipeline:
                             if item.url and not any(s.get("url") == item.url for s in sources_list):
                                 sources_list.append({"name": item.source_name, "url": item.url})
                                 existing["sources"] = sources_list
-                                save_story(existing)
+
+                            # Upgrade URL: if existing URL is paywalled or if incoming item is an official filing, upgrade to clean link
+                            if is_paywalled_url(existing.get("url")) and not is_paywalled_url(item.url):
+                                existing["url"] = item.url
+                                existing["source_name"] = item.source_name
+                            elif item.source_type == "filing" and existing.get("source_type") != "filing":
+                                existing["url"] = item.url
+                                existing["source_name"] = item.source_name
+                                existing["source_type"] = "filing"
+
+                            save_story(existing)
                             merged = True
                             break
 

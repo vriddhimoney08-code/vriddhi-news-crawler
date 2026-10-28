@@ -1,6 +1,7 @@
 """Executive PDF and HTML Digest Generator for Vriddhi Research Desk."""
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from datetime import datetime, timedelta
@@ -10,6 +11,26 @@ from .config import DIGESTS_DIR, IST
 from .db import get_analysts, get_companies
 
 log = logging.getLogger(__name__)
+
+_VRIDDHI_LOGO_CACHE: str | None = None
+
+
+def get_vriddhi_logo_data_uri() -> str:
+    """Load and cache the Vriddhi rectangular brand logo as a base64 Data URI for seamless PDF & HTML rendering."""
+    global _VRIDDHI_LOGO_CACHE
+    if _VRIDDHI_LOGO_CACHE:
+        return _VRIDDHI_LOGO_CACHE
+    logo_path = Path(__file__).resolve().parent / "ui" / "vriddhi_logo_transparent.png"
+    if not logo_path.exists():
+        logo_path = Path(__file__).resolve().parent / "ui" / "vriddhi_logo_rect_optimized.png"
+    if not logo_path.exists():
+        logo_path = Path(__file__).resolve().parent / "ui" / "vriddhi_logo_rect.png"
+    if logo_path.exists():
+        raw_b64 = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+        _VRIDDHI_LOGO_CACHE = f"data:image/png;base64,{raw_b64}"
+        return _VRIDDHI_LOGO_CACHE
+    return ""
+
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -42,15 +63,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     font-size: 9.5pt;
   }
 
-  /* 1. Modern Header Masthead */
+  /* 1. Modern Header Masthead - Executive Whitish Theme */
   .masthead {
-    background: linear-gradient(135deg, #090d16 0%, #111827 60%, #06241a 100%);
+    background: #ffffff;
     border-radius: 12px;
-    padding: 18px 22px;
+    padding: 16px 22px;
     margin-bottom: 16px;
-    color: #ffffff;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #0f172a;
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid #10b981;
   }
 
   .brand-row {
@@ -64,41 +86,36 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .brand-group {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
   }
 
-  .brand-logo-badge {
-    width: 38px;
+  .masthead-rect-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+  }
+
+  .brand-v-divider {
+    width: 1px;
     height: 38px;
-    background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14pt;
-    font-weight: 800;
-    color: #ffffff;
-    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+    background: #e2e8f0;
   }
 
-  .brand-title {
-    font-size: 16pt;
+  .brand-desk-title {
+    font-size: 11pt;
     font-weight: 800;
-    letter-spacing: -0.5px;
+    letter-spacing: -0.2px;
+    color: #0f172a;
     margin: 0;
-    line-height: 1.1;
-  }
-
-  .brand-title .brand-accent {
-    color: #10b981;
-    text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+    line-height: 1.2;
   }
 
   .brand-sub {
     font-size: 8pt;
-    color: #94a3b8;
+    color: #64748b;
     font-weight: 500;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
     margin-top: 2px;
   }
 
@@ -107,15 +124,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 6px 14px;
-    border-radius: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 7px 16px;
+    border-radius: 30px;
     font-size: 8pt;
-    color: #cbd5e1;
+    color: #334155;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   }
 
-  .meta-pills strong { color: #ffffff; }
+  .meta-pills strong {
+    color: #0f172a;
+  }
 
   /* 2. Section Titles */
   .section-heading {
@@ -128,6 +148,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     display: flex;
     align-items: center;
     gap: 8px;
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   .section-heading::after {
@@ -193,14 +215,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border: 1px solid #e2e8f0;
     border-radius: 12px;
     margin-bottom: 22px;
-    overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-    page-break-inside: avoid;
+    page-break-inside: auto;
+    break-inside: auto;
   }
 
   .portfolio-banner {
     padding: 12px 18px;
     color: #ffffff;
+    border-radius: 11px 11px 0 0;
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   .portfolio-banner-game {
@@ -305,6 +330,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     display: flex;
     align-items: center;
     gap: 6px;
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   .basket-empty {
@@ -378,6 +405,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .story-item {
     padding: 8px 0;
     border-bottom: 1px dashed #f1f5f9;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   .story-item:last-child {
@@ -452,12 +481,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   .story-footer-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: block;
+    line-height: 18px;
+    overflow: hidden;
     font-size: 7.5pt;
     color: #64748b;
     margin-top: 4px;
+  }
+
+  .story-footer-row > div:first-child {
+    display: inline-block;
+    float: left;
+    line-height: 18px;
   }
 
   .publisher-pill {
@@ -469,6 +504,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   .source-link-action {
+    display: inline-block;
+    float: right;
+    line-height: 18px;
     color: #2563eb;
     text-decoration: none;
     font-weight: 600;
@@ -536,10 +574,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <div class="masthead">
   <div class="brand-row">
     <div class="brand-group">
-      <div class="brand-logo-badge">&#9670;</div>
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="masthead-rect-logo" alt="Vriddhi - Building wealth with wisdom" />
+      {% endif %}
+      <div class="brand-v-divider"></div>
       <div>
-        <h1 class="brand-title">VRIDDHI <span class="brand-accent">MONEY</span></h1>
-        <div class="brand-sub">Equity Research Executive Intelligence Desk</div>
+        <div class="brand-desk-title">EQUITY RESEARCH DESK</div>
+        <div class="brand-sub">Daily Executive Intelligence Digest</div>
       </div>
     </div>
     <div class="meta-pills">
@@ -549,7 +590,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <span>&bull;</span>
       <span>{{ date_str }}</span>
       <span>&bull;</span>
-      <span style="color:#10b981;font-weight:700;">{{ total_items }} Stories ({{ total_filings }} Filings)</span>
+      <span style="color:#059669;font-weight:700;">{{ total_items }} Stories ({{ total_filings }} Filings)</span>
     </div>
   </div>
 </div>
@@ -569,50 +610,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
 </div>
 
-<!-- 1. Executive Scorecard Table -->
-{% if scorecard %}
-<div class="section-heading">&#128200; Equity Research Morning Scorecard</div>
-<div class="company-card" style="padding: 0; overflow: hidden; margin-bottom: 20px;">
-  <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt;">
-    <thead>
-      <tr style="background: #0f172a; color: #f8fafc; text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.5px;">
-        <th style="padding: 10px 12px; width: 22%;">Company</th>
-        <th style="padding: 10px 10px; width: 14%;">Portfolio</th>
-        <th style="padding: 10px 12px; width: 38%;">Key Catalyst / Corporate Event</th>
-        <th style="padding: 10px 10px; width: 16%;">Materiality</th>
-        <th style="padding: 10px 12px; width: 10%; text-align: right;">Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in scorecard %}
-      <tr style="border-bottom: 1px solid #f1f5f9; background: {{ '#ffffff' if loop.index % 2 == 1 else '#f8fafc' }};">
-        <td style="padding: 10px 12px; font-weight: 800; color: #0f172a;">
-          {{ row.company }}
-        </td>
-        <td style="padding: 10px 10px;">
-          <span class="basket-pill-badge basket-pill-{{ row.theme }}">{{ row.portfolio }}</span>
-        </td>
-        <td style="padding: 10px 12px; color: #334155; line-height: 1.4;">
-          <a href="{{ row.url }}" target="_blank" style="color: #0f172a; text-decoration: none; font-weight: 600;">{{ row.catalyst }}</a>
-        </td>
-        <td style="padding: 10px 10px;">
-          {% if row.grade == 'Grade A' %}
-          <span class="badge badge-grade-a">&#128293; Grade A &bull; Material</span>
-          {% else %}
-          <span class="badge badge-grade-b">Grade B &bull; Research</span>
-          {% endif %}
-        </td>
-        <td style="padding: 10px 12px; text-align: right;">
-          <a class="source-link-action" href="{{ row.url }}" target="_blank">Track &rarr;</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-<!-- 2. Portfolio Baskets News & Filings -->
+<!-- Portfolio Baskets News & Filings -->
 <div class="section-heading">&#128202; Portfolio Baskets & Corporate Intelligence</div>
 
 {% if not baskets %}
@@ -842,6 +840,10 @@ def render_digest_html(
             or folder_name in s.get("company_folders", [])
         ]
 
+        # If there are no company updates/filings in this basket, neglect/hide it completely
+        if not basket_stories:
+            continue
+
         b_filings = [s for s in basket_stories if s.get("source_type") == "filing" or bool(s.get("filing_id"))]
         b_news_by_company: dict[str, list[dict]] = {}
         for s in basket_stories:
@@ -931,6 +933,7 @@ def render_digest_html(
 
     template = Template(HTML_TEMPLATE)
     return template.render(
+        logo_data_uri=get_vriddhi_logo_data_uri(),
         analyst_name=analyst_name,
         assigned_folders_str=assigned_folders_str,
         date_str=date_str,
@@ -982,6 +985,50 @@ def generate_pdf_via_browser(html_path: Path, pdf_path: Path) -> bool:
         return False
 
 
+def normalize_pdf_link_rects(pdf_path: Path) -> None:
+    """Ensure all /Rect bounding boxes in PDF annotations satisfy x1 < x2 and y1 < y2.
+    WeasyPrint inverted y-coordinates [x1, y_top, x2, y_bottom] cause hit-tests in mobile and
+    desktop PDF viewers to fail due to negative height rectangles.
+    """
+    try:
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import ArrayObject, FloatObject, NameObject
+
+        reader = PdfReader(str(pdf_path))
+        writer = PdfWriter()
+        writer.append(reader)
+        modified = False
+
+        for page in writer.pages:
+            annots = page.get("/Annots")
+            if not annots:
+                continue
+            for a in annots:
+                obj = a.get_object()
+                rect = obj.get("/Rect")
+                if rect and len(rect) == 4:
+                    x1, y1, x2, y2 = [float(v) for v in rect]
+                    nx1 = min(x1, x2)
+                    ny1 = min(y1, y2)
+                    nx2 = max(x1, x2)
+                    ny2 = max(y1, y2)
+                    if (x1, y1, x2, y2) != (nx1, ny1, nx2, ny2):
+                        obj[NameObject("/Rect")] = ArrayObject([
+                            FloatObject(nx1),
+                            FloatObject(ny1),
+                            FloatObject(nx2),
+                            FloatObject(ny2),
+                        ])
+                        modified = True
+
+        if modified:
+            with open(pdf_path, "wb") as f:
+                writer.write(f)
+            log.info("Normalized inverted link annotations in PDF: %s", pdf_path.name)
+    except Exception as e:
+        log.warning("PDF rect normalization skipped: %s", e)
+
+
 def get_clean_digest_filename(analyst_name: str, ext: str = ".pdf") -> str:
     """Format PDF filename as [Client_Name]_[Date].pdf using DD-MM-YYYY format."""
     now = datetime.now(IST)
@@ -1008,12 +1055,14 @@ def generate_analyst_digest(analyst_id: str, analyst_name: str, stories: list[di
     # 1. Try native browser headless print-to-pdf (produces clean vector PDF)
     if generate_pdf_via_browser(html_file, pdf_file):
         log.info("Compiled fresh PDF via native browser: %s (size: %s bytes)", pdf_file, pdf_file.stat().st_size)
+        normalize_pdf_link_rects(pdf_file)
         return pdf_file, html_content
 
     # 2. Attempt WeasyPrint if available
     try:
         import weasyprint  # type: ignore[import-untyped]
         weasyprint.HTML(string=html_content).write_pdf(str(pdf_file))
+        normalize_pdf_link_rects(pdf_file)
         return pdf_file, html_content
     except Exception as e:  # noqa: BLE001
         log.info("WeasyPrint direct compilation not active (%s); using HTML digest fallback", e)
@@ -1052,47 +1101,70 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   .masthead {
-    background: linear-gradient(135deg, #090d16 0%, #111827 60%, #06241a 100%);
-    border-radius: 10px;
-    padding: 16px 20px;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px 22px;
     margin-bottom: 14px;
-    color: #ffffff;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    color: #0f172a;
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid #0284c7;
   }
 
   .brand-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 12px;
     margin-bottom: 10px;
   }
 
-  .brand-title {
-    font-size: 16pt;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-    color: #10b981;
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
   }
 
-  .brand-subtitle {
-    font-size: 7.5pt;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: #94a3b8;
+  .masthead-rect-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+  }
+
+  .brand-v-divider {
+    width: 1px;
+    height: 38px;
+    background: #e2e8f0;
+  }
+
+  .brand-desk-title {
+    font-size: 11pt;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .brand-sub {
+    font-size: 7.8pt;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: 0.2px;
     margin-top: 2px;
-    font-weight: 600;
   }
 
   .analyst-badge {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    padding: 5px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 6px 16px;
     border-radius: 20px;
     font-size: 8.5pt;
     font-weight: 600;
-    color: #f8fafc;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   }
 
   .meta-sub-row {
@@ -1100,53 +1172,75 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
     justify-content: space-between;
     align-items: center;
     font-size: 8pt;
-    color: #94a3b8;
+    color: #64748b;
+  }
+
+  .meta-sub-row strong {
+    color: #0f172a;
   }
 
   /* Benchmark Grid */
   .benchmark-grid {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: 9px;
+    margin-bottom: 20px;
   }
 
   .benchmark-box {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1.5px solid #94a3b8;
+    border-top: 4px solid #0284c7;
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 8px 6px;
     text-align: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.08);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .bm-label {
-    font-size: 6.5pt;
+    font-size: 7.2pt;
     text-transform: uppercase;
-    font-weight: 700;
-    color: #64748b;
-    letter-spacing: 0.5px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: 0.6px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 2.5px 6px;
+    display: inline-block;
+    width: 90%;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .bm-val {
-    font-size: 10.5pt;
-    font-weight: 800;
-    color: #0f172a;
+    font-size: 12.5pt;
+    font-weight: 900;
+    color: #090d16;
     font-family: 'JetBrains Mono', monospace;
-    margin: 2px 0;
+    margin: 2px 0 6px 0;
+    letter-spacing: -0.4px;
+    line-height: 1.15;
   }
 
   .bm-chg {
-    font-size: 7pt;
-    font-weight: 700;
-    padding: 2px 5px;
-    border-radius: 3px;
+    font-size: 7.2pt;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 4px;
     display: inline-block;
+    letter-spacing: 0.3px;
   }
 
-  .chg-pos { background: #dcfce7; color: #15803d; }
-  .chg-neg { background: #fee2e2; color: #b91c1c; }
-  .chg-neu { background: #f1f5f9; color: #475569; }
+  .chg-pos { background: #dcfce7; color: #15803d; border: 1.5px solid #4ade80; }
+  .chg-neg { background: #fee2e2; color: #b91c1c; border: 1.5px solid #f87171; }
+  .chg-neu { background: #f1f5f9; color: #0f172a; border: 1.5px solid #94a3b8; }
 
   /* Section Headings */
   .section-heading {
@@ -1155,123 +1249,135 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
     color: #0f172a;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin: 14px 0 8px 0;
+    margin: 16px 0 10px 0;
     display: flex;
     align-items: center;
     gap: 6px;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 4px;
+    border-bottom: 2px solid #cbd5e1;
+    padding-bottom: 5px;
   }
 
   /* Story Cards */
   .macro-card {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1.5px solid #cbd5e1;
     border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
+    padding: 11px 14px;
+    margin-bottom: 9px;
     page-break-inside: avoid;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   }
 
   .card-top {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    margin-bottom: 6px;
-    gap: 8px;
-    flex-wrap: wrap;
+    margin-bottom: 5px;
   }
 
-  .card-top-left {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .auth-tag {
-    font-size: 7pt;
+  .tier-tag {
+    font-size: 6.8pt;
     font-weight: 700;
-    padding: 2.5px 7px;
+    padding: 2.5px 8px;
     border-radius: 4px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #bfdbfe;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-
-  .sector-highlight-badge {
-    font-size: 7pt;
-    font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: #eef2ff;
-    color: #3730a3;
-    border: 1.5px solid #6366f1;
     text-transform: uppercase;
     letter-spacing: 0.4px;
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    box-shadow: 0 1px 2px rgba(99, 102, 241, 0.12);
   }
 
-  .sector-highlight-badge .sec-label {
-    font-size: 5.5pt;
-    font-weight: 800;
-    color: #4f46e5;
-    background: #e0e7ff;
-    padding: 1px 4px;
-    border-radius: 2px;
-    letter-spacing: 0.5px;
+  .tier-1 {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
   }
-
-  .tier-tag {
-    font-size: 7pt;
-    font-weight: 700;
-    padding: 2.5px 7px;
-    border-radius: 4px;
+  .tier-2 {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
   }
-
-  .tier-1 { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-  .tier-2 { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
 
   .story-title {
-    font-size: 9pt;
+    font-size: 9.5pt;
     font-weight: 700;
     color: #0f172a;
-    line-height: 1.35;
-    margin-bottom: 4px;
+    line-height: 1.4;
+    margin: 4px 0 6px 0;
   }
 
   .story-title a {
     color: #0f172a;
     text-decoration: none;
+    transition: color 0.15s ease;
+  }
+
+  .story-title a:hover {
+    color: #0284c7;
+    text-decoration: underline;
   }
 
   .impact-strip {
     background: #f8fafc;
-    border-left: 3px solid #10b981;
-    padding: 4px 8px;
-    font-size: 8pt;
-    color: #334155;
-    border-radius: 0 4px 4px 0;
-    margin-top: 4px;
+    border-left: 3.5px solid #10b981;
+    border-radius: 0 5px 5px 0;
+    padding: 5px 10px;
+    font-size: 8.2pt;
+    line-height: 1.45;
+    color: #1e293b;
+    margin: 6px 0 8px 0;
+    border-top: 1px solid #f1f5f9;
+    border-right: 1px solid #f1f5f9;
+    border-bottom: 1px solid #f1f5f9;
   }
 
-  .impact-strip-neg { border-left-color: #ef4444; }
-  .impact-strip-neu { border-left-color: #64748b; }
+  .impact-strip-neg {
+    border-left-color: #ef4444;
+    background: #fff5f5;
+  }
+  .impact-strip-neu {
+    border-left-color: #64748b;
+    background: #f8fafc;
+  }
 
   .card-footer {
-    display: flex;
-    justify-content: space-between;
-    font-size: 7pt;
+    display: block;
+    font-size: 7.5pt;
     color: #64748b;
     margin-top: 6px;
-    padding-top: 4px;
+    padding-top: 6px;
     border-top: 1px solid #f1f5f9;
+    line-height: 20px;
+    overflow: hidden;
+  }
+
+  .regulator-name {
+    font-weight: 600;
+    color: #475569;
+    display: inline-block;
+    float: left;
+    line-height: 20px;
+  }
+
+  .action-link {
+    color: #0284c7;
+    font-weight: 800;
+    font-size: 7.5pt;
+    text-decoration: none;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: #f0f9ff;
+    border: 1.5px solid #0284c7;
+    display: inline-block;
+    float: right;
+    line-height: 14px;
+    transition: all 0.15s ease;
+  }
+
+  .action-link:hover {
+    color: #ffffff;
+    background: #0284c7;
+    border-color: #0369a1;
   }
 
   .coverage-window-banner {
@@ -1307,11 +1413,103 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
     color: #334155;
     line-height: 1.4;
   }
-  .coverage-note {
-    font-size: 7.2pt;
-    color: #64748b;
-    font-style: italic;
-    margin-top: 2px;
+  .sector-nav-index {
+    display: block;
+    line-height: 28px;
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+  .sector-nav-chip {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+    margin-bottom: 6px;
+    padding: 5px 10px;
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 7.5pt;
+    font-weight: 800;
+    color: #1e293b;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .sector-nav-chip:hover {
+    border-color: #0284c7;
+    background: #f0f9ff;
+    color: #0284c7;
+  }
+  .sector-nav-chip .chip-count {
+    background: #0284c7;
+    color: #ffffff;
+    font-size: 6.8pt;
+    padding: 1.5px 6px;
+    border-radius: 10px;
+    font-weight: 800;
+  }
+  .sector-group-block {
+    margin-bottom: 22px;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  .sector-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, #e0f2fe 0%, #f0f9ff 45%, #ffffff 100%);
+    border: 1.5px solid #0284c7;
+    border-left: 7px solid #0369a1;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12);
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  .sector-group-title {
+    font-size: 10.5pt;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sector-group-icon {
+    font-size: 12pt;
+    line-height: 1;
+  }
+  .sector-label-badge {
+    font-size: 7pt;
+    font-weight: 800;
+    color: #ffffff;
+    background: #0284c7;
+    border: 1px solid #0369a1;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .sector-name-text {
+    font-weight: 900;
+    color: #0f172a;
+  }
+  .sector-group-count {
+    font-size: 7.8pt;
+    font-weight: 800;
+    color: #ffffff;
+    background: #0f172a;
+    border: 1.5px solid #0284c7;
+    padding: 3.5px 12px;
+    border-radius: 14px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
   }
 </style>
 </head>
@@ -1320,9 +1518,15 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
 <!-- Masthead -->
 <div class="masthead">
   <div class="brand-row">
-    <div>
-      <div class="brand-title">&#127963; VRIDDHI MONEY</div>
-      <div class="brand-subtitle">POST-MARKET MACRO &amp; REGULATORY POLICY BRIEFING</div>
+    <div class="brand-group">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="masthead-rect-logo" alt="Vriddhi - Building wealth with wisdom" />
+      {% endif %}
+      <div class="brand-v-divider"></div>
+      <div>
+        <div class="brand-desk-title">POST-MARKET MACRO DESK</div>
+        <div class="brand-sub">Sovereign &amp; Regulatory Policy Briefing</div>
+      </div>
     </div>
     <div class="analyst-badge">
       &#128100; {{ analyst_name }} &bull; {{ sectors_label }}
@@ -1362,7 +1566,7 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
   {% endfor %}
 </div>
 
-<!-- Section: Verified Directives -->
+<!-- Section: Verified Directives Organized By Sector -->
 <div class="section-heading">&#128220; Institutional &amp; Sector Directives</div>
 
 {% if not stories %}
@@ -1371,38 +1575,54 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 {% endif %}
 
-{% for s in stories %}
-<div class="macro-card">
-  <div class="card-top">
-    <div class="card-top-left">
-      <span class="auth-tag">{{ s.source_authority or 'GOVERNMENT GAZETTE' }}</span>
-      {% if s.sectors %}
-        {% for sec in s.sectors %}
-        <span class="sector-highlight-badge"><span class="sec-label">SECTOR</span>{{ sec }}</span>
-        {% endfor %}
-      {% else %}
-        <span class="sector-highlight-badge"><span class="sec-label">SECTOR</span>GENERAL_MACRO</span>
-      {% endif %}
+<!-- Sector Navigation Index -->
+{% if sector_groups and sector_groups|length > 1 %}
+<div class="sector-nav-index">
+  {% for sg in sector_groups %}
+  <a href="#sec-{{ loop.index }}" class="sector-nav-chip">
+    <span>{{ sg.icon }} {{ sg.name }}</span>
+    <span class="chip-count">{{ sg.count }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% for sg in sector_groups %}
+<div class="sector-group-block" id="sec-{{ loop.index }}">
+  <div class="sector-group-header">
+    <div class="sector-group-title">
+      <span class="sector-group-icon">{{ sg.icon }}</span>
+      <span class="sector-label-badge">SECTOR</span>
+      <span class="sector-name-text">{{ sg.name }}</span>
     </div>
-    <span class="tier-tag {% if 'Tier 1' in s.impact_grade %}tier-1{% else %}tier-2{% endif %}">
-      {{ s.impact_grade }}
-    </span>
+    <span class="sector-group-count">{{ sg.count }} DIRECTIVE{% if sg.count > 1 %}S{% endif %}</span>
   </div>
 
-  <div class="story-title">
-    <a href="{{ s.url }}" target="_blank">{{ s.title }}</a>
-  </div>
+  {% for s in sg.stories %}
+  <div class="macro-card">
+    <div class="card-top">
+      <span class="tier-tag {% if 'Tier 1' in s.impact_grade %}tier-1{% else %}tier-2{% endif %}">
+        {% if 'Tier 1' in s.impact_grade %}&#9889; {% endif %}{{ s.impact_grade }}
+      </span>
+    </div>
 
-  {% if s.impact_summary %}
-  <div class="impact-strip {% if s.impact_bias == 'NEGATIVE' %}impact-strip-neg{% elif s.impact_bias == 'NEUTRAL' %}impact-strip-neu{% endif %}">
-    <strong>Impact:</strong> {{ s.impact_summary }}
-  </div>
-  {% endif %}
+    <div class="story-title">
+      <a href="{{ s.url or '#' }}" target="_blank" rel="noopener noreferrer">{{ s.title }}</a>
+    </div>
 
-  <div class="card-footer">
-    <span>{{ s.ministry_or_regulator or 'Ministry / Regulatory Board' }}</span>
-    <a href="{{ s.url }}" target="_blank" style="color: #0284c7; text-decoration: none; font-weight: 600;">Official Gazette &rarr;</a>
+    {% if s.impact_summary %}
+    <div class="impact-strip {% if s.impact_bias == 'NEGATIVE' %}impact-strip-neg{% elif s.impact_bias == 'NEUTRAL' %}impact-strip-neu{% endif %}">
+      <strong>Impact:</strong> {{ s.impact_summary }}
+    </div>
+    {% endif %}
+
+    <div class="card-footer">
+      <span class="regulator-name">&#127963; {{ s.ministry_or_regulator or s.source_authority or 'Government / Regulatory Authority' }}</span>
+      <a href="{{ s.url or '#' }}" target="_blank" rel="noopener noreferrer" class="action-link">Go to website &rarr;</a>
+      <div style="clear: both;"></div>
+    </div>
   </div>
+  {% endfor %}
 </div>
 {% endfor %}
 
@@ -1452,7 +1672,7 @@ def render_macro_digest_html(
     coverage_window_end = today_5pm.strftime("%d-%b-%Y 05:00 PM IST")
     tier1_count = sum(1 for s in stories if "Tier 1" in (s.get("impact_grade") or ""))
 
-    # Ensure each story has its parsed sectors list
+    # Ensure each story has its parsed sectors list & formatted publish time
     import json
     for s in stories:
         if not s.get("sectors"):
@@ -1460,9 +1680,96 @@ def render_macro_digest_html(
                 s["sectors"] = [sec.strip().upper() for sec in json.loads(s.get("sectors_json") or "[]")]
             except Exception:
                 s["sectors"] = []
+        raw_pub = str(s.get("published_at") or "")
+        if raw_pub and not s.get("published_formatted"):
+            try:
+                dt = datetime.fromisoformat(raw_pub.replace("Z", "+00:00")).astimezone(IST)
+                s["published_formatted"] = dt.strftime("%I:%M %p")
+            except Exception:
+                s["published_formatted"] = ""
+
+    # Sector icons mapping for institutional aesthetics
+    SECTOR_ICONS = {
+        "AUTOMOBILES": "🚗",
+        "AUTO COMPONENTS": "⚙️",
+        "POWER": "⚡",
+        "OIL": "🛢️",
+        "GAS": "🔥",
+        "PETROLEUM PRODUCTS": "⛽",
+        "OTHER UTILITIES": "💧",
+        "BANKS": "🏦",
+        "FINANCE": "💳",
+        "CAPITAL MARKETS": "📈",
+        "CONSTRUCTION": "🏗️",
+        "REALTY": "🏢",
+        "TRANSPORT INFRASTRUCTURE": "🛣️",
+        "TRANSPORT SERVICES": "🚆",
+        "IT - SERVICES": "💻",
+        "IT - HARDWARE": "🖥️",
+        "IT - SOFTWARE": "💾",
+        "TELECOM - SERVICES": "📡",
+        "TELECOM - EQUIPMENT & ACCESSORIES": "📶",
+        "CHEMICALS & PETROCHEMICALS": "🧪",
+        "FERTILIZERS & AGROCHEMICALS": "🌱",
+        "AGRICULTURAL FOOD & OTHER PRODUCTS": "🌾",
+        "AGRICULTURAL, COMMERCIAL & CONSTRUCTION VEHICLES": "🚜",
+        "PHARMACEUTICALS & BIOTECHNOLOGY": "💊",
+        "HEALTHCARE SERVICES": "🏥",
+        "AEROSPACE & DEFENSE": "🛡️",
+        "FERROUS METALS": "🔩",
+        "MINERALS & MINING": "⛏️",
+        "INDUSTRIAL PRODUCTS": "🏭",
+        "INDUSTRIAL MANUFACTURING": "🏭",
+        "COMMERCIAL SERVICES & SUPPLIES": "📦",
+        "CIGARETTES & TOBACCO PRODUCTS": "🍂",
+        "DIVERSIFIED FMCG": "🛒",
+        "GENERAL_MACRO": "🏛️",
+        "OTHER": "📰",
+    }
+
+    # Group stories by primary sector
+    grouped_dict: dict[str, list[dict]] = {}
+    for s in stories:
+        secs = s.get("sectors") or []
+        primary_sec = secs[0].strip().upper() if secs else "GENERAL_MACRO"
+        grouped_dict.setdefault(primary_sec, []).append(s)
+
+    def _group_priority(item: tuple[str, list[dict]]) -> tuple[int, int]:
+        sec_name, sec_stories = item
+        has_tier1 = any("Tier 1" in (st.get("impact_grade") or "") for st in sec_stories)
+        is_general = sec_name in ("GENERAL_MACRO", "OTHER")
+        tier_score = 0 if has_tier1 else (2 if is_general else 1)
+        return (tier_score, -len(sec_stories))
+
+    sorted_groups_raw = sorted(grouped_dict.items(), key=_group_priority)
+    
+    sector_groups = []
+    for sec_name, sec_stories in sorted_groups_raw:
+        icon = SECTOR_ICONS.get(sec_name, "📊")
+        # Sort stories inside each sector: Tier 1 first, then newest published_at
+        sorted_sec_stories = list(sec_stories)
+        def _story_sort_key(x: dict) -> tuple[int, float]:
+            is_t1 = 0 if "Tier 1" in (x.get("impact_grade") or "") else 1
+            ts = 0.0
+            pub_raw = x.get("published_at")
+            if pub_raw:
+                try:
+                    ts = -(datetime.fromisoformat(pub_raw.replace("Z", "+00:00")).timestamp())
+                except Exception:
+                    pass
+            return (is_t1, ts)
+
+        sorted_sec_stories.sort(key=_story_sort_key)
+        sector_groups.append({
+            "name": sec_name,
+            "icon": icon,
+            "stories": sorted_sec_stories,
+            "count": len(sorted_sec_stories),
+        })
 
     template = Template(MACRO_HTML_TEMPLATE)
     return template.render(
+        logo_data_uri=get_vriddhi_logo_data_uri(),
         analyst_name=analyst_name,
         sectors_label=sectors_label,
         date_str=date_str,
@@ -1473,6 +1780,7 @@ def render_macro_digest_html(
         tier1_count=tier1_count,
         benchmarks=benchmarks,
         stories=stories,
+        sector_groups=sector_groups,
     )
 
 
@@ -1491,12 +1799,14 @@ def generate_macro_digest(analyst_id: str, analyst_name: str, stories: list[dict
     # 1. Try native browser headless print-to-pdf
     if generate_pdf_via_browser(html_file, pdf_file):
         log.info("Compiled fresh Macro PDF via native browser: %s (size: %s bytes)", pdf_file, pdf_file.stat().st_size)
+        normalize_pdf_link_rects(pdf_file)
         return pdf_file, html_content
 
     # 2. Attempt WeasyPrint if available
     try:
         import weasyprint  # type: ignore[import-untyped]
         weasyprint.HTML(string=html_content).write_pdf(str(pdf_file))
+        normalize_pdf_link_rects(pdf_file)
         return pdf_file, html_content
     except Exception as e:
         log.info("WeasyPrint direct compilation fallback (%s)", e)

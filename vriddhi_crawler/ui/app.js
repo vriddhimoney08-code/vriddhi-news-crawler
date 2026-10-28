@@ -173,6 +173,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (targetId === "view-settings") {
         loadFullSettings();
+        loadSchedulerStatus();
+        loadPromptStudio();
       }
     });
   });
@@ -424,6 +426,15 @@ document.addEventListener("DOMContentLoaded", () => {
         ? `<span class="sector-tag sector-tag-all" onclick="window.editAnalyst('${a.id}')" title="Evening Briefing covers all macro sectors">🌐 All Macro Sectors</span>`
         : sectors.slice(0, 2).map(s => `<span class="sector-tag" onclick="window.editAnalyst('${a.id}')" title="Evening sector: ${s}">${s}</span>`).join(" ") + (sectors.length > 2 ? `<span class="sector-tag" style="background:rgba(255,255,255,0.06);color:var(--text-dim);border:none;" onclick="window.editAnalyst('${a.id}')">+${sectors.length - 2}</span>` : "");
 
+      const isActive = a.is_active !== false;
+      const statusPill = isActive
+        ? ''
+        : `<span class="status-pill-paused" style="margin-left: 6px;">PAUSED</span>`;
+
+      const dispatchStatusHtml = isActive
+        ? `<span class="status-badge-ok"><span class="pulse-dot"></span>8:00 AM QUEUED</span><span class="dispatch-cycle-sub">Next: Tomorrow 8 AM</span>`
+        : `<span class="status-pill-paused">DELIVERY ON HOLD</span><span class="dispatch-cycle-sub" style="color: #f59e0b;">Briefings paused</span>`;
+
       return `
         <tr class="client-row" data-client-id="${a.id}">
           <!-- Column 1: Client / Recipient -->
@@ -431,7 +442,10 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="client-cell">
               <div class="client-avatar-chip" onclick="window.editAnalyst('${a.id}')" title="Click to edit profile">${initials}</div>
               <div class="client-info">
-                <span class="client-name" onclick="window.editAnalyst('${a.id}')" title="Click to edit profile">${a.name}</span>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <span class="client-name" onclick="window.editAnalyst('${a.id}')" title="Click to edit profile">${a.name}</span>
+                  ${statusPill}
+                </div>
                 <div class="client-meta-row">
                   <span class="client-phone-badge" title="WhatsApp Delivery Number">💬 +91 ${a.phone}</span>
                   ${a.email ? `<span class="client-email-badge" title="Email: ${a.email}">✉️ ${a.email}</span>` : ''}
@@ -454,8 +468,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <!-- Column 3: Morning Dispatch Status -->
           <td>
             <div class="client-dispatch-cell">
-              <span class="status-badge-ok"><span class="pulse-dot"></span>8:00 AM QUEUED</span>
-              <span class="dispatch-cycle-sub">Next: Tomorrow 8 AM</span>
+              ${dispatchStatusHtml}
             </div>
           </td>
 
@@ -465,6 +478,9 @@ document.addEventListener("DOMContentLoaded", () => {
               <button type="button" class="btn-client-dispatch" onclick="window.sendBriefToClient('${a.id}')" title="Send WhatsApp briefing right now">
                 <span class="action-icon">💬</span>
                 <span>Send Brief</span>
+              </button>
+              <button type="button" class="btn-secondary-micro" onclick="window.toggleClientActive('${a.id}')" title="${isActive ? 'Pause daily briefings for this client' : 'Resume daily briefings'}" style="padding: 4px 8px; font-size: 0.72rem;">
+                <span>${isActive ? '⏸️' : '▶️'}</span>
               </button>
               <button type="button" class="btn-row-edit" onclick="window.editAnalyst('${a.id}')" title="Edit client details">
                 <span class="action-icon">✏️</span>
@@ -710,6 +726,33 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  window.toggleClientActive = async (id) => {
+    try {
+      const res = await fetch(`/api/analysts/${id}/toggle-status`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.is_active ? "Client briefings resumed!" : "Client briefings paused.");
+        await loadAnalysts();
+        loadStats();
+      }
+    } catch (err) {
+      showToast("Error updating client status", true);
+    }
+  };
+
+  window.testPingClient = async (id) => {
+    const a = analystsList.find(x => x.id === id);
+    const clientName = a ? a.name : id;
+    showToast(`Sending test WhatsApp verification to ${clientName}...`);
+    try {
+      const res = await fetch(`/api/analysts/${id}/test-ping`, { method: "POST" });
+      const data = await res.json();
+      showToast(data.message || `Test verification sent to ${clientName}!`);
+    } catch (err) {
+      showToast("Error sending test ping", true);
+    }
+  };
+
   window.editAnalyst = (id) => {
     const a = analystsList.find(x => x.id === id);
     if (!a) return;
@@ -718,25 +761,101 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("input-analyst-name").value = a.name;
     document.getElementById("input-analyst-phone").value = a.phone;
     document.getElementById("input-analyst-email").value = a.email || "";
+    const activeCb = document.getElementById("input-analyst-active");
+    if (activeCb) activeCb.checked = (a.is_active !== false);
+
     renderAnalystFoldersCheckboxes(a.assigned_folders || []);
+    renderAnalystCompaniesCheckboxes(a.assigned_companies || []);
     renderAnalystSectorsCheckboxes(a.macro_sectors || ["ALL"]);
+
+    const btnPing = document.getElementById("btn-test-ping-client");
+    if (btnPing) {
+      btnPing.style.display = "inline-flex";
+      btnPing.onclick = () => window.testPingClient(a.id);
+    }
     modalAddAnalyst.classList.add("open");
   };
 
-  window.deleteAnalyst = async (id) => {
+  // ---------------------------------------------------------------------------
+  // Universal Executive Danger Confirmation Modal
+  // ---------------------------------------------------------------------------
+  const modalDangerConfirm = document.getElementById("modal-danger-confirm");
+  const dangerConfirmTitle = document.getElementById("danger-confirm-title");
+  const dangerConfirmSubtitle = document.getElementById("danger-confirm-subtitle");
+  const dangerConfirmMessage = document.getElementById("danger-confirm-message");
+  const btnCloseDangerModal = document.getElementById("btn-close-danger-modal");
+  const btnCancelDangerModal = document.getElementById("btn-cancel-danger-modal");
+  const btnExecuteDangerModal = document.getElementById("btn-execute-danger-modal");
+
+  let pendingDangerCallback = null;
+
+  function closeDangerModal() {
+    if (modalDangerConfirm) modalDangerConfirm.classList.remove("open");
+    pendingDangerCallback = null;
+    if (btnExecuteDangerModal) {
+      btnExecuteDangerModal.disabled = false;
+      btnExecuteDangerModal.textContent = "Yes, Delete Permanently";
+    }
+  }
+
+  if (btnCloseDangerModal) btnCloseDangerModal.addEventListener("click", closeDangerModal);
+  if (btnCancelDangerModal) btnCancelDangerModal.addEventListener("click", closeDangerModal);
+  if (modalDangerConfirm) {
+    modalDangerConfirm.addEventListener("click", (e) => {
+      if (e.target === modalDangerConfirm) closeDangerModal();
+    });
+  }
+
+  if (btnExecuteDangerModal) {
+    btnExecuteDangerModal.addEventListener("click", async () => {
+      if (pendingDangerCallback) {
+        btnExecuteDangerModal.disabled = true;
+        btnExecuteDangerModal.textContent = "Deleting...";
+        try {
+          await pendingDangerCallback();
+        } catch (e) {
+          console.error("Danger execution failed:", e);
+        } finally {
+          closeDangerModal();
+        }
+      } else {
+        closeDangerModal();
+      }
+    });
+  }
+
+  function showDangerModal({ title, subtitle, message, confirmText = "Yes, Delete Permanently", onConfirm }) {
+    if (dangerConfirmTitle) dangerConfirmTitle.textContent = title || "Confirm Deletion";
+    if (dangerConfirmSubtitle) dangerConfirmSubtitle.textContent = subtitle || "Irreversible admin action";
+    if (dangerConfirmMessage) dangerConfirmMessage.innerHTML = message || "Are you sure you want to proceed?";
+    if (btnExecuteDangerModal) btnExecuteDangerModal.textContent = confirmText;
+    pendingDangerCallback = onConfirm;
+    if (modalDangerConfirm) modalDangerConfirm.classList.add("open");
+  }
+
+  window.deleteAnalyst = (id) => {
     const a = analystsList.find(x => x.id === id);
     const clientName = a ? a.name : id;
-    if (!confirm(`Are you sure you want to remove ${clientName} from the client directory?`)) return;
-    try {
-      const res = await fetch(`/api/analysts/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        showToast("Client removed.");
-        await loadAnalysts();
-        loadStats();
+    showDangerModal({
+      title: `Remove Client: ${clientName}`,
+      subtitle: "Client Directory Deletion",
+      message: `Are you sure you want to remove <strong>${clientName}</strong> (+91 ${a ? a.phone : ''}) from your subscriber directory? They will no longer receive daily WhatsApp briefings or Macro digests.`,
+      confirmText: "Yes, Delete Client",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/analysts/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            showToast(`Removed ${clientName} from client directory.`);
+            await loadAnalysts();
+            loadStats();
+          } else {
+            showToast("Error deleting client", true);
+          }
+        } catch(err) {
+          showToast("Error deleting client", true);
+        }
       }
-    } catch(err) {
-      showToast("Error deleting client", true);
-    }
+    });
   };
 
   function renderAnalystFoldersCheckboxes(assigned = []) {
@@ -769,6 +888,38 @@ document.addEventListener("DOMContentLoaded", () => {
     }).join("");
   }
 
+  function renderAnalystCompaniesCheckboxes(assigned = []) {
+    const container = document.getElementById("analyst-companies-checkboxes");
+    if (!container) return;
+    if (!companiesList.length) {
+      container.innerHTML = `<span style="font-size:0.75rem; color:var(--text-dim); padding:4px;">No stocks in watchlist.</span>`;
+      return;
+    }
+    const assignedIds = (assigned || []);
+    container.innerHTML = companiesList.map(c => {
+      const isChecked = assignedIds.includes(c.id) ? 'checked' : '';
+      return `
+        <label class="checkbox-item" style="padding: 4px 6px;" data-company-name="${(c.name || '').toLowerCase()}" data-company-nse="${(c.nse_symbol || '').toLowerCase()}">
+          <input type="checkbox" name="assigned_company_override" value="${c.id}" ${isChecked}>
+          <span><strong>${c.name}</strong> <span style="color:var(--text-dim); font-size:0.72rem;">(${c.nse_symbol || c.id})</span></span>
+        </label>
+      `;
+    }).join("");
+  }
+
+  const analystCompFilter = document.getElementById("analyst-company-search-filter");
+  if (analystCompFilter) {
+    analystCompFilter.addEventListener("input", (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      const labels = document.querySelectorAll("#analyst-companies-checkboxes .checkbox-item");
+      labels.forEach(lbl => {
+        const cname = lbl.getAttribute("data-company-name") || "";
+        const cnse = lbl.getAttribute("data-company-nse") || "";
+        lbl.style.display = (!query || cname.includes(query) || cnse.includes(query)) ? "flex" : "none";
+      });
+    });
+  }
+
   function renderAnalystSectorsCheckboxes(assigned = ["ALL"]) {
     const container = document.getElementById("analyst-sectors-checkboxes");
     if (!container) return;
@@ -798,7 +949,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.handleSectorCheckboxChange = (changedCb) => {
     const allCb = document.querySelector('input[name="assigned_macro_sector"][value="ALL"]');
     const otherCbs = Array.from(document.querySelectorAll('input[name="assigned_macro_sector"]:not([value="ALL"])'));
-    
+
     if (changedCb.value === "ALL") {
       if (changedCb.checked) {
         otherCbs.forEach(cb => { cb.checked = false; });
@@ -838,67 +989,84 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  btnOpenAddAnalyst.addEventListener("click", () => {
-    document.getElementById("analyst-modal-title").textContent = "Add New Client";
-    formAddAnalyst.reset();
-    document.getElementById("input-analyst-id").value = "";
-    renderAnalystFoldersCheckboxes([]);
-    renderAnalystSectorsCheckboxes(["ALL"]);
-    modalAddAnalyst.classList.add("open");
-  });
+  if (btnOpenAddAnalyst) {
+    btnOpenAddAnalyst.addEventListener("click", () => {
+      document.getElementById("analyst-modal-title").textContent = "Add New Client";
+      formAddAnalyst.reset();
+      document.getElementById("input-analyst-id").value = "";
+      const activeCb = document.getElementById("input-analyst-active");
+      if (activeCb) activeCb.checked = true;
+      const btnPing = document.getElementById("btn-test-ping-client");
+      if (btnPing) btnPing.style.display = "none";
+      renderAnalystFoldersCheckboxes([]);
+      renderAnalystCompaniesCheckboxes([]);
+      renderAnalystSectorsCheckboxes(["ALL"]);
+      modalAddAnalyst.classList.add("open");
+    });
+  }
 
-  btnCloseAnalystModal.addEventListener("click", () => modalAddAnalyst.classList.remove("open"));
-  btnCancelAnalystModal.addEventListener("click", () => modalAddAnalyst.classList.remove("open"));
+  if (btnCloseAnalystModal) {
+    btnCloseAnalystModal.addEventListener("click", () => modalAddAnalyst.classList.remove("open"));
+  }
+  if (btnCancelAnalystModal) {
+    btnCancelAnalystModal.addEventListener("click", () => modalAddAnalyst.classList.remove("open"));
+  }
 
-  formAddAnalyst.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const id = document.getElementById("input-analyst-id").value.trim();
-    const name = document.getElementById("input-analyst-name").value.trim();
-    const phone = document.getElementById("input-analyst-phone").value.trim().replace(/\D/g, "");
-    const email = document.getElementById("input-analyst-email").value.trim();
+  if (formAddAnalyst) {
+    formAddAnalyst.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = document.getElementById("input-analyst-id").value.trim();
+      const name = document.getElementById("input-analyst-name").value.trim();
+      const phone = document.getElementById("input-analyst-phone").value.trim().replace(/\D/g, "");
+      const email = document.getElementById("input-analyst-email").value.trim();
 
-    if (phone.length < 10) {
-      showToast("Please enter a valid 10-digit WhatsApp number", true);
-      return;
-    }
-
-    const checkedBoxes = document.querySelectorAll('input[name="assigned_folder"]:checked');
-    const assignedFolders = Array.from(checkedBoxes).map(cb => cb.value);
-
-    const checkedSectorBoxes = document.querySelectorAll('input[name="assigned_macro_sector"]:checked');
-    const assignedSectors = Array.from(checkedSectorBoxes).map(cb => cb.value);
-
-    // Preserve existing directly assigned stocks
-    const existing = analystsList.find(x => x.id === id);
-    const assignedCompanies = existing ? (existing.assigned_companies || []) : [];
-
-    const payload = {
-      id: id || name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16),
-      name,
-      phone,
-      email,
-      assigned_companies: assignedCompanies,
-      assigned_folders: assignedFolders,
-      macro_sectors: assignedSectors.length ? assignedSectors : ["ALL"]
-    };
-
-    try {
-      const res = await fetch("/api/analysts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        showToast(`Saved client: ${name}!`);
-        modalAddAnalyst.classList.remove("open");
-        formAddAnalyst.reset();
-        await loadAnalysts();
-        loadStats();
+      if (phone.length < 10) {
+        showToast("Please enter a valid 10-digit WhatsApp number", true);
+        return;
       }
-    } catch(err) {
-      showToast("Failed to save client", true);
-    }
-  });
+
+      const activeCb = document.getElementById("input-analyst-active");
+      const is_active = activeCb ? activeCb.checked : true;
+
+      const checkedBoxes = document.querySelectorAll('input[name="assigned_folder"]:checked');
+      const assignedFolders = Array.from(checkedBoxes).map(cb => cb.value);
+
+      const checkedCompBoxes = document.querySelectorAll('input[name="assigned_company_override"]:checked');
+      const assignedCompanies = Array.from(checkedCompBoxes).map(cb => cb.value);
+
+      const checkedSectorBoxes = document.querySelectorAll('input[name="assigned_macro_sector"]:checked');
+      const assignedSectors = Array.from(checkedSectorBoxes).map(cb => cb.value);
+
+      const payload = {
+        id: id || name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16),
+        name,
+        phone,
+        email,
+        assigned_companies: assignedCompanies,
+        assigned_folders: assignedFolders,
+        macro_sectors: assignedSectors.length ? assignedSectors : ["ALL"],
+        is_active: is_active
+      };
+
+      try {
+        const res = await fetch("/api/analysts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          showToast(`Saved client: ${name}!`);
+          modalAddAnalyst.classList.remove("open");
+          formAddAnalyst.reset();
+          await loadAnalysts();
+          loadStats();
+        }
+      } catch(err) {
+        showToast("Failed to save client", true);
+      }
+    });
+  }
+
 
   overviewAnalystSelect.addEventListener("change", (e) => {
     currentAnalystId = e.target.value;
@@ -1104,20 +1272,34 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
       return;
     }
-    previewStoriesFeed.innerHTML = stories.slice(0, 25).map(item => {
+    previewStoriesFeed.innerHTML = stories.slice(0, 35).map(item => {
       const isFiling = item.source_type === "filing";
       const cname = item.company_name || "Company";
-      const sourcesText = (item.sources || []).map(s => s.name).join(" • ") || item.source_name;
+      const sourcesText = (item.sources || []).map(s => s.name).join(" • ") || item.source_name || "Market Desk";
+      const grade = item.impact_grade || "";
+      const summaryText = item.summary ? `<div style="font-size: 0.77rem; color: #94a3b8; line-height: 1.45; margin-top: 6px;">${item.summary}</div>` : '';
+      const safeTitleAttr = (item.title || "").replace(/"/g, '&quot;');
 
       return `
-        <div class="preview-story-card">
+        <div class="preview-story-card" data-story-id="${item.id}">
           <div class="story-card-top">
-            <span class="ticker-badge ${isFiling ? 'badge-filing' : ''}">${isFiling ? '🏛️ ' : ''}${cname.toUpperCase()}</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="ticker-badge ${isFiling ? 'badge-filing' : ''}">${isFiling ? '🏛️ ' : ''}${cname.toUpperCase()}</span>
+              ${grade ? `<span style="font-size: 0.68rem; font-weight: 700; color: #a5b4fc; background: rgba(99,102,241,0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(99,102,241,0.25);">${grade}</span>` : ''}
+            </div>
             <span class="story-source-badge">${sourcesText}</span>
           </div>
           <a class="story-card-title" href="${item.url || '#'}" target="_blank" rel="noopener">
             ${item.title}
           </a>
+          ${summaryText}
+          <div class="story-actions" style="margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.7rem; color: var(--text-muted);">${item.published_at ? item.published_at.slice(0, 16).replace('T', ' ') : 'Live Intelligence'}</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button type="button" class="btn-micro-edit-story" data-id="${item.id}">✏️ Edit</button>
+              <button type="button" class="btn-micro-delete-story" data-id="${item.id}" data-title="${safeTitleAttr}">🗑️</button>
+            </div>
+          </div>
         </div>
       `;
     }).join("");
@@ -1794,19 +1976,41 @@ document.addEventListener("DOMContentLoaded", () => {
     if (watchlistSearchInput) watchlistSearchInput.focus();
   };
 
-  function renderWatchlistTable() {
-    if (!watchlistTableBody) return;
+  // ---------------------------------------------------------------------------
+  // Phase 1: Watchlist Desk, Batch Actions, CSV Ingestion & Asset Management
+  // ---------------------------------------------------------------------------
+  let selectedWatchlistStockIds = new Set();
+  const selectAllStocksCheckbox = document.getElementById("select-all-watchlist-stocks");
+  const watchlistBatchBar = document.getElementById("watchlist-batch-bar");
+  const batchSelectedCount = document.getElementById("batch-selected-count");
+  const batchSelectBasket = document.getElementById("batch-select-basket");
+  const batchSelectClient = document.getElementById("batch-select-client");
+  const btnBatchApplyBasket = document.getElementById("btn-batch-apply-basket");
+  const btnBatchApplyClient = document.getElementById("btn-batch-apply-client");
+  const btnBatchPause = document.getElementById("btn-batch-pause");
+  const btnBatchActivate = document.getElementById("btn-batch-activate");
+  const btnBatchDelete = document.getElementById("btn-batch-delete");
+  const btnBatchDeselect = document.getElementById("btn-batch-deselect");
 
-    if (watchlistTotalPill) {
-      watchlistTotalPill.textContent = `${companiesList.length} Monitored Stocks`;
-    }
+  // CSV Export & Import Elements
+  const btnExportWatchlist = document.getElementById("btn-export-watchlist");
+  const btnOpenImportModal = document.getElementById("btn-open-import-modal");
+  const modalImportWatchlist = document.getElementById("modal-import-watchlist");
+  const btnCloseImportModal = document.getElementById("btn-close-import-modal");
+  const btnCancelImportModal = document.getElementById("btn-cancel-import-modal");
+  const btnImportSample = document.getElementById("btn-import-sample");
+  const importCsvFile = document.getElementById("import-csv-file");
+  const importCsvText = document.getElementById("import-csv-text");
+  const importPreviewBox = document.getElementById("import-preview-box");
+  const importPreviewCount = document.getElementById("import-preview-count");
+  const importPreviewList = document.getElementById("import-preview-list");
+  const btnExecuteImport = document.getElementById("btn-execute-import");
 
-    // 1. Filter by Basket / Folder
+  function getVisibleWatchlistStocks() {
     let filtered = currentWatchlistFolder === "ALL"
       ? [...companiesList]
       : companiesList.filter(c => getCompanyFolders(c).includes(currentWatchlistFolder.toUpperCase()));
 
-    // 2. Filter by Search Query (Name, Symbol, BSE Code, or Aliases)
     if (watchlistSearchQuery) {
       filtered = filtered.filter(c => {
         const name = (c.name || "").toLowerCase();
@@ -1821,6 +2025,488 @@ document.addEventListener("DOMContentLoaded", () => {
                aliases.some(a => a.includes(watchlistSearchQuery));
       });
     }
+    return filtered;
+  }
+
+  function updateBatchBar() {
+    if (!watchlistBatchBar) return;
+    const count = selectedWatchlistStockIds.size;
+    if (count > 0) {
+      watchlistBatchBar.style.display = "flex";
+      if (batchSelectedCount) {
+        batchSelectedCount.textContent = `${count} stock${count > 1 ? 's' : ''} selected`;
+      }
+    } else {
+      watchlistBatchBar.style.display = "none";
+    }
+
+    // Populate Basket Dropdown
+    if (batchSelectBasket) {
+      const curBasket = batchSelectBasket.value;
+      batchSelectBasket.innerHTML = `
+        <option value="" disabled ${!curBasket ? 'selected' : ''}>Add to Basket...</option>
+        ${availableFolders.map(f => `<option value="${f}">${f}</option>`).join("")}
+      `;
+      if (curBasket && availableFolders.includes(curBasket)) {
+        batchSelectBasket.value = curBasket;
+      }
+    }
+
+    // Populate Client Dropdown
+    if (batchSelectClient) {
+      const curClient = batchSelectClient.value;
+      batchSelectClient.innerHTML = `
+        <option value="" disabled ${!curClient ? 'selected' : ''}>Assign Client...</option>
+        ${analystsList.map(a => `<option value="${a.id}">${a.name} (+91 ${a.phone})</option>`).join("")}
+      `;
+      if (curClient && analystsList.some(a => a.id === curClient)) {
+        batchSelectClient.value = curClient;
+      }
+    }
+
+    // Update Select-All master checkbox state
+    if (selectAllStocksCheckbox) {
+      const visible = getVisibleWatchlistStocks();
+      if (visible.length === 0) {
+        selectAllStocksCheckbox.checked = false;
+        selectAllStocksCheckbox.indeterminate = false;
+      } else {
+        const visibleSelected = visible.filter(c => selectedWatchlistStockIds.has(c.id)).length;
+        if (visibleSelected === visible.length) {
+          selectAllStocksCheckbox.checked = true;
+          selectAllStocksCheckbox.indeterminate = false;
+        } else if (visibleSelected > 0) {
+          selectAllStocksCheckbox.checked = false;
+          selectAllStocksCheckbox.indeterminate = true;
+        } else {
+          selectAllStocksCheckbox.checked = false;
+          selectAllStocksCheckbox.indeterminate = false;
+        }
+      }
+    }
+  }
+
+  window.toggleSelectStock = (id) => {
+    if (selectedWatchlistStockIds.has(id)) {
+      selectedWatchlistStockIds.delete(id);
+    } else {
+      selectedWatchlistStockIds.add(id);
+    }
+    const row = document.querySelector(`.watchlist-row[data-stock-id="${id}"]`);
+    const cb = document.querySelector(`.watchlist-row-checkbox[data-stock-id="${id}"]`);
+    if (cb) cb.checked = selectedWatchlistStockIds.has(id);
+    if (row) {
+      if (selectedWatchlistStockIds.has(id)) {
+        row.classList.add("row-selected");
+      } else {
+        row.classList.remove("row-selected");
+      }
+    }
+    updateBatchBar();
+  };
+
+  if (selectAllStocksCheckbox) {
+    selectAllStocksCheckbox.addEventListener("change", (e) => {
+      const isChecked = e.target.checked;
+      const visible = getVisibleWatchlistStocks();
+      visible.forEach(c => {
+        if (isChecked) {
+          selectedWatchlistStockIds.add(c.id);
+        } else {
+          selectedWatchlistStockIds.delete(c.id);
+        }
+      });
+      document.querySelectorAll(".watchlist-row-checkbox").forEach(cb => {
+        const cid = cb.getAttribute("data-stock-id");
+        cb.checked = selectedWatchlistStockIds.has(cid);
+      });
+      document.querySelectorAll(".watchlist-row").forEach(r => {
+        const cid = r.getAttribute("data-stock-id");
+        if (selectedWatchlistStockIds.has(cid)) {
+          r.classList.add("row-selected");
+        } else {
+          r.classList.remove("row-selected");
+        }
+      });
+      updateBatchBar();
+    });
+  }
+
+  if (btnBatchDeselect) {
+    btnBatchDeselect.addEventListener("click", () => {
+      selectedWatchlistStockIds.clear();
+      document.querySelectorAll(".watchlist-row-checkbox").forEach(cb => { cb.checked = false; });
+      document.querySelectorAll(".watchlist-row").forEach(r => { r.classList.remove("row-selected"); });
+      updateBatchBar();
+    });
+  }
+
+  // Batch Toolbar Action Handlers
+  if (btnBatchApplyBasket) {
+    btnBatchApplyBasket.addEventListener("click", async () => {
+      const basket = batchSelectBasket.value;
+      if (!basket) {
+        showToast("Please choose a basket first", true);
+        return;
+      }
+      const cids = Array.from(selectedWatchlistStockIds);
+      if (!cids.length) return;
+
+      try {
+        const res = await fetch("/api/watchlist/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company_ids: cids, action: "assign_folder", value: basket })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          showToast(data.message || `Assigned ${cids.length} stocks to ${basket}!`);
+          await loadWatchlist();
+          await loadAnalysts();
+        } else {
+          showToast("Failed to assign basket in batch", true);
+        }
+      } catch (err) {
+        showToast("Batch basket error", true);
+      }
+    });
+  }
+
+  if (btnBatchApplyClient) {
+    btnBatchApplyClient.addEventListener("click", async () => {
+      const analystId = batchSelectClient.value;
+      if (!analystId) {
+        showToast("Please select a client first", true);
+        return;
+      }
+      const cids = Array.from(selectedWatchlistStockIds);
+      if (!cids.length) return;
+
+      try {
+        const res = await fetch("/api/watchlist/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company_ids: cids, action: "assign_analyst", value: analystId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          showToast(data.message || `Assigned ${cids.length} stocks to client!`);
+          await loadWatchlist();
+          await loadAnalysts();
+        } else {
+          showToast("Failed to assign client in batch", true);
+        }
+      } catch (err) {
+        showToast("Batch client assign error", true);
+      }
+    });
+  }
+
+  if (btnBatchPause) {
+    btnBatchPause.addEventListener("click", async () => {
+      const cids = Array.from(selectedWatchlistStockIds);
+      if (!cids.length) return;
+      try {
+        const res = await fetch("/api/watchlist/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company_ids: cids, action: "toggle_active", value: "false" })
+        });
+        if (res.ok) {
+          showToast(`Paused monitoring for ${cids.length} stocks.`);
+          await loadWatchlist();
+        } else {
+          showToast("Failed to pause stocks", true);
+        }
+      } catch (err) {
+        showToast("Batch pause error", true);
+      }
+    });
+  }
+
+  if (btnBatchActivate) {
+    btnBatchActivate.addEventListener("click", async () => {
+      const cids = Array.from(selectedWatchlistStockIds);
+      if (!cids.length) return;
+      try {
+        const res = await fetch("/api/watchlist/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company_ids: cids, action: "toggle_active", value: "true" })
+        });
+        if (res.ok) {
+          showToast(`Activated monitoring for ${cids.length} stocks.`);
+          await loadWatchlist();
+        } else {
+          showToast("Failed to activate stocks", true);
+        }
+      } catch (err) {
+        showToast("Batch activate error", true);
+      }
+    });
+  }
+
+  if (btnBatchDelete) {
+    btnBatchDelete.addEventListener("click", () => {
+      const cids = Array.from(selectedWatchlistStockIds);
+      if (!cids.length) return;
+      showDangerModal({
+        title: `Delete ${cids.length} Selected Stocks`,
+        subtitle: "Batch Watchlist Deletion",
+        message: `Are you sure you want to permanently remove <strong>${cids.length} stocks</strong> from your monitoring desk? All disclosure tracking and automated briefings for these assets will stop immediately.`,
+        confirmText: `Yes, Delete ${cids.length} Stocks`,
+        onConfirm: async () => {
+          try {
+            const res = await fetch("/api/watchlist/batch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ company_ids: cids, action: "delete" })
+            });
+            if (res.ok) {
+              showToast(`Deleted ${cids.length} stocks from watchlist.`);
+              selectedWatchlistStockIds.clear();
+              updateBatchBar();
+              await loadWatchlist();
+              await loadAnalysts();
+              loadStats();
+            } else {
+              showToast("Failed to delete selected stocks", true);
+            }
+          } catch (err) {
+            showToast("Batch delete error", true);
+          }
+        }
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // CSV Export & Bulk Ingestion Handlers
+  // ---------------------------------------------------------------------------
+  if (btnExportWatchlist) {
+    btnExportWatchlist.addEventListener("click", () => {
+      showToast("Generating clean watchlist CSV...");
+      triggerSilentDownload("/api/watchlist/export", "vriddhi_watchlist.csv");
+    });
+  }
+
+  if (btnOpenImportModal) {
+    btnOpenImportModal.addEventListener("click", () => {
+      if (importCsvText) importCsvText.value = "";
+      if (importCsvFile) importCsvFile.value = "";
+      if (importPreviewBox) importPreviewBox.style.display = "none";
+      if (modalImportWatchlist) modalImportWatchlist.classList.add("open");
+    });
+  }
+
+  if (btnCloseImportModal) {
+    btnCloseImportModal.addEventListener("click", () => modalImportWatchlist.classList.remove("open"));
+  }
+  if (btnCancelImportModal) {
+    btnCancelImportModal.addEventListener("click", () => modalImportWatchlist.classList.remove("open"));
+  }
+
+  if (btnImportSample) {
+    btnImportSample.addEventListener("click", () => {
+      if (!importCsvText) return;
+      importCsvText.value =
+`Company Name, NSE Symbol, Basket
+Tata Motors Ltd, TATAMOTORS, GAME
+Reliance Industries, RELIANCE, SET
+HDFC Bank Ltd, HDFCBANK, MATCH
+Infosys Ltd, INFY, JUNIOR`;
+      updateImportPreview();
+    });
+  }
+
+  if (importCsvFile) {
+    importCsvFile.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (importCsvText) {
+          importCsvText.value = event.target.result;
+          updateImportPreview();
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  function parseCsvLine(line) {
+    const result = [];
+    let insideQuotes = false;
+    let entry = "";
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        insideQuotes = !insideQuotes;
+      } else if (char === ',' && !insideQuotes) {
+        result.push(entry.trim());
+        entry = "";
+      } else {
+        entry += char;
+      }
+    }
+    result.push(entry.trim());
+    return result;
+  }
+
+  function parseImportData() {
+    if (!importCsvText) return [];
+    const text = importCsvText.value.trim();
+    if (!text) return [];
+
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    const parsedItems = [];
+    let headerMap = null;
+
+    lines.forEach((line, idx) => {
+      const parts = parseCsvLine(line);
+      if (!parts.length) return;
+
+      const firstCol = (parts[0] || "").toLowerCase();
+      // Check if header row
+      if (idx === 0 && (firstCol.includes("name") || firstCol.includes("company") || firstCol.includes("asset") || firstCol.includes("id"))) {
+        headerMap = {};
+        parts.forEach((col, cIdx) => {
+          const cLow = col.toLowerCase().trim();
+          if (cLow.includes("name") || cLow.includes("company") || cLow.includes("asset")) headerMap.name = cIdx;
+          else if (cLow.includes("nse") || cLow.includes("symbol") || cLow.includes("ticker")) headerMap.nse = cIdx;
+          else if (cLow.includes("bse") || cLow.includes("code") || cLow.includes("scrip")) headerMap.bse = cIdx;
+          else if (cLow.includes("basket") || cLow.includes("folder") || cLow.includes("portfolio")) headerMap.basket = cIdx;
+          else if (cLow.includes("alias")) headerMap.aliases = cIdx;
+        });
+        return;
+      }
+
+      let name = "";
+      let nse = "";
+      let bse = "";
+      let basket = "GAME";
+      let rawAliases = "";
+
+      if (headerMap && headerMap.name !== undefined) {
+        name = parts[headerMap.name] || "";
+        if (headerMap.nse !== undefined) nse = (parts[headerMap.nse] || "").toUpperCase();
+        if (headerMap.bse !== undefined) bse = parts[headerMap.bse] || "";
+        if (headerMap.basket !== undefined) basket = (parts[headerMap.basket] || "GAME").toUpperCase();
+        if (headerMap.aliases !== undefined) rawAliases = parts[headerMap.aliases] || "";
+      } else {
+        name = parts[0] || "";
+        nse = (parts[1] || "").toUpperCase();
+
+        if (parts.length === 2) {
+          basket = "GAME";
+        } else if (parts.length === 3) {
+          // Standard 3 columns: Name, NSE, Basket (BSE omitted)
+          basket = (parts[2] || "GAME").toUpperCase();
+        } else if (parts.length === 4) {
+          // If 3rd column is numeric BSE code: Name, NSE, BSE, Basket
+          if (/^\d{4,8}$/.test(parts[2].trim())) {
+            bse = parts[2].trim();
+            basket = (parts[3] || "GAME").toUpperCase();
+          } else {
+            // Name, NSE, Basket, BSE
+            basket = (parts[2] || "GAME").toUpperCase();
+            if (/^\d{4,8}$/.test(parts[3].trim())) {
+              bse = parts[3].trim();
+            } else {
+              rawAliases = parts[3];
+            }
+          }
+        } else if (parts.length >= 5) {
+          // Legacy format: Name, NSE, BSE, Basket, Aliases
+          bse = parts[2] || "";
+          basket = (parts[3] || "GAME").toUpperCase();
+          rawAliases = parts[4] || "";
+        }
+      }
+
+      if (!name) return;
+
+      const aliases = rawAliases
+        ? rawAliases.split(";").join(",").split(",").map(a => a.trim().replace(/^"|"$/g, "")).filter(Boolean)
+        : [name, nse, bse].filter(Boolean);
+
+      parsedItems.push({
+        name,
+        nse_symbol: nse,
+        bse_code: bse,
+        folder: basket,
+        folders: [basket],
+        aliases
+      });
+    });
+
+    return parsedItems;
+  }
+
+  function updateImportPreview() {
+    if (!importPreviewBox || !importPreviewCount || !importPreviewList) return;
+    const items = parseImportData();
+    if (!items.length) {
+      importPreviewBox.style.display = "none";
+      return;
+    }
+    importPreviewBox.style.display = "block";
+    importPreviewCount.textContent = `✓ Parsed ${items.length} valid stock${items.length > 1 ? 's' : ''} ready to import:`;
+    const previewSnippets = items.slice(0, 5).map(it =>
+      `• <strong>${it.name}</strong> (${it.nse_symbol || 'No NSE'}${it.bse_code ? ' | BSE: ' + it.bse_code : ''}) → Basket: <span style="color:#6ee7b7;">${it.folder}</span>`
+    ).join("<br>");
+    importPreviewList.innerHTML = previewSnippets + (items.length > 5 ? `<br><span style="color:var(--text-dim);">... and ${items.length - 5} more</span>` : '');
+  }
+
+  if (importCsvText) {
+    importCsvText.addEventListener("input", updateImportPreview);
+  }
+
+  if (btnExecuteImport) {
+    btnExecuteImport.addEventListener("click", async () => {
+      const items = parseImportData();
+      if (!items.length) {
+        showToast("No valid rows detected. Please check CSV format or load a sample.", true);
+        return;
+      }
+
+      btnExecuteImport.disabled = true;
+      btnExecuteImport.textContent = "Importing...";
+
+      try {
+        const res = await fetch("/api/watchlist/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          showToast(`Successfully imported ${data.imported || items.length} stocks!`);
+          modalImportWatchlist.classList.remove("open");
+          if (importCsvText) importCsvText.value = "";
+          await loadWatchlist();
+          await loadAnalysts();
+          loadStats();
+        } else {
+          showToast("Import failed. Please check format.", true);
+        }
+      } catch (err) {
+        showToast("Error processing import", true);
+      } finally {
+        btnExecuteImport.disabled = false;
+        btnExecuteImport.textContent = "Import Stocks";
+      }
+    });
+  }
+
+  function renderWatchlistTable() {
+    if (!watchlistTableBody) return;
+
+    if (watchlistTotalPill) {
+      watchlistTotalPill.textContent = `${companiesList.length} Monitored Stocks`;
+    }
+
+    const filtered = getVisibleWatchlistStocks();
 
     // Update visible count badge
     if (watchlistVisibleCount) {
@@ -1840,19 +2526,33 @@ document.addEventListener("DOMContentLoaded", () => {
       
       watchlistTableBody.innerHTML = `
         <tr>
-          <td colspan="4" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
+          <td colspan="5" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
             <div style="font-size: 1.6rem; margin-bottom: 8px;">🔍</div>
             <div style="font-size: 0.88rem; color: var(--text-secondary);">${msg}</div>
             ${watchlistSearchQuery ? `<button type="button" class="btn-secondary-micro" onclick="window.clearWatchlistSearch()" style="margin-top: 14px; padding: 6px 16px; border-radius: 8px; cursor: pointer;">Clear Search</button>` : ''}
           </td>
         </tr>
       `;
+      updateBatchBar();
       return;
     }
 
     watchlistTableBody.innerHTML = filtered.map(c => {
       const cFolders = getCompanyFolders(c);
       const symbol = (c.nse_symbol || c.id || "STK").toUpperCase();
+      const isSelected = selectedWatchlistStockIds.has(c.id);
+      const isActive = c.is_active !== false;
+
+      // Status pill for paused monitoring
+      const statusPill = isActive
+        ? ''
+        : `<span class="status-pill-paused" style="margin-left: 6px;">PAUSED</span>`;
+
+      // Aliases display
+      const aliasesList = c.aliases || [];
+      const aliasesDisplay = aliasesList.length > 0
+        ? `<div class="asset-aliases" style="font-size: 0.7rem; color: var(--text-dim); margin-top: 2px;" title="Keywords used for intelligent search & clustering">🏷️ ${aliasesList.slice(0, 3).join(", ")}${aliasesList.length > 3 ? '...' : ''}</div>`
+        : '';
 
       // Render pills for each assigned basket with dot and "x" to remove
       const pillsHtml = cFolders.map(fld => {
@@ -1894,16 +2594,26 @@ document.addEventListener("DOMContentLoaded", () => {
         : `<span class="badge-unassigned" onclick="window.openEditStockModal('${c.id}')" title="Click to assign clients">+ Assign Client</span>`;
 
       return `
-        <tr class="watchlist-row" data-stock-id="${c.id}">
+        <tr class="watchlist-row ${isSelected ? 'row-selected' : ''}" data-stock-id="${c.id}">
+          <!-- Column 0: Multi-Select Checkbox -->
+          <td style="text-align: center; width: 4%;">
+            <input type="checkbox" class="watchlist-row-checkbox custom-checkbox" data-stock-id="${c.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); window.toggleSelectStock('${c.id}')">
+          </td>
+
           <!-- Column 1: Asset / Company -->
           <td>
             <div class="asset-cell">
               <div class="asset-symbol-chip" onclick="window.openEditStockModal('${c.id}')" title="Click to edit stock">${symbol.slice(0, 10)}</div>
               <div class="asset-info">
-                <span class="asset-name" onclick="window.openEditStockModal('${c.id}')" title="Click to edit stock details">${c.name}</span>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <span class="asset-name" onclick="window.openEditStockModal('${c.id}')" title="Click to edit stock details">${c.name}</span>
+                  ${statusPill}
+                </div>
                 <div class="asset-sub-meta">
                   ${c.nse_symbol ? `<span class="exchange-tag nse">NSE: <strong>${c.nse_symbol}</strong></span>` : ''}
+                  ${c.bse_code ? `<span class="exchange-tag bse" style="font-size:0.68rem; color:var(--text-dim); margin-left:6px;">BSE: ${c.bse_code}</span>` : ''}
                 </div>
+                ${aliasesDisplay}
               </div>
             </div>
           </td>
@@ -1921,11 +2631,11 @@ document.addEventListener("DOMContentLoaded", () => {
           <!-- Column 4: Actions -->
           <td style="text-align: right;">
             <div class="row-actions-cell">
-              <button type="button" class="btn-row-edit" onclick="window.openEditStockModal('${c.id}')" title="Edit stock tickers & coverage">
+              <button type="button" class="btn-row-edit" onclick="window.openEditStockModal('${c.id}')" title="Edit stock tickers, aliases & coverage">
                 <span class="action-icon">✏️</span>
                 <span>Edit</span>
               </button>
-              <button type="button" class="btn-row-del" onclick="deleteStock('${c.id}')" title="Remove stock from watchlist">
+              <button type="button" class="btn-row-del" onclick="window.confirmDeleteStock('${c.id}')" title="Remove stock from watchlist">
                 <span class="action-icon">🗑️</span>
               </button>
             </div>
@@ -1933,6 +2643,8 @@ document.addEventListener("DOMContentLoaded", () => {
         </tr>
       `;
     }).join("");
+
+    updateBatchBar();
   }
 
   window.addStockFolder = async (id, folder) => {
@@ -1992,19 +2704,35 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  window.deleteStock = async (id) => {
-    if (!confirm("Remove this company from the watchlist?")) return;
-    try {
-      const res = await fetch(`/api/watchlist/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        showToast("Stock removed.");
-        await loadWatchlist();
-        loadStats();
+  window.confirmDeleteStock = (id) => {
+    const comp = companiesList.find(c => c.id === id);
+    const compName = comp ? comp.name : id;
+    showDangerModal({
+      title: `Remove Stock: ${compName}`,
+      subtitle: "Watchlist Deletion",
+      message: `Are you sure you want to remove <strong>${compName}</strong> (${comp ? (comp.nse_symbol || comp.id) : ''}) from your monitoring desk? It will no longer be crawled or included in any client briefings.`,
+      confirmText: "Yes, Delete Stock",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/watchlist/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            showToast(`Removed ${compName} from watchlist.`);
+            selectedWatchlistStockIds.delete(id);
+            updateBatchBar();
+            await loadWatchlist();
+            await loadAnalysts();
+            loadStats();
+          } else {
+            showToast("Failed to delete stock", true);
+          }
+        } catch (e) {
+          showToast("Delete failed", true);
+        }
       }
-    } catch (e) {
-      showToast("Delete failed", true);
-    }
+    });
   };
+
+  window.deleteStock = (id) => window.confirmDeleteStock(id);
 
   // Add Folder Modal Events
   if (btnOpenAddFolder) {
@@ -2085,6 +2813,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     renderStockFoldersCheckboxes(initialFolders);
 
+    const activeCb = document.getElementById("input-comp-active");
+    if (activeCb) activeCb.checked = true;
+
+    const aliasesInput = document.getElementById("input-comp-aliases");
+    if (aliasesInput) aliasesInput.value = "";
+
+    const queriesInput = document.getElementById("input-comp-queries");
+    if (queriesInput) queriesInput.value = "";
+
     // Populate manual analyst checkboxes (UNCHECKED by default - 100% manual control)
     if (stockAnalystsCheckboxes) {
       if (!analystsList.length) {
@@ -2109,10 +2846,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const nameInput = document.getElementById("input-comp-name");
     const nseInput = document.getElementById("input-comp-nse");
     const bseInput = document.getElementById("input-comp-bse");
+    const aliasesInput = document.getElementById("input-comp-aliases");
+    const queriesInput = document.getElementById("input-comp-queries");
+    const activeCb = document.getElementById("input-comp-active");
 
     const name = (nameInput ? nameInput.value : "").trim();
     const nse = (nseInput ? nseInput.value : "").trim().toUpperCase();
     const bse = (bseInput ? bseInput.value : "").trim();
+    const is_active = activeCb ? activeCb.checked : true;
 
     if (!name) {
       showToast("Please enter a company name.", true);
@@ -2127,6 +2868,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const checkedBoxes = document.querySelectorAll('input[name="stock_assigned_analyst"]:checked');
     const assignedAnalystIds = Array.from(checkedBoxes).map(cb => cb.value);
 
+    // Aliases
+    let aliases = (aliasesInput && aliasesInput.value)
+      ? aliasesInput.value.split(",").map(a => a.trim()).filter(Boolean)
+      : [];
+    if (!aliases.includes(name)) aliases.unshift(name);
+    if (nse && !aliases.includes(nse)) aliases.push(nse);
+
+    // Search queries
+    let searchQueries = (queriesInput && queriesInput.value)
+      ? queriesInput.value.split(",").map(q => q.trim()).filter(Boolean)
+      : [`"${name}"`];
+
     // Unique clean ID
     const baseId = (nse || name).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "stock";
     let finalId = baseId;
@@ -2139,11 +2892,12 @@ document.addEventListener("DOMContentLoaded", () => {
       name,
       nse_symbol: nse,
       bse_code: bse,
-      aliases: [name, nse, bse].filter(Boolean),
-      search_queries: [`"${name}"`],
+      aliases: aliases,
+      search_queries: searchQueries,
       folder: folders.join(", "),
       folders: folders,
-      assigned_analyst_ids: assignedAnalystIds
+      assigned_analyst_ids: assignedAnalystIds,
+      is_active: is_active
     };
 
     try {
@@ -2178,6 +2932,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (editCompNse) editCompNse.value = comp.nse_symbol || "";
     const editCompBse = document.getElementById("edit-comp-bse");
     if (editCompBse) editCompBse.value = comp.bse_code || "";
+
+    const editAliases = document.getElementById("edit-comp-aliases");
+    if (editAliases) {
+      editAliases.value = (comp.aliases || []).join(", ");
+    }
+
+    const editQueries = document.getElementById("edit-comp-queries");
+    if (editQueries) {
+      editQueries.value = (comp.search_queries || []).join(", ");
+    }
+
+    const editActive = document.getElementById("edit-comp-active");
+    if (editActive) {
+      editActive.checked = comp.is_active !== false;
+    }
 
     const modalTitle = document.getElementById("edit-stock-modal-title");
     if (modalTitle) modalTitle.textContent = `Edit Stock: ${comp.name}`;
@@ -2233,7 +3002,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const cid = editCompId.value;
       if (!cid) return;
       modalEditStock.classList.remove("open");
-      await window.deleteStock(cid);
+      window.confirmDeleteStock(cid);
     });
   }
 
@@ -2247,22 +3016,41 @@ document.addEventListener("DOMContentLoaded", () => {
       const editCompBse = document.getElementById("edit-comp-bse");
       const bse = editCompBse ? editCompBse.value.trim() : (comp ? (comp.bse_code || "") : "");
 
+      const editAliases = document.getElementById("edit-comp-aliases");
+      const editQueries = document.getElementById("edit-comp-queries");
+      const editActive = document.getElementById("edit-comp-active");
+
+      const is_active = editActive ? editActive.checked : true;
+
       const checkedFolderBoxes = document.querySelectorAll('input[name="edit_stock_folder"]:checked');
       const folders = Array.from(checkedFolderBoxes).map(cb => cb.value.trim().toUpperCase()).filter(Boolean);
 
       const checkedAnalystBoxes = document.querySelectorAll('input[name="edit_stock_assigned_analyst"]:checked');
       const assignedAnalystIds = Array.from(checkedAnalystBoxes).map(cb => cb.value);
 
+      // Aliases
+      let aliases = (editAliases && editAliases.value)
+        ? editAliases.value.split(",").map(a => a.trim()).filter(Boolean)
+        : (comp ? comp.aliases : []);
+      if (!aliases.includes(name)) aliases.unshift(name);
+      if (nse && !aliases.includes(nse)) aliases.push(nse);
+
+      // Queries
+      let searchQueries = (editQueries && editQueries.value)
+        ? editQueries.value.split(",").map(q => q.trim()).filter(Boolean)
+        : (comp ? comp.search_queries : [`"${name}"`]);
+
       const payload = {
         id,
         name,
         nse_symbol: nse,
         bse_code: bse,
-        aliases: comp ? (comp.aliases || [name, nse, bse].filter(Boolean)) : [name, nse, bse].filter(Boolean),
-        search_queries: [`"${name}"`],
+        aliases: aliases,
+        search_queries: searchQueries,
         folder: folders.join(", "),
         folders,
-        assigned_analyst_ids: assignedAnalystIds
+        assigned_analyst_ids: assignedAnalystIds,
+        is_active: is_active
       };
 
       try {
@@ -2466,6 +3254,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span>⚡</span> Ping
               </button>
               ${!isSystemFeed ? `
+                <button class="btn-edit-feed" data-id="${s.id}" title="Edit Feed Configuration">
+                  ✏️ Edit
+                </button>
                 <button class="btn-delete-feed" data-id="${s.id}" data-name="${escapeHtml(s.name)}" title="Remove Feed">
                   🗑️
                 </button>
@@ -2557,6 +3348,13 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      const editBtn = e.target.closest(".btn-edit-feed");
+      if (editBtn) {
+        const id = editBtn.dataset.id;
+        openEditSourceModal(id);
+        return;
+      }
+
       const pingBtn = e.target.closest(".btn-ping-feed");
       if (pingBtn) {
         const id = pingBtn.dataset.id;
@@ -2569,19 +3367,26 @@ document.addEventListener("DOMContentLoaded", () => {
       if (delBtn) {
         const id = delBtn.dataset.id;
         const name = delBtn.dataset.name;
-        if (confirm(`Are you sure you want to remove "${name}" from data feeds?`)) {
-          try {
-            const res = await fetch(`/api/sources/${id}`, { method: "DELETE" });
-            if (res.ok) {
-              showToast(`Feed removed: ${name}`);
-              loadSources();
-            } else {
-              showToast("Failed to remove feed", true);
+        showDangerModal({
+          title: "Delete Ingestion Feed",
+          subtitle: "Irreversible Feed Removal",
+          message: `Are you sure you want to permanently remove feed <strong>"${escapeHtml(name)}"</strong>? The crawler will stop ingesting stories from this endpoint.`,
+          confirmText: "Yes, Delete Feed",
+          onConfirm: async () => {
+            try {
+              const res = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+              if (res.ok) {
+                showToast(`Feed removed: ${name}`);
+                loadSources();
+              } else {
+                showToast("Failed to remove feed", true);
+              }
+            } catch (err) {
+              showToast("Network error removing feed", true);
             }
-          } catch (err) {
-            showToast("Network error removing feed", true);
           }
-        }
+        });
+        return;
       }
     });
   }
@@ -2655,12 +3460,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add Source Modal handling
   if (btnOpenAddSourceModal) {
     btnOpenAddSourceModal.addEventListener("click", () => {
-      if (modalAddSource) modalAddSource.classList.add("active");
+      if (modalAddSource) modalAddSource.classList.add("open", "active");
     });
   }
 
   function closeAddSourceModal() {
-    if (modalAddSource) modalAddSource.classList.remove("active");
+    if (modalAddSource) modalAddSource.classList.remove("open", "active");
     if (formAddSource) formAddSource.reset();
   }
 
@@ -2714,6 +3519,118 @@ document.addEventListener("DOMContentLoaded", () => {
           submitBtn.disabled = false;
           submitBtn.textContent = "Save & Activate Feed";
         }
+      }
+    });
+  }
+
+  // Edit Source Modal handling
+  const modalEditSource = document.getElementById("modal-edit-source");
+  const formEditSource = document.getElementById("form-edit-source");
+  const editSourceId = document.getElementById("edit-source-id");
+  const editSourceName = document.getElementById("edit-source-name");
+  const editSourceUrl = document.getElementById("edit-source-url");
+  const editSourceType = document.getElementById("edit-source-type");
+  const editSourcePattern = document.getElementById("edit-source-pattern");
+  const editSourceBodyCheck = document.getElementById("edit-source-bodycheck");
+  const editSourceActive = document.getElementById("edit-source-active");
+  const btnCloseEditSourceModal = document.getElementById("btn-close-edit-source-modal");
+  const btnCancelEditSourceModal = document.getElementById("btn-cancel-edit-source-modal");
+  const btnDeleteFromSourceModal = document.getElementById("btn-delete-from-source-modal");
+
+  function closeEditSourceModal() {
+    if (modalEditSource) modalEditSource.classList.remove("open", "active");
+  }
+
+  if (btnCloseEditSourceModal) btnCloseEditSourceModal.addEventListener("click", closeEditSourceModal);
+  if (btnCancelEditSourceModal) btnCancelEditSourceModal.addEventListener("click", closeEditSourceModal);
+  if (modalEditSource) {
+    modalEditSource.addEventListener("click", (e) => {
+      if (e.target === modalEditSource) closeEditSourceModal();
+    });
+  }
+
+  async function openEditSourceModal(sourceId) {
+    try {
+      const res = await fetch(`/api/sources/${sourceId}`);
+      if (!res.ok) {
+        showToast("Failed to load feed details", true);
+        return;
+      }
+      const s = await res.json();
+      if (editSourceId) editSourceId.value = s.id;
+      if (editSourceName) editSourceName.value = s.name || "";
+      if (editSourceUrl) editSourceUrl.value = s.url || "";
+      if (editSourceType) editSourceType.value = (s.type || "rss").toLowerCase();
+      if (editSourcePattern) editSourcePattern.value = s.keep_pattern || "";
+      if (editSourceBodyCheck) editSourceBodyCheck.checked = !!s.body_check;
+      if (editSourceActive) editSourceActive.checked = s.is_active !== 0;
+
+      if (modalEditSource) modalEditSource.classList.add("open", "active");
+    } catch (err) {
+      showToast("Network error opening feed editor", true);
+    }
+  }
+
+  if (btnDeleteFromSourceModal) {
+    btnDeleteFromSourceModal.addEventListener("click", () => {
+      const id = editSourceId ? editSourceId.value : null;
+      const name = editSourceName ? editSourceName.value : "Feed";
+      if (!id) return;
+      closeEditSourceModal();
+      showDangerModal({
+        title: "Delete Ingestion Feed",
+        subtitle: "Irreversible Feed Removal",
+        message: `Are you sure you want to permanently delete <strong>"${escapeHtml(name)}"</strong>? The system will stop polling this data stream immediately.`,
+        confirmText: "Yes, Delete Feed",
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+            if (res.ok) {
+              showToast(`Feed deleted: ${name}`);
+              loadSources();
+            } else {
+              showToast("Failed to delete feed", true);
+            }
+          } catch (err) {
+            showToast("Network error deleting feed", true);
+          }
+        }
+      });
+    });
+  }
+
+  if (formEditSource) {
+    formEditSource.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = editSourceId ? editSourceId.value : null;
+      if (!id) return;
+
+      const payload = {
+        name: editSourceName ? editSourceName.value.trim() : "",
+        url: editSourceUrl ? editSourceUrl.value.trim() : "",
+        type: editSourceType ? editSourceType.value : "rss",
+        keep_pattern: editSourcePattern ? editSourcePattern.value.trim() : null,
+        body_check: editSourceBodyCheck ? (editSourceBodyCheck.checked ? 1 : 0) : 1,
+        is_active: editSourceActive ? (editSourceActive.checked ? 1 : 0) : 1,
+      };
+
+      try {
+        const res = await fetch(`/api/sources/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          showToast(`Feed updated: ${payload.name}`);
+          closeEditSourceModal();
+          loadSources();
+        } else {
+          const errData = await res.json();
+          showToast(`Error: ${errData.detail || 'Could not update feed'}`, true);
+        }
+      } catch (err) {
+        showToast("Network error updating feed", true);
       }
     });
   }
@@ -3201,6 +4118,198 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
+  // Phase 2: Automated Scheduler & Broadcast Controls
+  // =========================================================================
+  const inputScheduleMorningTime = document.getElementById("input-schedule-morning-time");
+  const inputScheduleMorningActive = document.getElementById("input-schedule-morning-active");
+  const schedulerMorningNextBadge = document.getElementById("scheduler-morning-next-badge");
+  const btnTriggerMorningNow = document.getElementById("btn-trigger-morning-now");
+
+  const inputScheduleEveningTime = document.getElementById("input-schedule-evening-time");
+  const inputScheduleEveningActive = document.getElementById("input-schedule-evening-active");
+  const schedulerEveningNextBadge = document.getElementById("scheduler-evening-next-badge");
+  const btnTriggerEveningNow = document.getElementById("btn-trigger-evening-now");
+
+  const btnSaveScheduler = document.getElementById("btn-save-scheduler");
+  const btnClearDispatchLedger = document.getElementById("btn-clear-dispatch-ledger");
+  const schedulerLedgerTbody = document.getElementById("scheduler-ledger-tbody");
+
+  async function loadSchedulerStatus() {
+    try {
+      const res = await fetch("/api/scheduler/status");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (inputScheduleMorningTime) inputScheduleMorningTime.value = data.morning_time || "08:30";
+      if (inputScheduleMorningActive) inputScheduleMorningActive.checked = !!data.morning_active;
+      if (schedulerMorningNextBadge) {
+        schedulerMorningNextBadge.textContent = `Next: ${data.next_morning_run}`;
+        schedulerMorningNextBadge.className = data.morning_active ? "setting-status-pill ok" : "setting-status-pill warn";
+      }
+
+      if (inputScheduleEveningTime) inputScheduleEveningTime.value = data.evening_time || "17:15";
+      if (inputScheduleEveningActive) inputScheduleEveningActive.checked = !!data.evening_active;
+      if (schedulerEveningNextBadge) {
+        schedulerEveningNextBadge.textContent = `Next: ${data.next_evening_run}`;
+        schedulerEveningNextBadge.className = data.evening_active ? "setting-status-pill ok" : "setting-status-pill warn";
+      }
+
+      const nextCrawlEl = document.getElementById("next-crawl-time");
+      if (nextCrawlEl && data.next_morning_run) {
+        nextCrawlEl.textContent = data.next_morning_run;
+      }
+
+      renderSchedulerLedger(data.recent_runs || []);
+    } catch (err) {
+      console.error("Scheduler status fetch failed:", err);
+    }
+  }
+
+  function renderSchedulerLedger(runs) {
+    if (!schedulerLedgerTbody) return;
+    if (!runs || runs.length === 0) {
+      schedulerLedgerTbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 18px 8px;">
+            No automated or manual dispatches recorded yet. Use "Run Now" to test a broadcast cycle.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    schedulerLedgerTbody.innerHTML = runs.map(r => {
+      let runBadge = `<span class="badge-run-manual">MANUAL</span>`;
+      const typeLower = (r.run_type || "").toLowerCase();
+      if (typeLower.includes("morning")) {
+        runBadge = `<span class="badge-run-morning">☀️ MORNING EQUITY</span>`;
+      } else if (typeLower.includes("evening")) {
+        runBadge = `<span class="badge-run-evening">🌙 EVENING MACRO</span>`;
+      }
+
+      const statusOk = (r.status || "").toUpperCase() === "COMPLETED";
+      const statusPill = `<span class="setting-status-pill ${statusOk ? 'ok' : 'warn'}" style="font-size: 0.68rem;">${r.status || 'DONE'}</span>`;
+
+      return `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+          <td style="padding: 8px; font-family: var(--font-mono); color: #cbd5e1;">${escapeHtml(r.dispatched_at || '')}</td>
+          <td style="padding: 8px;">${runBadge}</td>
+          <td style="padding: 8px; font-weight: 600; color: #fff;">👥 ${r.recipients_count || 0} Clients</td>
+          <td style="padding: 8px; color: var(--text-muted);">📰 ${r.stories_count || 0} Stories</td>
+          <td style="padding: 8px; text-align: right;">${statusPill}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  if (btnSaveScheduler) {
+    btnSaveScheduler.addEventListener("click", async () => {
+      btnSaveScheduler.disabled = true;
+      btnSaveScheduler.innerHTML = `<span>⏳ Saving...</span>`;
+
+      const payload = {
+        morning_time: inputScheduleMorningTime ? inputScheduleMorningTime.value : "08:30",
+        morning_active: inputScheduleMorningActive ? inputScheduleMorningActive.checked : true,
+        evening_time: inputScheduleEveningTime ? inputScheduleEveningTime.value : "17:15",
+        evening_active: inputScheduleEveningActive ? inputScheduleEveningActive.checked : true,
+      };
+
+      try {
+        const res = await fetch("/api/scheduler/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          showToast("Broadcast schedule saved & active");
+          await loadSchedulerStatus();
+        } else {
+          showToast("Failed to save schedule settings", true);
+        }
+      } catch (err) {
+        showToast("Network error saving schedule", true);
+      } finally {
+        btnSaveScheduler.disabled = false;
+        btnSaveScheduler.innerHTML = `<span>💾 Save Schedule</span>`;
+      }
+    });
+  }
+
+  if (btnTriggerMorningNow) {
+    btnTriggerMorningNow.addEventListener("click", async () => {
+      btnTriggerMorningNow.disabled = true;
+      btnTriggerMorningNow.innerHTML = `<span>⏳ Dispatching...</span>`;
+      showToast("🚀 Initiating Morning Equity Broadcast cycle...");
+
+      try {
+        const res = await fetch("/api/scheduler/trigger-morning", { method: "POST" });
+        const data = await res.json();
+        if (data.status === "ok" || data.status === "completed") {
+          showToast(`✓ Morning Broadcast complete: ${data.dispatched_count || data.recipients_count || 0} clients briefed`);
+        } else if (data.status === "skipped") {
+          showToast(`Notice: ${data.message || 'Morning broadcast skipped'}`, true);
+        } else {
+          showToast(`Broadcast completed with notice: ${data.message || 'Done'}`);
+        }
+        await loadSchedulerStatus();
+      } catch (err) {
+        showToast("Network error during broadcast trigger", true);
+      } finally {
+        btnTriggerMorningNow.disabled = false;
+        btnTriggerMorningNow.innerHTML = `<span>🚀 Run Now</span>`;
+      }
+    });
+  }
+
+  if (btnTriggerEveningNow) {
+    btnTriggerEveningNow.addEventListener("click", async () => {
+      btnTriggerEveningNow.disabled = true;
+      btnTriggerEveningNow.innerHTML = `<span>⏳ Dispatching...</span>`;
+      showToast("🚀 Initiating Evening Macro & Sovereign Briefing cycle...");
+
+      try {
+        const res = await fetch("/api/scheduler/trigger-evening", { method: "POST" });
+        const data = await res.json();
+        if (data.status === "ok" || data.status === "completed") {
+          showToast(`✓ Evening Macro Broadcast complete: ${data.dispatched_count || data.recipients_count || 0} clients briefed`);
+        } else if (data.status === "skipped") {
+          showToast(`Notice: ${data.message || 'Evening broadcast skipped'}`, true);
+        } else {
+          showToast(`Macro broadcast status: ${data.message || 'Done'}`);
+        }
+        await loadSchedulerStatus();
+      } catch (err) {
+        showToast("Network error during macro trigger", true);
+      } finally {
+        btnTriggerEveningNow.disabled = false;
+        btnTriggerEveningNow.innerHTML = `<span>🚀 Run Now</span>`;
+      }
+    });
+  }
+
+  if (btnClearDispatchLedger) {
+    btnClearDispatchLedger.addEventListener("click", () => {
+      showDangerModal({
+        title: "Reset Sent Stories Ledger",
+        subtitle: "Allows Duplicate Delivery Testing",
+        message: "Are you sure you want to reset the sent stories ledger? This clears the 24h deduplication locks so clients can receive fresh test dispatches immediately.",
+        confirmText: "Yes, Reset Ledger",
+        onConfirm: async () => {
+          try {
+            const res = await fetch("/api/scheduler/clear-ledger", { method: "POST" });
+            const data = await res.json();
+            showToast(`✓ Sent ledger reset (${data.cleared_records || 0} locks cleared)`);
+            await loadSchedulerStatus();
+          } catch (err) {
+            showToast("Network error clearing ledger", true);
+          }
+        }
+      });
+    });
+  }
+
+  // =========================================================================
   // Macro & Sector Intelligence Desk
   // =========================================================================
   let currentMacroMode = "live";
@@ -3257,7 +4366,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function loadMacroSectors() {
     if (!macroSectorChips) return;
     try {
-      const res = await fetch("/api/macro/sectors");
+      const res = await fetch(`/api/macro/sectors?mode=${currentMacroMode}`);
       const data = await res.json();
       allMasterSectorsList = data.sectors || [];
       renderMacroSectorPills();
@@ -3339,11 +4448,31 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!stories || stories.length === 0) {
+      let emptyMsg = "No verified government or regulatory directives matching this filter.";
+      let extraAction = "";
+      if (currentMacroSector && currentMacroSector !== "ALL" && currentMacroMode === "live") {
+        emptyMsg = `No official directives published in the last 24h for <strong>${currentMacroSector}</strong>.`;
+        extraAction = `
+          <div style="margin-top: 14px;">
+            <button type="button" id="btn-macro-expand-history" style="font-size: 0.78rem; padding: 6px 16px; border-radius: 6px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.35); color: #93c5fd; cursor: pointer;">
+              🔍 Search All-Time Records for ${currentMacroSector}
+            </button>
+          </div>
+        `;
+      }
       macroStoriesFeed.innerHTML = `
         <div style="padding: 48px 24px; text-align: center; color: var(--text-muted); font-style: italic;">
-          No verified government or regulatory directives matching this filter.
+          <div>${emptyMsg}</div>
+          ${extraAction}
         </div>
       `;
+      const expandBtn = document.getElementById("btn-macro-expand-history");
+      if (expandBtn) {
+        expandBtn.addEventListener("click", () => {
+          const allBtn = document.querySelector('.macro-mode-btn[data-mode="all"]');
+          if (allBtn) allBtn.click();
+        });
+      }
       return;
     }
 
@@ -3381,9 +4510,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
           <div class="macro-card-footer">
             <span>📅 ${pubDate} IST</span>
-            <a href="${s.url || '#'}" target="_blank" rel="noopener" style="color: #60a5fa; text-decoration: none; font-weight: 600;">
-              Official Gazette / Document ↗
-            </a>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <a href="${s.url || '#'}" target="_blank" rel="noopener" style="color: #60a5fa; text-decoration: none; font-weight: 600;">
+                Gazette ↗
+              </a>
+              <button type="button" class="btn-micro-edit-macro" data-id="${s.id}">✏️ Edit</button>
+              <button type="button" class="btn-micro-delete-macro" data-id="${s.id}" data-title="${(s.title || '').replace(/"/g, '&quot;')}">🗑️</button>
+            </div>
           </div>
         </div>
       `;
@@ -3404,6 +4537,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.style.borderColor = "rgba(59,130,246,0.4)";
       btn.style.color = "#93c5fd";
       currentMacroMode = btn.getAttribute("data-mode") || "live";
+      loadMacroSectors();
       loadMacroStories();
     });
   });
@@ -3464,6 +4598,617 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // =========================================================================
+  // Phase 3: Story Editorial & Manual Overrides
+  // =========================================================================
+  const modalEditStory = document.getElementById("modal-edit-story");
+  const btnCloseEditStory = document.getElementById("btn-close-edit-story-modal");
+  const btnCancelEditStory = document.getElementById("btn-cancel-edit-story-modal");
+  const formEditStory = document.getElementById("form-edit-story");
+  const editStoryId = document.getElementById("edit-story-id");
+  const editStoryCompany = document.getElementById("edit-story-company");
+  const editStoryTitle = document.getElementById("edit-story-title");
+  const editStoryGrade = document.getElementById("edit-story-grade");
+  const editStorySummary = document.getElementById("edit-story-summary");
+  const editStoryExclude = document.getElementById("edit-story-exclude");
+  const btnDeleteFromStoryModal = document.getElementById("btn-delete-from-story-modal");
+
+  const modalManualStory = document.getElementById("modal-manual-story");
+  const btnOpenManualStoryModal = document.getElementById("btn-open-manual-story-modal");
+  const btnCloseManualStoryModal = document.getElementById("btn-close-manual-story-modal");
+  const btnCancelManualStoryModal = document.getElementById("btn-cancel-manual-story-modal");
+  const formManualStory = document.getElementById("form-manual-story");
+  const manualStoryCompany = document.getElementById("manual-story-company");
+  const manualStoryTitle = document.getElementById("manual-story-title");
+  const manualStoryGrade = document.getElementById("manual-story-grade");
+  const manualStorySummary = document.getElementById("manual-story-summary");
+  const manualStoryUrl = document.getElementById("manual-story-url");
+
+  function populateCompanySelect(selectElem, selectedId = "") {
+    if (!selectElem) return;
+    const sorted = [...companiesList].sort((a, b) => a.name.localeCompare(b.name));
+    selectElem.innerHTML = sorted.map(c => 
+      `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.name} (${c.id.toUpperCase()})</option>`
+    ).join("");
+  }
+
+  // Delegated click handler on preview-stories-feed for Edit & Delete
+  if (previewStoriesFeed) {
+    previewStoriesFeed.addEventListener("click", async (e) => {
+      const btnEdit = e.target.closest(".btn-micro-edit-story");
+      const btnDel = e.target.closest(".btn-micro-delete-story");
+
+      if (btnEdit) {
+        const storyId = btnEdit.dataset.id;
+        try {
+          const res = await fetch(`/api/stories/${storyId}`);
+          if (!res.ok) throw new Error("Story not found");
+          const s = await res.json();
+          editStoryId.value = s.id;
+          populateCompanySelect(editStoryCompany, s.company_id);
+          editStoryTitle.value = s.title || "";
+          editStoryGrade.value = s.impact_grade || "Grade A";
+          editStorySummary.value = s.summary || "";
+          editStoryExclude.checked = !!s.is_excluded;
+          modalEditStory.classList.add("open");
+        } catch (err) {
+          showToast(`Failed to load story: ${err.message}`, true);
+        }
+        return;
+      }
+
+      if (btnDel) {
+        const storyId = btnDel.dataset.id;
+        const storyTitle = decodeURIComponent(btnDel.dataset.title || "Selected Story");
+        showDangerModal({
+          title: "Delete Market Story",
+          subtitle: "Editorial Override",
+          message: `Are you sure you want to permanently delete this story?<br><br><strong>"${storyTitle}"</strong><br><br>It will be removed from all analyst feeds and future digests.`,
+          confirmText: "Yes, Delete Story",
+          onConfirm: async () => {
+            try {
+              const res = await fetch(`/api/stories/${storyId}`, { method: "DELETE" });
+              if (!res.ok) throw new Error("Failed to delete story");
+              showToast("Story deleted successfully");
+              if (currentAnalystId) loadAnalystStoriesPreview(currentAnalystId);
+            } catch (err) {
+              showToast(err.message, true);
+            }
+          }
+        });
+        return;
+      }
+    });
+  }
+
+  function closeEditStoryModal() {
+    if (modalEditStory) modalEditStory.classList.remove("open");
+  }
+  if (btnCloseEditStory) btnCloseEditStory.addEventListener("click", closeEditStoryModal);
+  if (btnCancelEditStory) btnCancelEditStory.addEventListener("click", closeEditStoryModal);
+  if (modalEditStory) {
+    modalEditStory.addEventListener("click", (e) => {
+      if (e.target === modalEditStory) closeEditStoryModal();
+    });
+  }
+
+  if (formEditStory) {
+    formEditStory.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const storyId = editStoryId.value;
+      const payload = {
+        title: editStoryTitle.value.trim(),
+        company_id: editStoryCompany.value,
+        impact_grade: editStoryGrade.value,
+        summary: editStorySummary.value.trim(),
+        is_excluded: editStoryExclude.checked ? 1 : 0
+      };
+      try {
+        const res = await fetch(`/api/stories/${storyId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || "Update failed");
+        }
+        showToast("Story updated successfully!");
+        closeEditStoryModal();
+        if (currentAnalystId) loadAnalystStoriesPreview(currentAnalystId);
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+
+  if (btnDeleteFromStoryModal) {
+    btnDeleteFromStoryModal.addEventListener("click", () => {
+      const storyId = editStoryId.value;
+      const storyTitle = editStoryTitle.value;
+      closeEditStoryModal();
+      showDangerModal({
+        title: "Delete Market Story",
+        subtitle: "Editorial Override",
+        message: `Are you sure you want to delete <strong>"${storyTitle}"</strong>?`,
+        confirmText: "Yes, Delete Story",
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/stories/${storyId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Delete failed");
+            showToast("Story deleted");
+            if (currentAnalystId) loadAnalystStoriesPreview(currentAnalystId);
+          } catch (err) {
+            showToast(err.message, true);
+          }
+        }
+      });
+    });
+  }
+
+  // Manual Story Modal Open / Close / Submit
+  function closeManualStoryModal() {
+    if (modalManualStory) modalManualStory.classList.remove("open");
+  }
+  if (btnOpenManualStoryModal) {
+    btnOpenManualStoryModal.addEventListener("click", () => {
+      populateCompanySelect(manualStoryCompany);
+      if (formManualStory) formManualStory.reset();
+      modalManualStory.classList.add("open");
+    });
+  }
+  if (btnCloseManualStoryModal) btnCloseManualStoryModal.addEventListener("click", closeManualStoryModal);
+  if (btnCancelManualStoryModal) btnCancelManualStoryModal.addEventListener("click", closeManualStoryModal);
+  if (modalManualStory) {
+    modalManualStory.addEventListener("click", (e) => {
+      if (e.target === modalManualStory) closeManualStoryModal();
+    });
+  }
+
+  if (formManualStory) {
+    formManualStory.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        title: manualStoryTitle.value.trim(),
+        company_id: manualStoryCompany.value,
+        impact_grade: manualStoryGrade.value,
+        summary: manualStorySummary.value.trim(),
+        url: (manualStoryUrl.value || "").trim() || "https://vriddhi.internal/bulletin"
+      };
+      try {
+        const res = await fetch("/api/stories/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || "Publishing failed");
+        }
+        showToast("Breaking story published to intelligence desk!");
+        closeManualStoryModal();
+        if (currentAnalystId) loadAnalystStoriesPreview(currentAnalystId);
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+
+  // =========================================================================
+  // Phase 3: Macro Policy Directives Editorial & Injections
+  // =========================================================================
+  const modalEditMacro = document.getElementById("modal-edit-macro");
+  const btnCloseEditMacro = document.getElementById("btn-close-edit-macro-modal");
+  const btnCancelEditMacro = document.getElementById("btn-cancel-edit-macro-modal");
+  const formEditMacro = document.getElementById("form-edit-macro");
+  const editMacroId = document.getElementById("edit-macro-id");
+  const editMacroTitle = document.getElementById("edit-macro-title");
+  const editMacroAuthority = document.getElementById("edit-macro-authority");
+  const editMacroGrade = document.getElementById("edit-macro-grade");
+  const editMacroBias = document.getElementById("edit-macro-bias");
+  const editMacroSectors = document.getElementById("edit-macro-sectors");
+  const editMacroImplication = document.getElementById("edit-macro-implication");
+  const editMacroExclude = document.getElementById("edit-macro-exclude");
+  const btnDeleteFromMacroModal = document.getElementById("btn-delete-from-macro-modal");
+
+  const modalManualMacro = document.getElementById("modal-manual-macro");
+  const btnOpenManualMacroModal = document.getElementById("btn-open-manual-macro-modal");
+  const btnCloseManualMacroModal = document.getElementById("btn-close-manual-macro-modal");
+  const btnCancelManualMacroModal = document.getElementById("btn-cancel-manual-macro-modal");
+  const formManualMacro = document.getElementById("form-manual-macro");
+  const manualMacroTitle = document.getElementById("manual-macro-title");
+  const manualMacroAuthority = document.getElementById("manual-macro-authority");
+  const manualMacroGrade = document.getElementById("manual-macro-grade");
+  const manualMacroBias = document.getElementById("manual-macro-bias");
+  const manualMacroSectors = document.getElementById("manual-macro-sectors");
+  const manualMacroImplication = document.getElementById("manual-macro-implication");
+  const manualMacroUrl = document.getElementById("manual-macro-url");
+
+  // Delegated click handler on macro-stories-feed for Edit & Delete
+  if (macroStoriesFeed) {
+    macroStoriesFeed.addEventListener("click", async (e) => {
+      const btnEdit = e.target.closest(".btn-micro-edit-macro");
+      const btnDel = e.target.closest(".btn-micro-delete-macro");
+
+      if (btnEdit) {
+        const macroId = btnEdit.dataset.id;
+        try {
+          const res = await fetch(`/api/macro/${macroId}`);
+          if (!res.ok) throw new Error("Macro directive not found");
+          const m = await res.json();
+          editMacroId.value = m.id;
+          editMacroTitle.value = m.title || "";
+          editMacroAuthority.value = m.ministry_or_regulator || m.source_authority || "";
+          editMacroGrade.value = m.impact_grade || "Tier 1 (Market Mover)";
+          editMacroBias.value = m.market_bias || "NEUTRAL";
+          editMacroSectors.value = Array.isArray(m.sectors) ? m.sectors.join(", ") : (m.sectors || "");
+          editMacroImplication.value = m.impact_summary || m.summary || "";
+          editMacroExclude.checked = !!m.is_excluded;
+          modalEditMacro.classList.add("open");
+        } catch (err) {
+          showToast(`Failed to load directive: ${err.message}`, true);
+        }
+        return;
+      }
+
+      if (btnDel) {
+        const macroId = btnDel.dataset.id;
+        const macroTitle = decodeURIComponent(btnDel.dataset.title || "Selected Policy Directive");
+        showDangerModal({
+          title: "Delete Macro Directive",
+          subtitle: "Sovereign Intelligence Purge",
+          message: `Are you sure you want to permanently delete this policy directive?<br><br><strong>"${macroTitle}"</strong><br><br>It will be removed from macro desk feeds and evening dispatches.`,
+          confirmText: "Yes, Delete Directive",
+          onConfirm: async () => {
+            try {
+              const res = await fetch(`/api/macro/${macroId}`, { method: "DELETE" });
+              if (!res.ok) throw new Error("Delete failed");
+              showToast("Directive deleted successfully");
+              loadMacroStories();
+              loadMacroStats();
+            } catch (err) {
+              showToast(err.message, true);
+            }
+          }
+        });
+        return;
+      }
+    });
+  }
+
+  function closeEditMacroModal() {
+    if (modalEditMacro) modalEditMacro.classList.remove("open");
+  }
+  if (btnCloseEditMacro) btnCloseEditMacro.addEventListener("click", closeEditMacroModal);
+  if (btnCancelEditMacro) btnCancelEditMacro.addEventListener("click", closeEditMacroModal);
+  if (modalEditMacro) {
+    modalEditMacro.addEventListener("click", (e) => {
+      if (e.target === modalEditMacro) closeEditMacroModal();
+    });
+  }
+
+  if (formEditMacro) {
+    formEditMacro.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const macroId = editMacroId.value;
+      const sectors = editMacroSectors.value.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+      const payload = {
+        title: editMacroTitle.value.trim(),
+        ministry_or_regulator: editMacroAuthority.value.trim(),
+        impact_grade: editMacroGrade.value,
+        market_bias: editMacroBias.value,
+        sectors: sectors,
+        impact_summary: editMacroImplication.value.trim(),
+        is_excluded: editMacroExclude.checked ? 1 : 0
+      };
+      try {
+        const res = await fetch(`/api/macro/${macroId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || "Update failed");
+        }
+        showToast("Macro directive updated successfully!");
+        closeEditMacroModal();
+        loadMacroStories();
+        loadMacroStats();
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+
+  if (btnDeleteFromMacroModal) {
+    btnDeleteFromMacroModal.addEventListener("click", () => {
+      const macroId = editMacroId.value;
+      const macroTitle = editMacroTitle.value;
+      closeEditMacroModal();
+      showDangerModal({
+        title: "Delete Macro Directive",
+        subtitle: "Sovereign Intelligence Purge",
+        message: `Are you sure you want to delete <strong>"${macroTitle}"</strong>?`,
+        confirmText: "Yes, Delete Directive",
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/macro/${macroId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Delete failed");
+            showToast("Directive deleted");
+            loadMacroStories();
+            loadMacroStats();
+          } catch (err) {
+            showToast(err.message, true);
+          }
+        }
+      });
+    });
+  }
+
+  // Manual Macro Modal Open / Close / Submit
+  function closeManualMacroModal() {
+    if (modalManualMacro) modalManualMacro.classList.remove("open");
+  }
+  if (btnOpenManualMacroModal) {
+    btnOpenManualMacroModal.addEventListener("click", () => {
+      if (formManualMacro) formManualMacro.reset();
+      modalManualMacro.classList.add("open");
+    });
+  }
+  if (btnCloseManualMacroModal) btnCloseManualMacroModal.addEventListener("click", closeManualMacroModal);
+  if (btnCancelManualMacroModal) btnCancelManualMacroModal.addEventListener("click", closeManualMacroModal);
+  if (modalManualMacro) {
+    modalManualMacro.addEventListener("click", (e) => {
+      if (e.target === modalManualMacro) closeManualMacroModal();
+    });
+  }
+
+  if (formManualMacro) {
+    formManualMacro.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const sectors = manualMacroSectors.value.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+      const payload = {
+        title: manualMacroTitle.value.trim(),
+        ministry_or_regulator: manualMacroAuthority.value.trim(),
+        impact_grade: manualMacroGrade.value,
+        market_bias: manualMacroBias.value,
+        sectors: sectors,
+        impact_summary: manualMacroImplication.value.trim(),
+        url: (manualMacroUrl.value || "").trim() || "https://pib.gov.in/release"
+      };
+      try {
+        const res = await fetch("/api/macro/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || "Publishing failed");
+        }
+        showToast("Sovereign policy directive published to macro desk!");
+        closeManualMacroModal();
+        loadMacroStories();
+        loadMacroStats();
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+
+  // =========================================================================
+  // Phase 3: AI Prompt Studio & Playground Logic
+  // =========================================================================
+  let currentStudioPromptId = "equity_summary";
+  const btnPromptTabEquity = document.getElementById("btn-prompt-tab-equity");
+  const btnPromptTabMacro = document.getElementById("btn-prompt-tab-macro");
+  const inputPromptModel = document.getElementById("input-prompt-model");
+  const inputPromptTemp = document.getElementById("input-prompt-temp");
+  const valPromptTemp = document.getElementById("val-prompt-temp");
+  const inputPromptTokens = document.getElementById("input-prompt-tokens");
+  const inputPromptText = document.getElementById("input-prompt-text");
+  const chipsWrap = document.getElementById("prompt-variable-chips-wrap");
+  const btnSavePrompt = document.getElementById("btn-save-prompt");
+  const btnResetPrompt = document.getElementById("btn-reset-prompt-default");
+  const btnTestPromptLive = document.getElementById("btn-test-prompt-live");
+  const promptTestResultBox = document.getElementById("prompt-test-result-box");
+  const inputSampleCompany = document.getElementById("input-sample-company");
+  const inputSampleHeadline = document.getElementById("input-sample-headline");
+
+  async function loadPromptStudio(promptId = currentStudioPromptId) {
+    currentStudioPromptId = promptId;
+    if (btnPromptTabEquity && btnPromptTabMacro) {
+      if (promptId === "equity_summary") {
+        btnPromptTabEquity.classList.add("active");
+        btnPromptTabMacro.classList.remove("active");
+      } else {
+        btnPromptTabMacro.classList.add("active");
+        btnPromptTabEquity.classList.remove("active");
+      }
+    }
+
+    // Update variable chips
+    if (chipsWrap) {
+      if (promptId === "equity_summary") {
+        chipsWrap.innerHTML = `
+          <span class="variable-chip" title="Click to insert at cursor" data-var="{company_name}">{company_name}</span>
+          <span class="variable-chip" title="Click to insert at cursor" data-var="{headline}">{headline}</span>
+          <span class="variable-chip" title="Click to insert at cursor" data-var="{summary}">{summary}</span>
+        `;
+      } else {
+        chipsWrap.innerHTML = `
+          <span class="variable-chip" title="Click to insert at cursor" data-var="{authority}">{authority}</span>
+          <span class="variable-chip" title="Click to insert at cursor" data-var="{title}">{title}</span>
+          <span class="variable-chip" title="Click to insert at cursor" data-var="{snippet}">{snippet}</span>
+        `;
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/ai/prompts/${promptId}`);
+      if (!res.ok) throw new Error("Prompt not found");
+      const p = await res.json();
+      if (inputPromptModel) inputPromptModel.value = p.model || "gemini-1.5-flash";
+      if (inputPromptTemp) inputPromptTemp.value = p.temperature ?? 0.2;
+      if (valPromptTemp) valPromptTemp.textContent = p.temperature ?? 0.2;
+      if (inputPromptTokens) inputPromptTokens.value = p.max_tokens ?? 400;
+      if (inputPromptText) inputPromptText.value = p.prompt_text || "";
+    } catch (err) {
+      console.warn("Failed to load prompt:", err);
+    }
+  }
+
+  // Variable chip click insertion
+  if (chipsWrap) {
+    chipsWrap.addEventListener("click", (e) => {
+      const chip = e.target.closest(".variable-chip");
+      if (!chip || !inputPromptText) return;
+      const val = chip.dataset.var || chip.textContent;
+      const start = inputPromptText.selectionStart;
+      const end = inputPromptText.selectionEnd;
+      const text = inputPromptText.value;
+      inputPromptText.value = text.substring(0, start) + val + text.substring(end);
+      inputPromptText.focus();
+      inputPromptText.selectionStart = inputPromptText.selectionEnd = start + val.length;
+    });
+  }
+
+  // Tab switching
+  if (btnPromptTabEquity) {
+    btnPromptTabEquity.addEventListener("click", () => {
+      loadPromptStudio("equity_summary");
+    });
+  }
+  if (btnPromptTabMacro) {
+    btnPromptTabMacro.addEventListener("click", () => {
+      loadPromptStudio("macro_directive");
+    });
+  }
+
+  // Temp slider
+  if (inputPromptTemp) {
+    inputPromptTemp.addEventListener("input", (e) => {
+      if (valPromptTemp) valPromptTemp.textContent = e.target.value;
+    });
+  }
+
+  // Save prompt
+  if (btnSavePrompt) {
+    btnSavePrompt.addEventListener("click", async () => {
+      const text = (inputPromptText.value || "").trim();
+      if (!text) {
+        showToast("Prompt template cannot be empty", true);
+        return;
+      }
+      btnSavePrompt.disabled = true;
+      btnSavePrompt.innerHTML = "<span>Saving...</span>";
+      try {
+        const payload = {
+          prompt_text: text,
+          model: inputPromptModel.value,
+          temperature: parseFloat(inputPromptTemp.value),
+          max_tokens: parseInt(inputPromptTokens.value)
+        };
+        const res = await fetch(`/api/ai/prompts/${currentStudioPromptId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error("Failed to save prompt");
+        showToast("Prompt template saved & active in production!");
+      } catch (err) {
+        showToast(`Save failed: ${err.message}`, true);
+      } finally {
+        btnSavePrompt.disabled = false;
+        btnSavePrompt.innerHTML = "<span>💾 Save Prompt Template</span>";
+      }
+    });
+  }
+
+  // Reset to default
+  if (btnResetPrompt) {
+    btnResetPrompt.addEventListener("click", () => {
+      showDangerModal({
+        title: "Reset AI Prompt Template",
+        subtitle: "Factory Reset",
+        message: "Are you sure you want to revert this prompt template to its default factory schema?<br><br>Any custom institutional guidelines or scoring rules will be replaced with defaults.",
+        confirmText: "Yes, Reset Prompt",
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/ai/prompts/${currentStudioPromptId}/reset`, { method: "POST" });
+            if (!res.ok) throw new Error("Reset failed");
+            showToast("Prompt template reset to factory default");
+            loadPromptStudio(currentStudioPromptId);
+          } catch (err) {
+            showToast(err.message, true);
+          }
+        }
+      });
+    });
+  }
+
+  // Live test playground
+  if (btnTestPromptLive) {
+    btnTestPromptLive.addEventListener("click", async () => {
+      const promptText = (inputPromptText.value || "").trim();
+      if (!promptText) {
+        showToast("Prompt template is empty", true);
+        return;
+      }
+
+      btnTestPromptLive.disabled = true;
+      btnTestPromptLive.innerHTML = "<span>⚡ Running Gemini Inference...</span>";
+      if (promptTestResultBox) {
+        promptTestResultBox.style.display = "block";
+        promptTestResultBox.style.color = "#93c5fd";
+        promptTestResultBox.textContent = "Connecting to Google Gemini API and evaluating sample disclosure...";
+      }
+
+      const sampleCompany = inputSampleCompany ? inputSampleCompany.value : "Reliance Industries";
+      const sampleHeadline = inputSampleHeadline ? inputSampleHeadline.value : "Reliance Jio adds 12M 5G users";
+
+      const payload = {
+        prompt_text: promptText,
+        model: inputPromptModel.value,
+        temperature: parseFloat(inputPromptTemp.value),
+        max_tokens: parseInt(inputPromptTokens.value),
+        sample_company: sampleCompany,
+        sample_headline: sampleHeadline,
+        sample_snippet: "Strategic network expansion and high ARPU addition across Tier 2 and Tier 3 cities driven by JioAirFiber.",
+        sample_authority: "Reserve Bank of India"
+      };
+
+      try {
+        const res = await fetch("/api/ai/test-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          const formatted = data.parsed ? JSON.stringify(data.parsed, null, 2) : data.raw_text;
+          promptTestResultBox.style.color = "#a7f3d0";
+          promptTestResultBox.textContent = `// Latency: ${data.latency_ms}ms | Model: ${data.model} | HTTP 200 OK\n\n${formatted}`;
+          showToast(`Gemini inference succeeded in ${data.latency_ms}ms!`);
+        } else {
+          promptTestResultBox.style.color = "#fca5a5";
+          promptTestResultBox.textContent = `// Error: ${data.latency_ms}ms\n\n${data.message || 'Inference error'}`;
+          showToast("Gemini inference error", true);
+        }
+      } catch (err) {
+        if (promptTestResultBox) {
+          promptTestResultBox.style.color = "#fca5a5";
+          promptTestResultBox.textContent = `// Network or Server Error:\n${err.message}`;
+        }
+        showToast(`Inference failed: ${err.message}`, true);
+      } finally {
+        btnTestPromptLive.disabled = false;
+        btnTestPromptLive.innerHTML = "<span>⚡ Run Live Prompt Test</span>";
+      }
+    });
+  }
+
   // Initial Load
   async function initDashboard() {
     loadStats();
@@ -3475,6 +5220,8 @@ document.addEventListener("DOMContentLoaded", () => {
     loadSources();
     loadLogs();
     loadFullSettings();
+    loadSchedulerStatus();
+    loadPromptStudio();
     initKpiDrilldowns();
   }
   initDashboard();

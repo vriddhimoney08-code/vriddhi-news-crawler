@@ -10,7 +10,14 @@ import feedparser
 
 from ..controlpanel import Company
 from ..http import Fetcher
-from ..normalize import clean_text, is_reputable_publisher, strip_publisher_suffix
+from ..normalize import (
+    clean_text,
+    is_paywalled_url,
+    is_reputable_publisher,
+    is_sponsored_or_pr,
+    resolve_news_url,
+    strip_publisher_suffix,
+)
 from .base import RawItem, parse_date
 
 log = logging.getLogger(__name__)
@@ -57,9 +64,22 @@ def google_news(fetcher: Fetcher, company: Company, editions: list[str], since: 
                 summary = clean_text(str(e.get("summary") or e.get("description") or ""))
                 raw_link = e.get("link")
                 link_str: str | None = str(raw_link) if raw_link is not None else None
-                if not is_reputable_publisher(publisher, link_str, "news"):
+                # Decode Google News redirect URL to obtain actual destination
+                real_url = resolve_news_url(link_str) if link_str else ""
+                final_url = real_url or link_str
+
+                # Drop paywalled subscription links right at ingestion (ET Prime, Mint Premium, BS Premium, etc.)
+                if is_paywalled_url(final_url):
                     continue
-                out.append(RawItem(source_name=publisher, source_type="news", title=title, summary=summary, url=link_str,
+
+                # Drop paid PR wires, advertorials, and sponsored marketing
+                if is_sponsored_or_pr(title, final_url):
+                    continue
+
+                if not is_reputable_publisher(publisher, final_url, "news"):
+                    continue
+
+                out.append(RawItem(source_name=publisher, source_type="news", title=title, summary=summary, url=final_url,
                                    published_at=pub, lang=lang))
     return out
 

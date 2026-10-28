@@ -229,13 +229,12 @@ def send_whatsapp_digest(
 
     header_values = []
     if doc_header:
-        cdn_link = upload_pdf_to_cdn(pdf_path) if pdf_path else None
-        base_url = (os.getenv("BASE_URL") or "").rstrip("/")
+        base_url = (os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io").rstrip("/")
         fallback_server_url = f"{base_url}/api/digest/file/{pdf_filename}" if (base_url and pdf_filename) else None
         doc_link = (
             public_pdf_url
-            or cdn_link
             or fallback_server_url
+            or (upload_pdf_to_cdn(pdf_path) if pdf_path else None)
             or "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
         )
         header_values.append(doc_link)
@@ -450,13 +449,12 @@ def send_whatsapp_macro_digest(
 
     header_values = []
     if doc_header:
-        cdn_link = upload_pdf_to_cdn(pdf_path) if pdf_path else None
-        base_url = (os.getenv("BASE_URL") or "").rstrip("/")
+        base_url = (os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io").rstrip("/")
         fallback_server_url = f"{base_url}/api/digest/file/{pdf_filename}" if (base_url and pdf_filename) else None
         doc_link = (
             public_pdf_url
-            or cdn_link
             or fallback_server_url
+            or (upload_pdf_to_cdn(pdf_path) if pdf_path else None)
             or "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
         )
         header_values.append(doc_link)

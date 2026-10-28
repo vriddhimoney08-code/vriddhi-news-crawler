@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from datetime import datetime
 
 from .config import PORT
 from .controlpanel import create_starter_excel
@@ -13,6 +15,7 @@ from .db import (
     get_unsent_stories_for_analyst,
     init_db,
     mark_sent,
+    record_dispatch_run,
 )
 from .pdf import generate_analyst_digest, generate_macro_digest
 from .pipeline import Pipeline
@@ -75,7 +78,7 @@ def main():
             print(f"Warnings/Errors: {res['errors']}")
 
     elif args.command == "preview":
-        init_db(seed_defaults=True)
+        init_db(seed_defaults=False)
         analysts = get_analysts()
         for a in analysts:
             if args.only and args.only.lower() not in a.name.lower():
@@ -93,40 +96,76 @@ def main():
 
         print("=== [CRON] Dispatching Morning Digests via WhatsApp ===")
 
+        public_base = os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io"
         analysts = get_analysts()
+        results = []
         for a in analysts:
+            if not getattr(a, "is_active", True):
+                continue
             stories = get_unsent_stories_for_analyst(a.id)
             if not stories:
                 print(f"[{a.name}] Ledger is clean, no unsent stories.")
+                results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "ledger_clean"})
                 continue
 
             file_path, _ = generate_analyst_digest(a.id, a.name, stories)
-            res = send_whatsapp_digest(analyst_name=a.name, analyst_phone=a.phone, stories=stories, pdf_path=file_path)
-            mark_sent([s["id"] for s in stories], a.id)
-            print(f"[{a.name}] Result: {res.get('status')} -> {res.get('message')}")
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
+            res = send_whatsapp_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                stories=stories,
+                pdf_path=file_path,
+                public_pdf_url=public_pdf_url,
+            )
+            st = res.get("status", "sent")
+            if st in ("sent", "simulated"):
+                mark_sent([s["id"] for s in stories], a.id)
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": st, "message": res.get("message")})
+            print(f"[{a.name}] Result: {st} -> {res.get('message')}")
+
+        sent_count = len([r for r in results if r["status"] == "sent"])
+        total_stories = sum(r["count"] for r in results)
+        run_status = "COMPLETED" if sent_count > 0 else ("CLEAN" if all(r["status"] == "ledger_clean" for r in results) else "PARTIAL")
+        record_dispatch_run("morning_digest", recipients_count=sent_count, stories_count=total_stories, status=run_status, details=results)
 
     elif args.command in ("macro-dispatch", "macro-digest"):
         init_db(seed_defaults=True)
-        print("=== [CRON] Starting Evening 5:30 PM Macro & Sector Briefing Cycle ===")
+        print("=== [CRON] Starting Evening 5:15 PM Macro & Sector Briefing Cycle ===")
 
         print("Crawling macro sources (PIB, RBI, SEBI, official gazettes)...")
         from .sources.macro import MacroPipeline
         MacroPipeline().run_macro_crawl(hours=48)
 
+        public_base = os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io"
         analysts = get_analysts()
+        results = []
         for a in analysts:
-            stories = get_macro_stories_for_analyst(a.id, hours=24, limit=30)
+            if not getattr(a, "is_active", True):
+                continue
+            stories = get_macro_stories_for_analyst(a.id, hours=24, limit=100)
             if not stories:
                 print(f"[{a.name}] No policy updates today.")
+                results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "no_updates"})
                 continue
             file_path, _ = generate_macro_digest(a.id, a.name, stories)
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
             res = send_whatsapp_macro_digest(
                 analyst_name=a.name,
                 analyst_phone=a.phone,
                 stories=stories,
                 pdf_path=file_path,
+                public_pdf_url=public_pdf_url,
             )
-            print(f"[{a.name}] Result: {res.get('status')} -> {res.get('message')}")
+            st = res.get("status", "sent")
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": st, "message": res.get("message")})
+            print(f"[{a.name}] Result: {st} -> {res.get('message')}")
+
+        sent_count = len([r for r in results if r["status"] == "sent"])
+        total_stories = sum(r["count"] for r in results)
+        run_status = "COMPLETED" if sent_count > 0 else ("CLEAN" if all(r["status"] == "no_updates" for r in results) else "PARTIAL")
+        record_dispatch_run("evening_macro", recipients_count=sent_count, stories_count=total_stories, status=run_status, details=results)
 
     elif args.command == "status":
         stats = get_dashboard_stats()

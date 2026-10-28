@@ -67,6 +67,27 @@ def canonical_url(url: str | None) -> str:
         return (url or "").strip()
 
 
+def resolve_news_url(url: str | None) -> str:
+    """Decode Google News redirect URL to its true destination or return cleaned url."""
+    if not url:
+        return ""
+    u = url.strip()
+    if "news.google.com" not in u:
+        return u
+    try:
+        from googlenewsdecoder import gnewsdecoder
+        res = gnewsdecoder(u)
+        if isinstance(res, dict):
+            dec = res.get("decoded_url")
+            if dec:
+                return html.unescape(str(dec)).strip()
+        elif isinstance(res, str) and res.startswith("http"):
+            return html.unescape(res).strip()
+    except Exception:
+        pass
+    return u
+
+
 def strip_publisher_suffix(title: str, publisher: str = "") -> str:
     """Strip trailing publisher branding (e.g. 'Tata Motors Q2 - The Economic Times' -> 'Tata Motors Q2')."""
     if not title:
@@ -108,11 +129,11 @@ NOISE_PATTERNS = [
     r"\b(it sector (q[1-4] )?results preview|sector preview|sector rally|spark(s)? (it )?rally)\b",
     # 4. Celebrity, startup drama, lifestyle, clickbait
     r"\b(shark tank|anupam mittal|ashneer|aman gupta|viral|net worth|bollywood|horoscope|astrology|rashifal)\b",
-    # 5. Automated ticker pages & algorithmic noise
-    r"\b(share price,\s*(nse|bse)|share price live updates|stock price live)\b",
     # 6. Retail clickbait questions & speculative fluff
     r"\b(who really owns|can .* aid the bounce back|experts['\s]+views?|what investors should know|what should you do|here['’]s why)\b",
     r"\b(top \d+ factors|reasons behind|reasons why)\b",
+    # 7. Paid PR, sponsored content, advertorials, and promotional marketing
+    r"\b(sponsored|partnered\s*content|partner\s*content|brand\s*story|brand\s*voice|advertorial|press\s*release\s*wire|business\s*wire|newsvoir|promoted\s*by|in\s*collaboration\s*with)\b",
 ]
 
 
@@ -122,6 +143,64 @@ def is_generic_market_noise(title: str) -> bool:
         return True
     t_lower = title.lower()
     return any(re.search(pat, t_lower) for pat in NOISE_PATTERNS)
+
+
+# Patterns for subscription paywalls that block human readers
+PAYWALLED_URL_PATTERNS = [
+    r"economictimes\.indiatimes\.com/prime(/|$|\?)",
+    r"economictimes\.indiatimes\.com/.*-prime",
+    r"livemint\.com/mint-premium(/|$|\?)",
+    r"livemint\.com/.*-premium",
+    r"livemint\.com/.*/premium(/|$|\?)",
+    r"business-standard\.com/.*bs-premium",
+    r"business-standard\.com/.*premium-story",
+    r"business-standard\.com/premium(/|$|\?)",
+    r"bloomberg\.com/",
+    r"thehindubusinessline\.com/portfolio(/|$|\?)",
+    r"financialexpress\.com/.*-premium(/|$|\?)",
+]
+
+
+def is_paywalled_url(url: str | None) -> bool:
+    """Identify articles behind subscription paywalls (e.g. ET Prime, Mint Premium, BS Premium)."""
+    if not url:
+        return False
+    u = url.lower()
+    return any(re.search(pat, u) for pat in PAYWALLED_URL_PATTERNS)
+
+
+SPONSORED_PATTERNS = [
+    r"\b(sponsored|partnered\s*content|partner\s*content|brand\s*story|brand\s*voice|advertorial|press\s*release\s*wire|business\s*wire|newsvoir|promoted\s*by|in\s*collaboration\s*with)\b",
+]
+
+PR_WIRE_DOMAINS = [
+    "newsvoir.com",
+    "businesswireindia.com",
+    "businesswire.com",
+    "prnewswire.com",
+    "prlog.org",
+    "presswire.com",
+    "aninews.in",
+    "openpr.com",
+    "brand-solutions",
+    "partner-content",
+    "brandstory",
+    "advertorial",
+]
+
+
+def is_sponsored_or_pr(title: str, url: str | None = None) -> bool:
+    """Identify paid advertorials, promotional brand stories, and PR agency wires."""
+    t_lower = (title or "").lower()
+    if any(re.search(pat, t_lower) for pat in SPONSORED_PATTERNS):
+        return True
+    if url:
+        u_lower = url.lower()
+        if any(d in u_lower for d in PR_WIRE_DOMAINS):
+            return True
+        if re.search(r"/(sponsored|advertorial|partner-content|brand-post|brand-stories|native-content)/", u_lower):
+            return True
+    return False
 
 
 def extract_event_signature(title: str, summary: str = "") -> str | None:
@@ -317,6 +396,18 @@ BLACKLIST_KEYWORDS = [
     "simply wall street",
     "marketbeat",
     "apnnews",
+    # PR & promotional wire services
+    "newsvoir",
+    "businesswireindia",
+    "businesswire",
+    "prnewswire",
+    "prlog",
+    "presswire",
+    "aninews",
+    "brand-solutions",
+    "partner-content",
+    "brandstory",
+    "advertorial",
 ]
 
 
@@ -329,8 +420,12 @@ def is_reputable_publisher(source_name: str, url: str | None = None, source_type
     s_lower = (source_name or "").lower().strip()
     u_lower = (url or "").lower().strip()
 
-    # 2. Strict blacklist check: immediately reject scrapers, aggregators, and spam blogs
+    # 2. Strict blacklist check: immediately reject scrapers, aggregators, PR wires, and spam blogs
     if any(b in s_lower or b in u_lower for b in BLACKLIST_KEYWORDS):
+        return False
+
+    # 2b. Reject paid advertorials, sponsored content, and PR distribution networks
+    if is_sponsored_or_pr(s_lower, u_lower):
         return False
 
     # 3. Whitelist check by URL domain

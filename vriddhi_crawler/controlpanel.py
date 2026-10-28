@@ -52,6 +52,7 @@ class Analyst:
     assigned_companies: list[str] = field(default_factory=list)
     assigned_folders: list[str] = field(default_factory=list)
     macro_sectors: list[str] = field(default_factory=lambda: ["ALL"])
+    is_active: bool = True
 
 
 def create_starter_excel(file_path: Path = CONTROL_PANEL_PATH) -> None:

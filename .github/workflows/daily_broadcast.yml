@@ -54,8 +54,7 @@ jobs:
         if: >
           github.event.action == 'morning_companies_broadcast' ||
           github.event.inputs.target == 'morning_companies_broadcast' ||
-          github.event.inputs.target == 'both' ||
-          github.event.schedule == '30 3 * * *'
+          github.event.inputs.target == 'both'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}
@@ -72,8 +71,7 @@ jobs:
         if: >
           github.event.action == 'evening_sectorial_broadcast' ||
           github.event.inputs.target == 'evening_sectorial_broadcast' ||
-          github.event.inputs.target == 'both' ||
-          github.event.schedule == '0 12 * * *'
+          github.event.inputs.target == 'both'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INTERAKT_API_KEY: ${{ secrets.INTERAKT_API_KEY }}

@@ -992,7 +992,8 @@ def test_ping_analyst(analyst_id: str):
 @app.delete("/api/analysts/{analyst_id}")
 def remove_analyst(analyst_id: str):
     analysts = {a.id: a for a in get_analysts()}
-    name = analysts.get(analyst_id).name if analysts.get(analyst_id) else analyst_id
+    client = analysts.get(analyst_id)
+    name = client.name if client is not None else analyst_id
     delete_analyst(analyst_id)
     log_audit_event("CLIENT_DELETE", name, f"Deleted client '{name}' (ID: {analyst_id})")
     return {"status": "deleted"}

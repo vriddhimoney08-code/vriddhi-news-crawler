@@ -29,6 +29,12 @@ IST = timezone(timedelta(hours=5, minutes=30))
 PORT = int(os.getenv("PORT", "3009"))
 HOST = os.getenv("HOST", "0.0.0.0")
 
+# Dashboard Authentication
+DASHBOARD_USERNAME = os.getenv("DASHBOARD_USERNAME", "Admin").strip()
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "Admin@123").strip()
+SESSION_SECRET = os.getenv("SESSION_SECRET", "vriddhi_auth_secret_key_2026_99x").strip()
+
+
 # Safety switches & test recipient
 TEST_MODE = os.getenv("TEST_MODE", "no").strip().lower() in ("yes", "true", "1")
 TEST_WHATSAPP = os.getenv("TEST_WHATSAPP", "").strip()

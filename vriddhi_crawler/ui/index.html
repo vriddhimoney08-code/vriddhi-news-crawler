@@ -54,10 +54,16 @@
         </div>
       </div>
 
-      <div class="topbar-right">
+      <div class="topbar-right" style="display: flex; align-items: center; gap: 10px;">
         <button id="btn-trigger-crawl" class="terminal-action-btn">
           <span class="play-icon">&#9658;</span>
           <span id="crawl-btn-text">Run Crawl Now</span>
+        </button>
+        <div class="topbar-user-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; font-size: 0.78rem; font-weight: 700; color: #a5b4fc;">
+          <span>👤</span> <span id="topbar-user-name">Admin</span>
+        </div>
+        <button id="btn-logout" class="btn-logout-topbar" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; background: rgba(244, 63, 94, 0.14); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 8px; font-size: 0.78rem; font-weight: 700; color: #fda4af; cursor: pointer; transition: all 0.2s ease;" title="Log out of terminal">
+          <span style="font-size: 0.88rem;">⏻</span> <span>Logout</span>
         </button>
       </div>
     </header>
@@ -95,6 +101,10 @@
           <button class="nav-item" data-view="view-settings">
             <span class="nav-icon">&#9881;</span>
             <span class="nav-label">Settings</span>
+          </button>
+          <button class="nav-item" data-view="view-history" id="nav-btn-history">
+            <span class="nav-icon">&#128339;</span>
+            <span class="nav-label">History &amp; Logs</span>
           </button>
         </nav>
 
@@ -1190,6 +1200,93 @@
           </div>
         </section>
 
+        <!-- VIEW 7: HISTORY & AUDIT LOGS -->
+        <section id="view-history" class="workspace-view">
+          <div class="view-header-bar" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+              <div class="view-title-tag">DISPATCH AUDIT &amp; CHANGE TRACKING</div>
+              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">History &amp; System Activity Logs</h2>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">Comprehensive verification records of automated daily broadcast runs, recipient deliveries, and administrative changes.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <button id="btn-refresh-history-view" class="btn-secondary-action" style="cursor: pointer;">
+                <span class="btn-icon">🔄</span> Refresh Logs
+              </button>
+            </div>
+          </div>
+
+          <!-- Dual Panel Grid -->
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- PANEL 1: Daily Trigger & Broadcast History -->
+            <div class="setting-card" style="padding: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 1.25rem;">📡</span>
+                  <div>
+                    <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin: 0;">Daily Broadcast Dispatches</h3>
+                    <span style="font-size: 0.74rem; color: var(--text-muted);">Execution records of 8:30 AM Morning Equity, 5:15 PM Evening Macro, and manual test triggers</span>
+                  </div>
+                </div>
+                <span id="dispatch-runs-count-badge" class="badge-tag" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3); font-size: 0.74rem; font-weight: 700; padding: 3px 10px; border-radius: 6px;">0 Runs Recorded</span>
+              </div>
+
+              <div style="overflow-x: auto; max-height: 380px; border: 1px solid var(--border-subtle); border-radius: 10px; background: rgba(0, 0, 0, 0.2);">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid var(--border-default); background: rgba(15, 23, 42, 0.7); text-align: left; color: var(--text-muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                      <th style="padding: 10px 14px;">Timestamp (IST)</th>
+                      <th style="padding: 10px 14px;">Broadcast Type</th>
+                      <th style="padding: 10px 14px;">Recipients</th>
+                      <th style="padding: 10px 14px;">Stories Sent</th>
+                      <th style="padding: 10px 14px; text-align: right;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-dispatch-table-body">
+                    <tr>
+                      <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading dispatch runs...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- PANEL 2: Change Log & Audit Trail -->
+            <div class="setting-card" style="padding: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 1.25rem;">📝</span>
+                  <div>
+                    <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin: 0;">System Change Log &amp; Audit Trail</h3>
+                    <span style="font-size: 0.74rem; color: var(--text-muted);">Real-time log of analyst updates, phone number changes, sector modifications, and timing edits</span>
+                  </div>
+                </div>
+                <span id="audit-logs-count-badge" class="badge-tag" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.74rem; font-weight: 700; padding: 3px 10px; border-radius: 6px;">0 Events</span>
+              </div>
+
+              <div style="overflow-x: auto; max-height: 420px; border: 1px solid var(--border-subtle); border-radius: 10px; background: rgba(0, 0, 0, 0.2);">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid var(--border-default); background: rgba(15, 23, 42, 0.7); text-align: left; color: var(--text-muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                      <th style="padding: 10px 14px; width: 175px;">Time (IST)</th>
+                      <th style="padding: 10px 14px; width: 100px;">Actor</th>
+                      <th style="padding: 10px 14px; width: 140px;">Category</th>
+                      <th style="padding: 10px 14px; width: 150px;">Target</th>
+                      <th style="padding: 10px 14px;">Change Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-audit-table-body">
+                    <tr>
+                      <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading activity history...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
       </main>
 
     </div>
@@ -1916,6 +2013,58 @@
 
   </div>
 
-  <script src="/static/app.js?v=5.2"></script>
+  <!-- Full-Screen Login Overlay -->
+  <div id="login-overlay" style="display: none; position: fixed; inset: 0; z-index: 999999; background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.2), transparent 70%), #070a11; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); align-items: center; justify-content: center; padding: 20px;">
+    <div style="width: 100%; max-width: 420px; background: #0f1627; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px; box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 40px rgba(99, 102, 241, 0.25); overflow: hidden;">
+      
+      <!-- Login Header -->
+      <div style="padding: 34px 28px 22px; text-align: center; background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, transparent 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+        <div style="width: 64px; height: 64px; margin: 0 auto 16px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 22px rgba(99, 102, 241, 0.3);">
+          <img src="/static/vriddhi_owl_clean.png" alt="Vriddhi" style="width: 42px; height: 42px; object-fit: contain;">
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #fff; letter-spacing: -0.3px; margin: 0;">VRIDDHI <span style="color: #6366f1;">MONEY</span></h2>
+        <p style="font-size: 0.82rem; color: #94a3b8; margin: 6px 0 0; font-weight: 500;">Automated Market Intelligence Desk</p>
+        <div style="display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 3px 12px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 999px; font-size: 0.72rem; color: #34d399; font-weight: 600;">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981;"></span>
+          <span>Secure Terminal Access</span>
+        </div>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" style="padding: 26px 28px 30px;">
+        <!-- Error banner -->
+        <div id="login-error-msg" style="display: none; margin-bottom: 18px; padding: 10px 14px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 8px; font-size: 0.82rem; color: #fda4af; display: flex; align-items: center; gap: 8px;">
+          <span>⚠️</span> <span id="login-error-text">Invalid username or password</span>
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <label for="login-username" style="display: block; font-size: 0.76rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;">Username</label>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 0.95rem; color: #64748b;">👤</span>
+            <input type="text" id="login-username" autocomplete="username" required placeholder="Enter username" style="width: 100%; background: #070a11; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 12px 14px 12px 42px; font-size: 0.92rem; color: #fff; font-family: var(--font-sans); outline: none; transition: all 0.2s ease;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 24px;">
+          <label for="login-password" style="display: block; font-size: 0.76rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;">Password</label>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 0.95rem; color: #64748b;">🔒</span>
+            <input type="password" id="login-password" autocomplete="current-password" required placeholder="Enter password" style="width: 100%; background: #070a11; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 12px 14px 12px 42px; font-size: 0.92rem; color: #fff; font-family: var(--font-sans); outline: none; transition: all 0.2s ease;">
+          </div>
+        </div>
+
+        <button type="submit" id="btn-login-submit" style="width: 100%; background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; font-weight: 700; font-size: 0.94rem; padding: 12px 20px; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 18px rgba(99, 102, 241, 0.4); transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span id="login-btn-text">Sign In to Terminal</span>
+          <span style="font-size: 1.05rem;">→</span>
+        </button>
+
+        <div style="margin-top: 18px; text-align: center; font-size: 0.72rem; color: #64748b;">
+          Authorized Access Only &bull; Vriddhi Capital Research
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=5.3"></script>
 </body>
 </html>

@@ -176,6 +176,9 @@ document.addEventListener("DOMContentLoaded", () => {
         loadSchedulerStatus();
         loadPromptStudio();
       }
+      if (targetId === "view-history") {
+        loadHistoryView();
+      }
     });
   });
 
@@ -5209,8 +5212,229 @@ Infosys Ltd, INFY, JUNIOR`;
     });
   }
 
+  // =========================================================================
+  // History & Audit Logs View
+  // =========================================================================
+  async function loadHistoryView() {
+    await Promise.all([loadDispatchHistory(), loadAuditLogs()]);
+  }
+
+  async function loadDispatchHistory() {
+    const tbody = document.getElementById("history-dispatch-table-body");
+    const countBadge = document.getElementById("dispatch-runs-count-badge");
+    if (!tbody) return;
+    try {
+      const res = await fetch("/api/scheduler/history");
+      const data = await res.json();
+      const runs = data.runs || [];
+      if (countBadge) countBadge.textContent = `${runs.length} Runs Recorded`;
+
+      if (runs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">
+              No broadcast dispatches recorded yet. Use "Run Now" or wait for the 8:30 AM / 5:15 PM automated server crontab.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = runs.map(r => {
+        let runBadge = `<span class="badge-run-manual" style="padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3);">MANUAL</span>`;
+        const typeLower = (r.run_type || "").toLowerCase();
+        if (typeLower.includes("morning")) {
+          runBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 0.72rem;">☀️ MORNING EQUITY</span>`;
+        } else if (typeLower.includes("evening")) {
+          runBadge = `<span style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.35); padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 0.72rem;">🌙 EVENING MACRO</span>`;
+        }
+
+        const statusOk = (r.status || "").toUpperCase() === "COMPLETED";
+        const statusPill = `<span style="padding: 3px 9px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; background: ${statusOk ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)'}; color: ${statusOk ? '#34d399' : '#fda4af'}; border: 1px solid ${statusOk ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'};">${escapeHtml(r.status || 'DONE')}</span>`;
+
+        return `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 11px 14px; font-family: var(--font-mono); color: #cbd5e1; font-size: 0.8rem;">${escapeHtml(r.dispatched_at || '')}</td>
+            <td style="padding: 11px 14px;">${runBadge}</td>
+            <td style="padding: 11px 14px; font-weight: 600; color: #fff;">👥 ${r.recipients_count || 0} Recipients</td>
+            <td style="padding: 11px 14px; color: var(--text-muted);">📰 ${r.stories_count || 0} Stories</td>
+            <td style="padding: 11px 14px; text-align: right;">${statusPill}</td>
+          </tr>
+        `;
+      }).join("");
+    } catch (err) {
+      console.error("Failed to load dispatch history:", err);
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #f87171; padding: 20px;">Failed to load dispatch history</td></tr>`;
+    }
+  }
+
+  async function loadAuditLogs() {
+    const tbody = document.getElementById("history-audit-table-body");
+    const countBadge = document.getElementById("audit-logs-count-badge");
+    if (!tbody) return;
+    try {
+      const res = await fetch("/api/audit-logs");
+      const data = await res.json();
+      const logs = data.logs || [];
+      if (countBadge) countBadge.textContent = `${logs.length} Events`;
+
+      if (logs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">
+              No system changes recorded yet. Edits to analysts, phone numbers, sectors, and schedule settings will appear here automatically.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = logs.map(l => {
+        let catColor = "#94a3b8";
+        let catBg = "rgba(148, 163, 184, 0.12)";
+        const cat = (l.action_type || "").toUpperCase();
+        if (cat.includes("AUTH")) {
+          catColor = "#a78bfa";
+          catBg = "rgba(167, 139, 250, 0.15)";
+        } else if (cat.includes("CLIENT") || cat.includes("ANALYST")) {
+          catColor = "#38bdf8";
+          catBg = "rgba(56, 189, 248, 0.15)";
+        } else if (cat.includes("SETTINGS")) {
+          catColor = "#fbbf24";
+          catBg = "rgba(251, 191, 36, 0.15)";
+        } else if (cat.includes("TRIGGER")) {
+          catColor = "#34d399";
+          catBg = "rgba(52, 211, 153, 0.15)";
+        }
+
+        return `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 10px 14px; font-family: var(--font-mono); color: #cbd5e1; font-size: 0.78rem;">${escapeHtml(l.timestamp || '')}</td>
+            <td style="padding: 10px 14px; font-weight: 700; color: #e2e8f0; font-size: 0.8rem;">👤 ${escapeHtml(l.actor || 'Admin')}</td>
+            <td style="padding: 10px 14px;">
+              <span style="padding: 3px 8px; border-radius: 5px; font-size: 0.7rem; font-weight: 700; background: ${catBg}; color: ${catColor}; border: 1px solid ${catColor}40;">${escapeHtml(l.action_type || '')}</span>
+            </td>
+            <td style="padding: 10px 14px; font-weight: 600; color: #f1f5f9;">${escapeHtml(l.target_name || 'System')}</td>
+            <td style="padding: 10px 14px; color: var(--text-muted); font-size: 0.8rem; line-height: 1.4;">${escapeHtml(l.details || '')}</td>
+          </tr>
+        `;
+      }).join("");
+    } catch (err) {
+      console.error("Failed to load audit logs:", err);
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #f87171; padding: 20px;">Failed to load audit logs</td></tr>`;
+    }
+  }
+
+  const btnRefreshHistory = document.getElementById("btn-refresh-history-view");
+  if (btnRefreshHistory) {
+    btnRefreshHistory.addEventListener("click", () => {
+      btnRefreshHistory.disabled = true;
+      btnRefreshHistory.innerHTML = `<span>⏳ Refreshing...</span>`;
+      loadHistoryView().finally(() => {
+        btnRefreshHistory.disabled = false;
+        btnRefreshHistory.innerHTML = `<span class="btn-icon">🔄</span> Refresh Logs`;
+      });
+    });
+  }
+
+  // =========================================================================
+  // Authentication & Session Protection
+  // =========================================================================
+  const loginOverlay = document.getElementById("login-overlay");
+  const loginForm = document.getElementById("login-form");
+  const loginUsernameInput = document.getElementById("login-username");
+  const loginPasswordInput = document.getElementById("login-password");
+  const loginErrorMsg = document.getElementById("login-error-msg");
+  const loginErrorText = document.getElementById("login-error-text");
+  const btnLoginSubmit = document.getElementById("btn-login-submit");
+  const btnLogout = document.getElementById("btn-logout");
+  const topbarUserName = document.getElementById("topbar-user-name");
+
+  async function checkAuthStatus() {
+    try {
+      const res = await fetch("/api/auth/check");
+      const data = await res.json();
+      if (data.authenticated) {
+        if (loginOverlay) loginOverlay.style.display = "none";
+        if (topbarUserName) topbarUserName.textContent = data.username || "Admin";
+      } else {
+        if (loginOverlay) {
+          loginOverlay.style.display = "flex";
+          if (loginUsernameInput) loginUsernameInput.focus();
+        }
+      }
+    } catch (err) {
+      console.warn("Auth check failed:", err);
+    }
+  }
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (loginErrorMsg) loginErrorMsg.style.display = "none";
+      if (btnLoginSubmit) {
+        btnLoginSubmit.disabled = true;
+        btnLoginSubmit.innerHTML = `<span>⏳ Verifying...</span>`;
+      }
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: (loginUsernameInput?.value || "").trim(),
+            password: (loginPasswordInput?.value || "").trim(),
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Invalid username or password");
+        }
+
+        const data = await res.json();
+        if (topbarUserName) topbarUserName.textContent = data.username || "Admin";
+        if (loginOverlay) loginOverlay.style.display = "none";
+        showToast("Access Granted • Welcome to Vriddhi Intelligence Desk", false);
+        initDashboard();
+      } catch (err) {
+        if (loginErrorMsg) {
+          loginErrorMsg.style.display = "flex";
+          if (loginErrorText) loginErrorText.textContent = err.message || "Invalid credentials";
+        }
+        if (loginPasswordInput) {
+          loginPasswordInput.value = "";
+          loginPasswordInput.focus();
+        }
+      } finally {
+        if (btnLoginSubmit) {
+          btnLoginSubmit.disabled = false;
+          btnLoginSubmit.innerHTML = `<span>Sign In to Terminal</span> <span style="font-size: 1.05rem;">→</span>`;
+        }
+      }
+    });
+  }
+
+  if (btnLogout) {
+    btnLogout.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to log out of the terminal?")) return;
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch (e) {
+        console.warn("Logout error:", e);
+      }
+      if (loginOverlay) {
+        loginOverlay.style.display = "flex";
+        if (loginPasswordInput) loginPasswordInput.value = "";
+        if (loginUsernameInput) loginUsernameInput.focus();
+      }
+      showToast("Logged out successfully", false);
+    });
+  }
+
   // Initial Load
   async function initDashboard() {
+    await checkAuthStatus();
     loadStats();
     loadMacroStats();
     loadDeliveryMode();
@@ -5226,3 +5450,4 @@ Infosys Ltd, INFY, JUNIOR`;
   }
   initDashboard();
 });
+

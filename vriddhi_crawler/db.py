@@ -144,6 +144,17 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
             details_json TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_dispatch_time ON dispatch_runs(dispatched_at);
+
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'Admin',
+            action_type TEXT NOT NULL,
+            target_name TEXT,
+            details TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at);
         """)
 
         # Safe migration for folder column
@@ -575,6 +586,39 @@ def get_dispatch_runs(limit: int = 20, db_path: Path = DB_PATH) -> list[dict]:
                 d["details"] = []
             result.append(d)
         return result
+
+
+def log_audit_event(
+    action_type: str,
+    target_name: str,
+    details: str,
+    actor: str = "Admin",
+    db_path: Path = DB_PATH
+) -> int:
+    """Record an administrative change or system event in the audit trail."""
+    now_ist = datetime.now(IST).strftime("%Y-%m-%d %I:%M:%S %p IST")
+    now_utc = datetime.now(UTC).isoformat()
+    try:
+        with get_connection(db_path) as conn:
+            cur = conn.execute(
+                """INSERT INTO audit_logs (timestamp, actor, action_type, target_name, details, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (now_ist, actor, action_type, target_name, details, now_utc)
+            )
+            return cur.lastrowid or 0
+    except Exception as exc:
+        log.warning("Failed to record audit event: %s", exc)
+        return 0
+
+
+def get_audit_logs(limit: int = 100, db_path: Path = DB_PATH) -> list[dict]:
+    """Retrieve recent audit logs in descending chronological order."""
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
 
 
 def clear_sent_ledger(analyst_id: str | None = None, db_path: Path = DB_PATH) -> int:

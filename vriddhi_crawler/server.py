@@ -1,20 +1,29 @@
 """FastAPI Application for Vriddhi News Crawler Web Dashboard on port 3009."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
+import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .config import DIGESTS_DIR, PORT
+from .config import (
+    DIGESTS_DIR,
+    PORT,
+    DASHBOARD_USERNAME,
+    DASHBOARD_PASSWORD,
+    SESSION_SECRET,
+)
 from .controlpanel import Analyst, Company
 from .db import (
     add_folder,
@@ -41,6 +50,8 @@ from .db import (
     save_company,
     toggle_source_status,
     update_source,
+    log_audit_event,
+    get_audit_logs,
 )
 from .http import Fetcher
 from .pdf import generate_analyst_digest, get_clean_digest_filename, render_digest_html
@@ -61,6 +72,107 @@ app.add_middleware(
 
 # Initialize database schema on startup
 init_db(seed_defaults=True)
+
+
+# =========================================================================
+# Authentication & Session Security
+# =========================================================================
+def create_session_token(username: str) -> str:
+    """Create a tamper-proof HMAC signed session token valid for 30 days."""
+    ts = str(int(time.time()))
+    data = f"{username}:{ts}".encode("utf-8")
+    sig = hmac.new(SESSION_SECRET.encode("utf-8"), data, hashlib.sha256).hexdigest()
+    return f"{username}.{ts}.{sig}"
+
+
+def verify_session_token(token: str | None) -> str | None:
+    """Validate token cryptographic signature and expiration."""
+    if not token or "." not in token:
+        return None
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        username, ts_str, sig = parts
+        # 30 days expiration window (30 * 86400 = 2,592,000 seconds)
+        ts = int(ts_str)
+        if time.time() - ts > 2592000:
+            return None
+        data = f"{username}:{ts_str}".encode("utf-8")
+        expected_sig = hmac.new(SESSION_SECRET.encode("utf-8"), data, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(sig, expected_sig):
+            return username
+    except Exception:
+        return None
+    return None
+
+
+def get_current_user(request: Request) -> str | None:
+    """Extract authenticated user from cookie or Authorization header."""
+    token = request.cookies.get("vriddhi_session")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+    return verify_session_token(token)
+
+
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/login")
+def api_login(payload: LoginPayload, response: Response):
+    """Authenticate user with username and password, issuing a signed session cookie."""
+    u = payload.username.strip()
+    p = payload.password.strip()
+    if u.lower() != DASHBOARD_USERNAME.lower() or p != DASHBOARD_PASSWORD:
+        log_audit_event("AUTH_FAILED", u, f"Failed login attempt for username '{u}'")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = create_session_token(DASHBOARD_USERNAME)
+    response.set_cookie(
+        key="vriddhi_session",
+        value=token,
+        max_age=2592000,
+        httponly=True,
+        samesite="lax",
+        path="/"
+    )
+    log_audit_event("AUTH_LOGIN", DASHBOARD_USERNAME, f"User '{DASHBOARD_USERNAME}' logged in to control panel")
+    return {"status": "ok", "token": token, "username": DASHBOARD_USERNAME}
+
+
+@app.post("/api/auth/logout")
+def api_logout(request: Request, response: Response):
+    """Log out user and invalidate browser session."""
+    user = get_current_user(request) or DASHBOARD_USERNAME
+    log_audit_event("AUTH_LOGOUT", user, f"User '{user}' logged out")
+    response.delete_cookie(key="vriddhi_session", path="/")
+    return {"status": "ok", "message": "Logged out successfully"}
+
+
+@app.get("/api/auth/check")
+def api_auth_check(request: Request):
+    """Check current authentication state."""
+    user = get_current_user(request)
+    if user:
+        return {"authenticated": True, "username": user}
+    return {"authenticated": False}
+
+
+@app.get("/api/audit-logs")
+def api_list_audit_logs(limit: int = 100):
+    """Retrieve system audit and change history log."""
+    return {"status": "ok", "logs": get_audit_logs(limit)}
+
+
+@app.get("/api/scheduler/history")
+def api_list_dispatch_history(limit: int = 50):
+    """Retrieve full trigger and broadcast execution history."""
+    return {"status": "ok", "runs": get_dispatch_runs(limit)}
+
 
 # Mount static frontend directory
 STATIC_DIR = Path(__file__).resolve().parent / "ui"
@@ -828,6 +940,7 @@ def create_or_update_analyst(item: AnalystCreate):
         is_active=item.is_active
     )
     save_analyst(analyst)
+    log_audit_event("CLIENT_UPDATE", analyst.name, f"Saved client {analyst.name} (Phone: {analyst.phone}, Active: {analyst.is_active}, Sectors: {len(analyst.macro_sectors)})")
     return {"status": "ok", "analyst": asdict(analyst)}
 
 
@@ -840,6 +953,8 @@ def toggle_analyst_status(analyst_id: str):
         raise HTTPException(status_code=404, detail="Client not found")
     a.is_active = not getattr(a, "is_active", True)
     save_analyst(a)
+    st = "ACTIVE" if a.is_active else "PAUSED"
+    log_audit_event("CLIENT_TOGGLE", a.name, f"Toggled delivery status of client {a.name} to {st}")
     return {"status": "ok", "id": analyst_id, "is_active": a.is_active}
 
 
@@ -862,12 +977,16 @@ def test_ping_analyst(analyst_id: str):
         stories=sample_story,
         pdf_path=None
     )
+    log_audit_event("TEST_PING", a.name, f"Sent test WhatsApp ping to {a.name} ({a.phone})")
     return res
 
 
 @app.delete("/api/analysts/{analyst_id}")
 def remove_analyst(analyst_id: str):
+    analysts = {a.id: a for a in get_analysts()}
+    name = analysts.get(analyst_id).name if analysts.get(analyst_id) else analyst_id
     delete_analyst(analyst_id)
+    log_audit_event("CLIENT_DELETE", name, f"Deleted client '{name}' (ID: {analyst_id})")
     return {"status": "deleted"}
 
 
@@ -1007,18 +1126,25 @@ def save_scheduler_settings(payload: dict):
         content = update_var(content, "CRAWL_INTERVAL_MINUTES", str(int(payload["crawl_interval_minutes"])))
 
     env_path.write_text(content, encoding="utf-8")
+    log_audit_event(
+        "SETTINGS_UPDATE",
+        "Scheduler",
+        f"Updated dispatch schedule: Morning={payload.get('morning_time', '08:30')} (Active: {payload.get('morning_active', True)}), Evening={payload.get('evening_time', '17:15')} (Active: {payload.get('evening_active', True)})"
+    )
     return {"status": "ok", "message": "Scheduler settings updated and persisted"}
 
 
 @app.post("/api/scheduler/trigger-morning")
 def manual_trigger_morning(crawl: bool = False):
-    """Manual on-demand trigger of the 8:00 AM Equity Digest broadcast."""
+    """Manual on-demand trigger of the 8:30 AM Equity Digest broadcast."""
+    log_audit_event("MANUAL_TRIGGER", "Morning Equity Digest", "Initiated manual morning digest dispatch from web terminal")
     return trigger_cron_morning_broadcast(run_crawl=crawl)
 
 
 @app.post("/api/scheduler/trigger-evening")
 def manual_trigger_evening(crawl: bool = False):
-    """Manual on-demand trigger of the 6:30 PM Macro Briefing broadcast."""
+    """Manual on-demand trigger of the 5:15 PM Macro Briefing broadcast."""
+    log_audit_event("MANUAL_TRIGGER", "Evening Macro Briefing", "Initiated manual evening macro dispatch from web terminal")
     return trigger_cron_evening_broadcast(run_crawl=crawl)
 
 
@@ -1026,6 +1152,7 @@ def manual_trigger_evening(crawl: bool = False):
 def manual_clear_sent_ledger():
     """Clear sent stories ledger so test dispatches can be executed."""
     count = clear_sent_ledger()
+    log_audit_event("LEDGER_CLEAR", "Sent Ledger", f"Manually cleared {count} records from sent stories ledger")
     return {"status": "ok", "cleared_records": count, "message": f"Cleared {count} ledger records"}
 
 

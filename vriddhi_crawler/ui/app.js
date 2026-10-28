@@ -5457,8 +5457,46 @@ Infosys Ltd, INFY, JUNIOR`;
     });
   }
 
+  // =========================================================================
+  // Theme Management (Dark & Light Mode with Persistence)
+  // =========================================================================
+  const btnThemeToggle = document.getElementById("btn-theme-toggle");
+  const themeToggleIcon = document.getElementById("theme-toggle-icon");
+  const themeToggleText = document.getElementById("theme-toggle-text");
+
+  function applyTheme(theme) {
+    if (theme === "light") {
+      document.body.classList.remove("dark-theme");
+      document.body.classList.add("light-theme");
+      document.documentElement.setAttribute("data-theme", "light");
+      if (themeToggleIcon) themeToggleIcon.textContent = "🌙";
+      if (themeToggleText) themeToggleText.textContent = "Dark";
+      localStorage.setItem("vriddhi_theme", "light");
+    } else {
+      document.body.classList.remove("light-theme");
+      document.body.classList.add("dark-theme");
+      document.documentElement.setAttribute("data-theme", "dark");
+      if (themeToggleIcon) themeToggleIcon.textContent = "☀️";
+      if (themeToggleText) themeToggleText.textContent = "Light";
+      localStorage.setItem("vriddhi_theme", "dark");
+    }
+  }
+
+  // Load saved theme preference
+  const savedThemePref = localStorage.getItem("vriddhi_theme") || "dark";
+  applyTheme(savedThemePref);
+
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener("click", () => {
+      const isLight = document.body.classList.contains("light-theme");
+      applyTheme(isLight ? "dark" : "light");
+      showToast(`Switched to ${isLight ? 'Dark Obsidian' : 'Institutional Light'} Mode`, false);
+    });
+  }
+
   // Initial Load
   async function initDashboard() {
+
     await checkAuthStatus();
     loadStats();
     loadMacroStats();

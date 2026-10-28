@@ -52,6 +52,7 @@ from .db import (
     update_source,
     log_audit_event,
     get_audit_logs,
+    clear_audit_logs,
 )
 from .http import Fetcher
 from .pdf import generate_analyst_digest, get_clean_digest_filename, render_digest_html
@@ -163,9 +164,16 @@ def api_auth_check(request: Request):
 
 
 @app.get("/api/audit-logs")
-def api_list_audit_logs(limit: int = 100):
-    """Retrieve system audit and change history log."""
+def api_list_audit_logs(limit: int = 5):
+    """Retrieve system audit and change history log (strictly latest 5 entries)."""
     return {"status": "ok", "logs": get_audit_logs(limit)}
+
+
+@app.post("/api/audit-logs/clear")
+def api_clear_audit_logs():
+    """Vanish all system audit and change history logs."""
+    count = clear_audit_logs()
+    return {"status": "ok", "cleared_count": count, "message": "All change logs vanished successfully"}
 
 
 @app.get("/api/scheduler/history")

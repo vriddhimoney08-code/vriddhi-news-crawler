@@ -5337,6 +5337,31 @@ Infosys Ltd, INFY, JUNIOR`;
     });
   }
 
+  const btnClearAuditLogs = document.getElementById("btn-clear-audit-logs");
+  if (btnClearAuditLogs) {
+    btnClearAuditLogs.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to vanish and clear all past system change logs?")) return;
+      btnClearAuditLogs.disabled = true;
+      btnClearAuditLogs.innerHTML = `<span>⏳ Vanishing...</span>`;
+      try {
+        const res = await fetch("/api/audit-logs/clear", { method: "POST" });
+        if (res.ok) {
+          showToast("All activity logs vanished", false);
+          await loadAuditLogs();
+        } else {
+          showToast("Failed to clear logs", true);
+        }
+      } catch (err) {
+        console.error("Failed to clear audit logs:", err);
+        showToast("Error clearing logs", true);
+      } finally {
+        btnClearAuditLogs.disabled = false;
+        btnClearAuditLogs.innerHTML = `<span>🗑️</span> Clear Logs`;
+      }
+    });
+  }
+
+
   // =========================================================================
   // Authentication & Session Protection
   // =========================================================================

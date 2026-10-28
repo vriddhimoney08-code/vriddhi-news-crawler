@@ -595,7 +595,7 @@ def log_audit_event(
     actor: str = "Admin",
     db_path: Path = DB_PATH
 ) -> int:
-    """Record an administrative change or system event in the audit trail."""
+    """Record an administrative change or system event in the audit trail (strictly capped at 5 latest entries)."""
     now_ist = datetime.now(IST).strftime("%Y-%m-%d %I:%M:%S %p IST")
     now_utc = datetime.now(UTC).isoformat()
     try:
@@ -605,19 +605,34 @@ def log_audit_event(
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (now_ist, actor, action_type, target_name, details, now_utc)
             )
+            # Auto-limit: Keep only latest 5 entries, vanish anything older
+            conn.execute(
+                """DELETE FROM audit_logs
+                   WHERE id NOT IN (
+                       SELECT id FROM audit_logs ORDER BY id DESC LIMIT 5
+                   )"""
+            )
             return cur.lastrowid or 0
     except Exception as exc:
         log.warning("Failed to record audit event: %s", exc)
         return 0
 
 
-def get_audit_logs(limit: int = 100, db_path: Path = DB_PATH) -> list[dict]:
-    """Retrieve recent audit logs in descending chronological order."""
+def get_audit_logs(limit: int = 5, db_path: Path = DB_PATH) -> list[dict]:
+    """Retrieve recent audit logs in descending chronological order (strictly max 5)."""
     with get_connection(db_path) as conn:
         rows = conn.execute(
-            "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (min(limit, 5),)
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def clear_audit_logs(db_path: Path = DB_PATH) -> int:
+    """Vanish all audit logs and activity history."""
+    with get_connection(db_path) as conn:
+        cur = conn.execute("DELETE FROM audit_logs")
+        return cur.rowcount
+
 
 
 

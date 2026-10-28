@@ -121,10 +121,10 @@ class Pipeline:
                 try:
                     g_items = search.google_news(self.fetcher, comp, GOOGLE_NEWS_EDITIONS, since, errors)
                     for item in g_items:
-                        # Strictly verify that the headline or summary explicitly mentions this company or alias
-                        matched = any(m.id == comp.id for m in matcher.match_text(item.title))
-                        if not matched and item.summary:
-                            matched = any(m.id == comp.id for m in matcher.match_text(item.summary))
+                        # Strictly verify that the headline explicitly mentions this company or alias
+                        # Never fall back to summary for Google News because Google News RSS description
+                        # contains clustered links to unrelated articles (e.g. PVR Inox bundled with other stocks)
+                        matched = matcher.matches_company(comp, item.title)
                         if matched:
                             item.company_ids = [comp.id]
                             raw_items.append(item)
@@ -205,24 +205,20 @@ class Pipeline:
             if item.company_ids:
                 matched_companies = [company_lookup[cid] for cid in item.company_ids if cid in company_lookup]
             else:
+                # Primary match: The company name, symbol, or alias must appear in the headline
                 matched_companies = matcher.match_text(item.title)
-                if not matched_companies and item.summary:
-                    matched_companies = matcher.match_text(item.summary)
-                # If body check enabled and no headline/summary match, safely inspect main content
-                if not matched_companies and item.body_check and item.url and body_fetches < 10:
-                    try:
-                        r = self.fetcher.get(item.url, check_robots=False, delay=0.5, timeout=8)
-                        body = matcher.extract_body_text(r.content)
-                        if body:
-                            body_matches = matcher.match_text(body[:3000])
-                            # Only accept if exactly 1 company matches and name appears at least twice
-                            if len(body_matches) == 1:
-                                cand = body_matches[0]
-                                if body.lower().count(cand.name.lower()) >= 2:
-                                    matched_companies = [cand]
-                        body_fetches += 1
-                    except Exception:
-                        pass
+                # Only official corporate filings or company press releases may fall back to summary inspection
+                if not matched_companies and item.source_type in ("filing", "press"):
+                    if item.summary:
+                        matched_companies = matcher.match_text(item.summary)
+
+            # Strict institutional rule: For news articles, the company MUST be explicitly named in the headline.
+            # Never attribute an article headlined with another stock (e.g. PVR Inox) to a watchlist company.
+            if item.source_type not in ("filing", "press"):
+                matched_companies = [c for c in matched_companies if matcher.matches_company(c, item.title)]
+
+            if not matched_companies:
+                continue
 
             # Prioritize companies explicitly named in headline if multiple were found
             if len(matched_companies) > 1 and item.source_type != "filing":

@@ -67,6 +67,15 @@ class Matcher:
                 matched.append(company)
         return matched
 
+    def matches_company(self, company: Company, text: str) -> bool:
+        """Check if a specific company's name, symbol, or aliases match the given text."""
+        if not text or not company:
+            return False
+        for c, patterns in self._compiled_regexes:
+            if c.id == company.id:
+                return any(p.search(text) for p in patterns)
+        return False
+
     def grade_story(self, title: str, summary: str = "", source_type: str = "news") -> str:
         """Assign Grade A (High), Grade B (Medium), or Grade C (General)."""
         if source_type in ("filing", "rating"):

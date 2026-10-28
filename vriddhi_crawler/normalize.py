@@ -134,6 +134,10 @@ NOISE_PATTERNS = [
     r"\b(top \d+ factors|reasons behind|reasons why)\b",
     # 7. Paid PR, sponsored content, advertorials, and promotional marketing
     r"\b(sponsored|partnered\s*content|partner\s*content|brand\s*story|brand\s*voice|advertorial|press\s*release\s*wire|business\s*wire|newsvoir|promoted\s*by|in\s*collaboration\s*with)\b",
+    # 8. Multi-stock market roundups & non-company specific listicles
+    r"\b(stocks in (the )?news|stocks in focus|stocks to track|stocks that moved|stocks buzzing)\b",
+    r"\b(f&o ban|buzzing in trade|stocks you should watch|stocks trading|active stocks)\b",
+    r"\b(market live updates?|live market updates?|trading ideas?|day trading guide)\b",
 ]
 
 

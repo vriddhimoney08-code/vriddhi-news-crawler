@@ -262,6 +262,11 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
     except Exception as e:
         log.warning("purge_macro_archive_stories skipped: %s", e)
 
+    try:
+        cleanup_misattributed_stories(db_path)
+    except Exception as e:
+        log.warning("cleanup_misattributed_stories skipped: %s", e)
+
 
 def _seed_data(conn: sqlite3.Connection):
     # Seed default analysts ONLY if analysts table is completely empty (never overwrite/re-insert deleted)
@@ -1496,6 +1501,41 @@ def purge_macro_archive_stories(db_path: Path = DB_PATH) -> int:
                     pass
 
         return excluded_count
+
+
+def cleanup_misattributed_stories(db_path: Path = DB_PATH) -> int:
+    """Clean up Acutaas Chemicals aliases/queries and delete any misattributed cross-company stories."""
+    deleted_count = 0
+    with get_connection(db_path) as conn:
+        try:
+            row = conn.execute("SELECT aliases, search_queries FROM companies WHERE id = 'acutaaschemical'").fetchone()
+            if row:
+                aliases_raw, queries_raw = str(row["aliases"] or ""), str(row["search_queries"] or "")
+                if "Ami Organics" in aliases_raw or "Ami Organics" in queries_raw:
+                    conn.execute("""
+                        UPDATE companies
+                        SET aliases = '["Acutaas Chemicals", "Acutaas"]',
+                            search_queries = '["\\"Acutaas Chemicals\\"", "\\"ACUTAAS\\" share"]'
+                        WHERE id = 'acutaaschemical'
+                    """)
+                    log.info("Cleaned up Acutaas Chemicals aliases and search queries in SQLite DB")
+        except Exception as e:
+            log.warning("Acutaas company migration failed: %s", e)
+
+        # Remove any misattributed stories where title mentions PVR or INOX but is tagged as Acutaas Chemicals
+        try:
+            cur = conn.execute("""
+                DELETE FROM stories
+                WHERE company_id = 'acutaaschemical'
+                  AND (title LIKE '%PVR%' OR title LIKE '%INOX%')
+            """)
+            deleted_count = cur.rowcount
+            if deleted_count > 0:
+                log.info("Removed %d misattributed PVR/INOX stories from Acutaas Chemicals", deleted_count)
+        except Exception as e:
+            log.warning("PVR story cleanup failed: %s", e)
+
+    return deleted_count
 
 
 def get_macro_sectors(mode: str = "live", db_path: Path = DB_PATH) -> list[dict]:

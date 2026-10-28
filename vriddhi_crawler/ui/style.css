@@ -4874,6 +4874,60 @@ body.light-theme .btn-micro-delete-story {
 /* ==========================================================================
    2. MACRO & SECTOR DESK (LIGHT THEME)
    ========================================================================== */
+body.light-theme .macro-benchmark-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+body.light-theme .macro-benchmark-card:hover {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+  transform: translateY(-1px);
+}
+
+body.light-theme .macro-bench-label {
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.5px !important;
+}
+
+body.light-theme .macro-bench-val {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+  font-size: 1.18rem !important;
+}
+
+body.light-theme .macro-bench-change.bias-pos {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-bench-change.bias-neg {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-bench-change.bias-neu {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme #macro-sectors-total-badge {
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+}
+
 body.light-theme .macro-story-card {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;

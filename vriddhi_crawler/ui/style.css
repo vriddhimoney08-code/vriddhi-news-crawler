@@ -4649,7 +4649,9 @@ body.light-theme .btn-inspect-targets:hover {
 }
 
 body.light-theme .analyst-config-toolbar {
-  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
 }
 
 body.light-theme .config-label {
@@ -4664,7 +4666,7 @@ body.light-theme .mode-segmented-control {
 
 body.light-theme .mode-segment-btn {
   color: #475569 !important;
-  font-weight: 600;
+  font-weight: 600 !important;
 }
 
 body.light-theme .mode-segment-btn:hover {
@@ -4902,25 +4904,34 @@ body.light-theme .macro-authority-badge {
   font-weight: 800 !important;
 }
 
-body.light-theme .macro-tier-badge.tier-1 {
-  background: #fff1f2 !important;
-  border: 1px solid #fecdd3 !important;
-  color: #be123c !important;
+body.light-theme .macro-tier-badge {
+  font-weight: 800 !important;
+  font-size: 0.72rem !important;
+  padding: 3px 9px !important;
+}
+
+body.light-theme .macro-tier-badge.tier-1,
+body.light-theme .tier-1 {
+  background: #ffe4e6 !important;
+  border: 1px solid #f43f5e !important;
+  color: #9f1239 !important;
   font-weight: 800 !important;
 }
 
-body.light-theme .macro-tier-badge.tier-2 {
-  background: #fffbeb !important;
-  border: 1px solid #fde68a !important;
-  color: #b45309 !important;
+body.light-theme .macro-tier-badge.tier-2,
+body.light-theme .tier-2 {
+  background: #fef3c7 !important;
+  border: 1px solid #f59e0b !important;
+  color: #78350f !important;
   font-weight: 800 !important;
 }
 
-body.light-theme .macro-tier-badge.tier-3 {
+body.light-theme .macro-tier-badge.tier-3,
+body.light-theme .tier-3 {
   background: #f1f5f9 !important;
-  border: 1px solid #cbd5e1 !important;
-  color: #334155 !important;
-  font-weight: 700 !important;
+  border: 1px solid #94a3b8 !important;
+  color: #0f172a !important;
+  font-weight: 800 !important;
 }
 
 body.light-theme .macro-sector-tag {

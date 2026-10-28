@@ -1923,13 +1923,14 @@ body.dark-theme {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: 100;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .terminal-modal.open,
@@ -1943,6 +1944,9 @@ body.dark-theme {
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 520px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   animation: modalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1959,7 +1963,8 @@ body.dark-theme {
   justify-content: space-between;
   padding: 18px 22px;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(16, 23, 40, 0.7);
+  background: rgba(16, 23, 40, 0.85);
+  flex-shrink: 0;
 }
 
 .modal-top h3 {
@@ -1987,6 +1992,27 @@ body.dark-theme {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(88vh - 65px);
+}
+
+.modal-form::-webkit-scrollbar {
+  width: 7px;
+}
+
+.modal-form::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+}
+
+.modal-form::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+}
+
+.modal-form::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.6);
 }
 
 .input-block {
@@ -2034,10 +2060,16 @@ body.dark-theme {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 10px;
-  padding-top: 16px;
+  margin-top: auto;
+  padding: 14px 22px;
   border-top: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  flex-shrink: 0;
 }
+
 
 /* Toast Banner */
 .toast-banner {

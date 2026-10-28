@@ -4280,6 +4280,64 @@ body.dark-theme {
   border-color: #f43f5e;
 }
 
+/* Base Broadcast Banner & Components (Dark Theme default) */
+.scheduled-broadcast-info-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+
+.scheduled-broadcast-clock-icon {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.scheduled-broadcast-title {
+  color: #ffffff;
+}
+
+.banner-client-names {
+  color: #e2e8f0;
+}
+
+.badge-all-clients-pill {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.btn-inspect-targets {
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.08);
+  color: #7dd3fc;
+}
+
+.btn-inspect-targets:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #ffffff;
+}
+
+.scheduler-time-row {
+  background: rgba(0,0,0,0.3);
+}
+
+.scheduler-time-label {
+  color: #ffffff;
+}
+
+.scheduler-time-input {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border-default);
+  color: #ffffff;
+}
+
+.story-card-summary {
+  font-size: 0.77rem;
+  color: #94a3b8;
+  line-height: 1.45;
+  margin-top: 6px;
+}
 
 /* ==========================================================================
    INSTITUTIONAL FINTECH LIGHT THEME (STRIPE / LINEAR INSPIRED)
@@ -4481,11 +4539,26 @@ body.light-theme table {
   color: #1e293b;
 }
 
+/* ==========================================================================
+   TABLES & COMMON CONTAINERS IN LIGHT THEME
+   ========================================================================== */
+body.light-theme .terminal-table,
+body.light-theme table {
+  color: #1e293b;
+}
+
 body.light-theme .terminal-table th,
-body.light-theme table thead tr {
+body.light-theme table thead th,
+body.light-theme table thead tr,
+body.light-theme .modern-watchlist-table th,
+body.light-theme .modern-clients-table th {
   background: #f8fafc !important;
-  color: #475569 !important;
-  border-bottom: 1px solid #e2e8f0 !important;
+  color: #1e293b !important;
+  font-weight: 800 !important;
+  font-size: 0.74rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-bottom: 2px solid #e2e8f0 !important;
 }
 
 body.light-theme .terminal-table td,
@@ -4496,7 +4569,7 @@ body.light-theme table tbody td {
 
 body.light-theme .terminal-table tbody tr:hover,
 body.light-theme table tbody tr:hover {
-  background: rgba(99, 102, 241, 0.035) !important;
+  background: rgba(99, 102, 241, 0.04) !important;
 }
 
 /* Form Inputs in Light Theme */
@@ -4525,6 +4598,1043 @@ body.light-theme textarea:focus,
 body.light-theme .terminal-select:focus {
   border-color: #4f46e5 !important;
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+}
+
+/* ==========================================================================
+   1. DASHBOARD VIEW (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .scheduled-broadcast-info-card {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%) !important;
+  border: 1px solid #bae6fd !important;
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.08) !important;
+}
+
+body.light-theme .scheduled-broadcast-clock-icon {
+  background: #ffffff !important;
+  border: 1px solid #7dd3fc !important;
+}
+
+body.light-theme .scheduled-broadcast-title {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .scheduled-broadcast-sub {
+  color: #334155 !important;
+}
+
+body.light-theme #banner-client-names-list,
+body.light-theme .banner-client-names {
+  color: #0369a1 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .badge-all-clients-pill {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border: 1px solid #7dd3fc !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .btn-inspect-targets {
+  background: #ffffff !important;
+  border: 1px solid #7dd3fc !important;
+  color: #0284c7 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .btn-inspect-targets:hover {
+  background: #f0f9ff !important;
+  border-color: #0284c7 !important;
+}
+
+body.light-theme .analyst-config-toolbar {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+body.light-theme .config-label {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .mode-segmented-control {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+body.light-theme .mode-segment-btn {
+  color: #475569 !important;
+  font-weight: 600;
+}
+
+body.light-theme .mode-segment-btn:hover {
+  color: #0f172a !important;
+}
+
+body.light-theme .mode-segment-btn.active {
+  background: #ffffff !important;
+  color: #4338ca !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .analyst-single-panel label,
+body.light-theme .field-label {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .analyst-meta-badge {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .multi-select-container {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+body.light-theme .count-badge {
+  background: #e0e7ff !important;
+  color: #3730a3 !important;
+  border: 1px solid #c7d2fe !important;
+}
+
+body.light-theme .btn-micro-action {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+body.light-theme .analyst-card-item {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+body.light-theme .analyst-card-item:hover {
+  background: #f8fafc !important;
+  border-color: #6366f1 !important;
+}
+
+body.light-theme .analyst-card-item.selected {
+  background: #ecfdf5 !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15) !important;
+}
+
+body.light-theme .analyst-card-name {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .analyst-card-phone {
+  color: #64748b !important;
+}
+
+body.light-theme .analyst-avatar-badge {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+/* Dashboard Split Cards */
+body.light-theme .split-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05) !important;
+}
+
+body.light-theme .split-card-header {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .header-left-group {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .header-doc-name {
+  color: #0284c7 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .preview-count-pill {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .feed-mode-tabs {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+body.light-theme .feed-mode-btn {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+body.light-theme .feed-mode-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .feed-mode-btn.active {
+  background: rgba(79, 70, 229, 0.1) !important;
+  color: #4338ca !important;
+  border: 1px solid rgba(79, 70, 229, 0.4) !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .preview-search-wrap {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+body.light-theme #preview-story-search {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .preview-story-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.light-theme .preview-story-card:hover {
+  background: #f8fafc !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.1) !important;
+}
+
+body.light-theme .story-card-title {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .story-card-title:hover {
+  color: #4f46e5 !important;
+}
+
+body.light-theme .story-card-summary,
+body.light-theme .preview-story-card [style*="color: #94a3b8"] {
+  color: #334155 !important;
+}
+
+body.light-theme .ticker-badge {
+  background: #f0f9ff !important;
+  color: #0284c7 !important;
+  border: 1px solid #bae6fd !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .ticker-badge.badge-filing {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .story-source-badge {
+  color: #64748b !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .story-actions {
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+body.light-theme .btn-micro-edit-story {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+body.light-theme .btn-micro-delete-story {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   2. MACRO & SECTOR DESK (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .macro-story-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+body.light-theme .macro-story-card:hover {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.light-theme .macro-card-title {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+}
+
+body.light-theme .macro-card-title:hover {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+}
+
+body.light-theme .macro-authority-badge {
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1d4ed8 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-tier-badge.tier-1 {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-tier-badge.tier-2 {
+  background: #fffbeb !important;
+  border: 1px solid #fde68a !important;
+  color: #b45309 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-tier-badge.tier-3 {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .macro-sector-tag {
+  background: #eef2ff !important;
+  border: 1px solid #c7d2fe !important;
+  color: #4338ca !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-equity-box {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-left: 4px solid #4f46e5 !important;
+}
+
+body.light-theme .macro-equity-header {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-equity-text {
+  color: #334155 !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+}
+
+body.light-theme .bias-pos {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #065f46 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .bias-neg {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .bias-neu {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .macro-card-footer {
+  border-top: 1px solid #f1f5f9 !important;
+  color: #64748b !important;
+}
+
+body.light-theme .macro-card-footer a {
+  color: #2563eb !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .btn-micro-edit-macro {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+body.light-theme .btn-micro-delete-macro {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+body.light-theme .macro-mode-btn {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+body.light-theme .macro-mode-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .macro-mode-btn.active {
+  background: rgba(79, 70, 229, 0.1) !important;
+  color: #4338ca !important;
+  border-color: rgba(79, 70, 229, 0.4) !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .macro-sector-pill {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .macro-sector-pill:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+body.light-theme .macro-sector-pill.active {
+  background: #4f46e5 !important;
+  border-color: #4338ca !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+/* ==========================================================================
+   3. PORTFOLIOS & WATCHLIST DESK (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .watchlist-controls-panel {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.light-theme .watchlist-search-wrap input {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .search-input-icon {
+  color: #64748b !important;
+}
+
+body.light-theme .visible-count-badge {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+body.light-theme .folder-tab-btn {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .folder-tab-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+body.light-theme .folder-tab-btn.active {
+  background: #4f46e5 !important;
+  border-color: #4338ca !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25) !important;
+}
+
+body.light-theme .folder-tab-btn .tab-count-pill {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+body.light-theme .folder-tab-btn.active .tab-count-pill {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .asset-symbol-chip {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .asset-name {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .asset-name:hover {
+  color: #4f46e5 !important;
+}
+
+body.light-theme .exchange-tag {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+body.light-theme .exchange-tag strong {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .exchange-tag.bse strong {
+  color: #334155 !important;
+}
+
+body.light-theme .asset-aliases {
+  color: #64748b !important;
+}
+
+/* Basket / Portfolio Tags with Crisp Accessible Contrast */
+body.light-theme .folder-tag-game {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid #a7f3d0 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .folder-tag-set {
+  background: #f0f9ff !important;
+  color: #0369a1 !important;
+  border: 1px solid #bae6fd !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .folder-tag-match {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .folder-tag-junior {
+  background: #faf5ff !important;
+  color: #7e22ce !important;
+  border: 1px solid #e9d5ff !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .folder-tag-custom {
+  background: #eef2ff !important;
+  color: #4338ca !important;
+  border: 1px solid #c7d2fe !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .folder-pill-removable {
+  font-weight: 700 !important;
+}
+
+body.light-theme .tag-remove-x:hover {
+  color: #be123c !important;
+}
+
+body.light-theme .btn-add-basket-trigger {
+  background: #ffffff !important;
+  border: 1px dashed #cbd5e1 !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .btn-add-basket-trigger:hover {
+  background: #f8fafc !important;
+  border-color: #6366f1 !important;
+  color: #4338ca !important;
+}
+
+body.light-theme .badge-unassigned {
+  background: #fffbeb !important;
+  border: 1px dashed #f59e0b !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .badge-unassigned:hover {
+  background: #fef3c7 !important;
+  border-color: #d97706 !important;
+  color: #92400e !important;
+}
+
+body.light-theme .analyst-pill {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .btn-row-edit {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .btn-row-edit:hover {
+  background: #eef2ff !important;
+  border-color: #6366f1 !important;
+  color: #4338ca !important;
+}
+
+body.light-theme .btn-row-del {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+}
+
+body.light-theme .btn-row-del:hover {
+  background: #ffe4e6 !important;
+  border-color: #fb7185 !important;
+  color: #9f1239 !important;
+}
+
+body.light-theme .floating-batch-bar {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ==========================================================================
+   4. CLIENTS & SUBSCRIBERS (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .client-avatar-chip {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .client-name {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .client-name:hover {
+  color: #059669 !important;
+}
+
+body.light-theme .client-phone-badge {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .client-email-badge {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+body.light-theme .sector-tag {
+  background: #eef2ff !important;
+  border: 1px solid #c7d2fe !important;
+  color: #4338ca !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .sector-tag-all {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .client-stocks-count-badge {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .status-badge-ok {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .dispatch-cycle-sub {
+  color: #64748b !important;
+}
+
+body.light-theme .btn-client-dispatch {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .btn-client-dispatch:hover {
+  background: #10b981 !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   5. DATA SOURCES (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .sources-filter-tabs {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.light-theme .source-filter-btn {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .source-filter-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .source-filter-btn.active {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .source-filter-btn .filter-count-badge {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+body.light-theme .source-filter-btn.active .filter-count-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .sources-search-wrapper input {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .sources-search-wrapper .search-icon-symbol {
+  color: #64748b !important;
+}
+
+body.light-theme .sources-summary-bar span {
+  color: #475569 !important;
+}
+
+body.light-theme .source-feed-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05) !important;
+}
+
+body.light-theme .source-feed-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.light-theme .source-feed-title {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .source-brand-avatar.filing {
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+body.light-theme .source-brand-avatar.rss {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+
+body.light-theme .source-brand-avatar.search {
+  background: #fffbeb !important;
+  border: 1px solid #fde68a !important;
+}
+
+body.light-theme .source-feed-type-tag.filing {
+  background: #eef2ff !important;
+  border: 1px solid #c7d2fe !important;
+  color: #4338ca !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .source-feed-type-tag.rss {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .source-feed-type-tag.search {
+  background: #fffbeb !important;
+  border: 1px solid #fde68a !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .source-url-bar {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+body.light-theme .source-url-text {
+  color: #334155 !important;
+}
+
+body.light-theme .btn-icon-micro {
+  color: #64748b !important;
+}
+
+body.light-theme .btn-icon-micro:hover {
+  color: #0f172a !important;
+  background: #e2e8f0 !important;
+}
+
+body.light-theme .source-spec-item {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+body.light-theme .source-spec-label {
+  color: #64748b !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .source-spec-val {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+body.light-theme .source-card-footer {
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+body.light-theme .source-ping-badge {
+  color: #475569 !important;
+}
+
+body.light-theme .source-ping-badge.ok {
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .btn-ping-feed {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .btn-ping-feed:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .btn-edit-feed {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+body.light-theme .btn-delete-feed {
+  background: #fff1f2 !important;
+  border: 1px solid #fecdd3 !important;
+  color: #be123c !important;
+}
+
+body.light-theme .switch-slider {
+  background-color: #cbd5e1 !important;
+  border: 1px solid #94a3b8 !important;
+}
+
+body.light-theme .switch-slider:before {
+  background-color: #ffffff !important;
+}
+
+body.light-theme .switch-toggle input:checked + .switch-slider {
+  background-color: #10b981 !important;
+  border-color: #059669 !important;
+}
+
+/* ==========================================================================
+   6. DAILY DIGEST DESK (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .digest-edition-bar {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+body.light-theme .digest-edition-btn {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .digest-edition-btn:hover:not(.active) {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .digest-edition-btn.active {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .digest-client-strip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.light-theme .digest-select-modern {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .digest-nav-arrow-btn {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+body.light-theme .digest-nav-arrow-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+body.light-theme .digest-meta-pill {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .digest-viewmode-toggle {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+body.light-theme .viewmode-btn {
+  color: #475569 !important;
+}
+
+body.light-theme .viewmode-btn:hover {
+  color: #0f172a !important;
+}
+
+body.light-theme .viewmode-btn.active {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+/* ==========================================================================
+   7. SETTINGS & HISTORY DESK (LIGHT THEME)
+   ========================================================================== */
+body.light-theme .settings-box-panel {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05) !important;
+}
+
+body.light-theme .settings-panel-header {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+body.light-theme .settings-panel-title {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .settings-panel-sub {
+  color: #475569 !important;
+}
+
+body.light-theme .scheduler-schedule-box {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+body.light-theme .scheduler-schedule-box h4 {
+  color: #0f172a !important;
+}
+
+body.light-theme .setting-row-item {
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+body.light-theme .setting-row-label {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme .setting-row-desc {
+  color: #475569 !important;
+}
+
+body.light-theme .setting-status-pill.ok {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme .setting-status-pill.warn {
+  background: #fffbeb !important;
+  border: 1px solid #fde68a !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+}
+
+body.light-theme #history-dispatch-table-body td,
+body.light-theme #audit-logs-table-body td {
+  color: #1e293b !important;
+}
+
+body.light-theme #history-dispatch-table-body tr,
+body.light-theme #audit-logs-table-body tr {
+  border-bottom: 1px solid #e2e8f0 !important;
 }
 
 /* Modals in Light Theme */

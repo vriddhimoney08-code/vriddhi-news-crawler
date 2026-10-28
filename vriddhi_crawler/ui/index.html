@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=5.5">
+  <link rel="stylesheet" href="/static/style.css?v=5.6">
 </head>
 <body class="dark-theme">
 
@@ -205,25 +205,25 @@
           </div>
 
           <!-- Automated Schedule Audience Confirmation Banner -->
-          <div class="scheduled-broadcast-info-card" style="margin-bottom: 16px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(56, 189, 248, 0.28); border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 4px 20px rgba(0,0,0,0.35);">
+          <div class="scheduled-broadcast-info-card" style="margin-bottom: 16px; border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 14px;">
-              <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+              <div class="scheduled-broadcast-clock-icon" style="width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
                 ⏰
               </div>
               <div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <span style="font-size: 0.88rem; font-weight: 800; color: #fff;">Automated Schedule Broadcast Target:</span>
-                  <span class="badge-all-clients-pill" style="background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); font-size: 0.72rem; font-weight: 800; padding: 2px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;">
+                  <span class="scheduled-broadcast-title" style="font-size: 0.88rem; font-weight: 800;">Automated Schedule Broadcast Target:</span>
+                  <span class="badge-all-clients-pill" style="font-size: 0.72rem; font-weight: 800; padding: 2px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;">
                     👥 ALL REGISTERED CLIENTS (<span id="banner-active-count">--</span>)
                   </span>
                 </div>
-                <div style="font-size: 0.77rem; color: var(--text-muted); margin-top: 3px;">
-                  Automatic runs (Morning 8:30 AM &amp; Evening 5:15 PM IST) will deliver tailored intelligence to <strong style="color: #e2e8f0;" id="banner-client-names-list">all active clients</strong> in your directory.
+                <div class="scheduled-broadcast-sub" style="font-size: 0.77rem; color: var(--text-muted); margin-top: 3px;">
+                  Automatic runs (Morning 8:30 AM &amp; Evening 5:15 PM IST) will deliver tailored intelligence to <strong id="banner-client-names-list">all active clients</strong> in your directory.
                 </div>
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
-              <button type="button" id="btn-inspect-broadcast-targets" class="btn-secondary-micro" style="padding: 6px 14px; font-size: 0.76rem; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.08); color: #7dd3fc; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <button type="button" id="btn-inspect-broadcast-targets" class="btn-secondary-micro btn-inspect-targets" style="padding: 6px 14px; font-size: 0.76rem; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                 <span>📋 Inspect All Recipients</span>
               </button>
             </div>
@@ -634,7 +634,7 @@
           <div class="view-header-bar" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
             <div>
               <div class="view-title-tag">MARKET INGESTION ENGINE</div>
-              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">Ingestion Sources &amp; Feeds Radar</h2>
+              <h2 style="font-size: 1.35rem; font-weight: 800; margin: 4px 0;">Ingestion Sources &amp; Feeds Radar</h2>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">Multi-threaded crawlers monitoring regulatory exchange disclosures, verified publisher RSS streams, and live corporate radars.</p>
             </div>
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -697,7 +697,7 @@
           <div class="view-header-bar digest-topbar-custom" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
             <div>
               <div class="view-title-tag">EXECUTIVE INTELLIGENCE BRIEF</div>
-              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">Interactive Daily Digest Desk</h2>
+              <h2 style="font-size: 1.35rem; font-weight: 800; margin: 4px 0;">Interactive Daily Digest Desk</h2>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">24-Hour market intelligence compilation (8:00 AM &ndash; 8:00 AM IST) custom-formatted for client reading and automated WhatsApp delivery.</p>
             </div>
             
@@ -798,7 +798,7 @@
           <div class="view-header-bar" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
             <div>
               <div class="view-title-tag">CORE INFRASTRUCTURE &amp; CONTROLS</div>
-              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">System Settings &amp; Gateway Controls</h2>
+              <h2 style="font-size: 1.35rem; font-weight: 800; margin: 4px 0;">System Settings &amp; Gateway Controls</h2>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">Configure automated WhatsApp dispatch gateways, AI summarization engines, 24h market crawl windows, and database backups.</p>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -824,7 +824,7 @@
                 <div style="flex: 1;">
                   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
                     <div>
-                      <h3 class="settings-panel-title" style="color: #fff; font-size: 1.1rem;">Automated Broadcast Timers &amp; Scheduled Delivery</h3>
+                      <h3 class="settings-panel-title" style="font-size: 1.1rem;">Automated Broadcast Timers &amp; Scheduled Delivery</h3>
                       <span class="settings-panel-sub">Configure scheduled dispatch hours, pause automated briefings, or trigger immediate on-demand broadcasts</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
@@ -845,18 +845,18 @@
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                       <div>
                         <div style="font-size: 0.72rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.5px;">Morning Broadcast Edition</div>
-                        <h4 style="font-size: 1rem; color: #fff; margin: 2px 0 0 0;">☀️ Equity Research Digest</h4>
+                        <h4 style="font-size: 1rem; margin: 2px 0 0 0;">☀️ Equity Research Digest</h4>
                       </div>
                       <span id="scheduler-morning-next-badge" class="setting-status-pill ok" style="font-size: 0.7rem;">Next: Today 8:30 AM IST</span>
                     </div>
                     <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0 0 14px 0;">Dispatches personalized company disclosures &amp; news to each client based on their assigned portfolio baskets.</p>
 
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(0,0,0,0.3); border-radius: 8px; margin-bottom: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px;" class="scheduler-time-row">
                       <div>
-                        <div style="font-size: 0.76rem; font-weight: 600; color: #fff;">Scheduled Dispatch Time:</div>
+                        <div style="font-size: 0.76rem; font-weight: 600;" class="scheduler-time-label">Scheduled Dispatch Time:</div>
                         <div style="font-size: 0.72rem; color: var(--text-dim);">Indian Standard Time (IST)</div>
                       </div>
-                      <input type="time" id="input-schedule-morning-time" value="08:30" style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border-default); color: #fff; font-family: var(--font-mono); font-weight: 700; font-size: 0.92rem; padding: 4px 10px; border-radius: 6px;">
+                      <input type="time" id="input-schedule-morning-time" value="08:30" class="scheduler-time-input" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.92rem; padding: 4px 10px; border-radius: 6px;">
                     </div>
 
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px;">
@@ -1209,7 +1209,7 @@
           <div class="view-header-bar" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
             <div>
               <div class="view-title-tag">DISPATCH AUDIT &amp; CHANGE TRACKING</div>
-              <h2 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 4px 0;">History &amp; System Activity Logs</h2>
+              <h2 style="font-size: 1.35rem; font-weight: 800; margin: 4px 0;">History &amp; System Activity Logs</h2>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">Comprehensive verification records of automated daily broadcast runs, recipient deliveries, and administrative changes.</p>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -1228,7 +1228,7 @@
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <span style="font-size: 1.25rem;">📡</span>
                   <div>
-                    <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin: 0;">Daily Broadcast Dispatches</h3>
+                    <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0;">Daily Broadcast Dispatches</h3>
                     <span style="font-size: 0.74rem; color: var(--text-muted);">Execution records of 8:30 AM Morning Equity, 5:15 PM Evening Macro, and manual test triggers</span>
                   </div>
                 </div>
@@ -1261,7 +1261,7 @@
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <span style="font-size: 1.25rem;">📝</span>
                   <div>
-                    <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin: 0;">System Change Log &amp; Audit Trail</h3>
+                    <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0;">System Change Log &amp; Audit Trail</h3>
                     <span style="font-size: 0.74rem; color: var(--text-muted);">Real-time log of analyst updates, phone number changes, and timings (auto-retains latest 5 entries)</span>
                   </div>
                 </div>

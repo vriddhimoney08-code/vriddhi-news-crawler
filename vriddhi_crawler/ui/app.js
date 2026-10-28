@@ -1280,7 +1280,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const cname = item.company_name || "Company";
       const sourcesText = (item.sources || []).map(s => s.name).join(" • ") || item.source_name || "Market Desk";
       const grade = item.impact_grade || "";
-      const summaryText = item.summary ? `<div style="font-size: 0.77rem; color: #94a3b8; line-height: 1.45; margin-top: 6px;">${item.summary}</div>` : '';
+      const summaryText = item.summary ? `<div class="story-card-summary">${item.summary}</div>` : '';
       const safeTitleAttr = (item.title || "").replace(/"/g, '&quot;');
 
       return `

@@ -1547,11 +1547,15 @@ document.addEventListener("DOMContentLoaded", () => {
       btnSubmitImportClients.disabled = false;
       btnSubmitImportClients.innerHTML = `<span>📤 Upload &amp; Import</span>`;
     }
+    modalImportClients.style.display = "flex";
     modalImportClients.classList.add("open");
   }
 
   function closeImportClientsModal() {
-    if (modalImportClients) modalImportClients.classList.remove("open");
+    if (modalImportClients) {
+      modalImportClients.classList.remove("open");
+      modalImportClients.style.display = "none";
+    }
   }
 
   if (btnOpenImportClients) {
@@ -1569,6 +1573,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (btnCancelImportClientsModal) {
     btnCancelImportClientsModal.addEventListener("click", closeImportClientsModal);
+  }
+  if (modalImportClients) {
+    modalImportClients.addEventListener("click", (e) => {
+      if (e.target === modalImportClients) closeImportClientsModal();
+    });
   }
 
   if (dropzoneImportClients && inputImportClientsFile) {

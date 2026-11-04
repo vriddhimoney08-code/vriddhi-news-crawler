@@ -589,7 +589,19 @@
               </div>
               <span class="view-header-sub">Manage registered WhatsApp recipients, portfolio coverage, and morning briefings</span>
             </div>
-            <div class="view-header-actions">
+            <div class="view-header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="btn-export-clients-xlsx" class="terminal-action-btn btn-secondary-micro" title="Export all clients to Excel (.xlsx)">
+                <span class="btn-icon">📊</span>
+                <span>Export Excel</span>
+              </button>
+              <button id="btn-open-import-clients" class="terminal-action-btn" style="background: linear-gradient(135deg, #4f46e5, #06b6d4); color: #ffffff; border: none; padding: 7px 15px; font-weight: 700; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4);" title="Bulk import clients from Excel (.xlsx) or CSV">
+                <span class="btn-icon" style="font-size: 1.05rem;">📥</span>
+                <span>Import Excel</span>
+              </button>
+              <button id="btn-open-create-group" class="terminal-action-btn btn-secondary-micro" title="Create custom client distribution group">
+                <span class="btn-icon">📁</span>
+                <span>+ New Group</span>
+              </button>
               <button id="btn-open-add-analyst" class="terminal-action-btn btn-primary-add" title="Register new client">
                 <span class="btn-icon">➕</span>
                 <span>Add Client</span>
@@ -607,6 +619,40 @@
               </div>
               <div class="watchlist-filter-stats">
                 <span id="clients-visible-count" class="visible-count-badge">Showing -- clients</span>
+              </div>
+            </div>
+
+            <!-- Client Groups Filter Tabs Bar -->
+            <div class="client-groups-bar" style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+              <div class="folder-tabs-list" id="client-group-tabs">
+                <!-- Dynamically populated: All Clients, Group 1, Group 2, etc. -->
+              </div>
+            </div>
+
+            <!-- Active Group Details & Action Banner -->
+            <div id="active-group-banner" class="active-group-banner" style="display: none; margin-top: 12px; padding: 12px 16px; border-radius: 10px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 1.15rem;">📁</span>
+                  <strong id="active-group-name" style="font-size: 0.95rem; color: #ffffff;">VIP Advisory</strong>
+                  <span id="active-group-count" class="tab-count-pill" style="font-size: 0.74rem; background: rgba(99, 102, 241, 0.3); color: #c7d2fe; padding: 2px 8px; border-radius: 12px; font-weight: 700;">-- Members</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem;">
+                  <span id="active-group-morning-pill" class="badge-channel" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 600;">☀️ Morning: ON</span>
+                  <span id="active-group-evening-pill" class="badge-channel" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 600;">🌙 Evening: ON</span>
+                </div>
+                <span id="active-group-desc" style="font-size: 0.78rem; color: var(--text-muted);"></span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" id="btn-dispatch-group-brief" class="terminal-action-btn" style="padding: 6px 14px; font-size: 0.78rem; background: linear-gradient(135deg, #4f46e5, #06b6d4); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 700;">
+                  <span>🚀</span> Send Group Brief
+                </button>
+                <button type="button" id="btn-edit-active-group" class="btn-secondary-micro" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; cursor: pointer;">
+                  <span>✏️</span> Edit Group
+                </button>
+                <button type="button" id="btn-delete-active-group" class="btn-secondary-micro" style="padding: 6px 12px; font-size: 0.78rem; color: #fb7185; border-color: rgba(244, 63, 94, 0.3); border-radius: 8px; cursor: pointer;">
+                  <span>🗑️</span> Delete
+                </button>
               </div>
             </div>
           </div>
@@ -1496,6 +1542,16 @@
         </div>
         <form id="form-add-analyst" class="modal-form">
           <input type="hidden" id="input-analyst-id" value="">
+          <!-- Bulk Import Excel Shortcut Banner inside Modal -->
+          <div id="modal-client-import-shortcut" style="background: rgba(99, 102, 241, 0.12); border: 1px dashed rgba(99, 102, 241, 0.45); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">Need to add multiple clients at once?</div>
+              <div style="font-size: 0.72rem; color: #c7d2fe;">Upload an Excel (.xlsx) file to register all clients in seconds.</div>
+            </div>
+            <button type="button" id="btn-shortcut-open-import" class="terminal-action-btn" style="padding: 6px 12px; font-size: 0.75rem; background: linear-gradient(135deg, #4f46e5, #06b6d4); color: #ffffff; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+              <span>📥 Bulk Import Excel</span>
+            </button>
+          </div>
           <div class="input-block">
             <label>Client Full Name *</label>
             <input type="text" id="input-analyst-name" required placeholder="e.g. Vikram Sharma">
@@ -1519,6 +1575,15 @@
                 <span class="toggle-status-desc">Client will receive personalized morning &amp; evening briefings automatically</span>
               </div>
             </label>
+          </div>
+          <div class="input-block" id="block-client-groups">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="margin: 0; font-weight: 600;">Assign Client Groups <span style="font-size: 0.72rem; color: var(--text-muted);">(Distribution Lists)</span></label>
+              <span style="font-size: 0.72rem; color: #a5b4fc; font-weight: 600;">Morning &amp; Evening Rules</span>
+            </div>
+            <div id="analyst-groups-checkboxes" class="checkbox-scroll-box" style="max-height: 110px; display: flex; flex-direction: column; gap: 6px; padding: 8px;">
+              <!-- Populated dynamically via JS: VIP Advisory, Macro Desk, etc. -->
+            </div>
           </div>
           <div class="input-block">
             <label>Assign Portfolio Baskets (Morning briefing coverage)</label>
@@ -1555,6 +1620,177 @@
               <button type="button" id="btn-cancel-analyst-modal" class="btn-cancel">Cancel</button>
               <button type="submit" class="terminal-action-btn">Save Client</button>
             </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: ADD / EDIT CLIENT GROUP -->
+    <div id="modal-group" class="terminal-modal" style="display: none;">
+      <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-top">
+          <div>
+            <h3 id="group-modal-title">Create Client Group</h3>
+            <span id="group-modal-subtitle" style="font-size: 0.76rem; color: var(--text-muted);">Organize clients into targeted distribution lists with Morning/Evening briefing rules</span>
+          </div>
+          <button id="btn-close-group-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-group" class="modal-form">
+          <input type="hidden" id="input-group-id" value="">
+          
+          <div class="input-block">
+            <label>Group Name *</label>
+            <input type="text" id="input-group-name" required placeholder="e.g. VIP Advisory, Equity Traders, Senior Partners">
+          </div>
+
+          <div class="input-block">
+            <label>Description / Notes <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+            <input type="text" id="input-group-desc" placeholder="e.g. Receives morning equity news and evening macro policy briefs">
+          </div>
+
+          <div class="input-block">
+            <label style="margin-bottom: 8px; display: block; font-weight: 600;">Automated Briefing Schedule for this Group:</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-default); padding: 10px 12px; border-radius: var(--radius-md); cursor: pointer;">
+                <input type="checkbox" id="input-group-morning" checked style="margin-top: 3px;">
+                <div>
+                  <div style="font-size: 0.82rem; font-weight: 700; color: #34d399;">☀️ Morning Briefing</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted);">8:30 AM Company News & Filings</div>
+                </div>
+              </label>
+
+              <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-default); padding: 10px 12px; border-radius: var(--radius-md); cursor: pointer;">
+                <input type="checkbox" id="input-group-evening" checked style="margin-top: 3px;">
+                <div>
+                  <div style="font-size: 0.82rem; font-weight: 700; color: #a78bfa;">🌙 Evening Briefing</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted);">5:15 PM Sector & Macro News</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="input-block">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <label style="margin: 0; font-weight: 600;">Select Group Members (Clients):</label>
+              <div style="display: flex; gap: 12px; font-size: 0.75rem;">
+                <button type="button" id="btn-group-select-all" style="background: none; border: none; color: #818cf8; cursor: pointer; text-decoration: underline; font-weight: 600;">Select All</button>
+                <button type="button" id="btn-group-deselect-all" style="background: none; border: none; color: var(--text-muted); cursor: pointer; text-decoration: underline;">Clear</button>
+              </div>
+            </div>
+            <div id="group-clients-checklist" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+              <!-- Dynamically populated checkboxes of clients -->
+            </div>
+          </div>
+
+          <div class="modal-bottom" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button type="button" id="btn-cancel-group-modal" class="btn-cancel">Cancel</button>
+            <button type="submit" id="btn-save-group" class="terminal-action-btn">Save Group</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: DISPATCH GROUP BRIEFING -->
+    <div id="modal-group-dispatch" class="terminal-modal" style="display: none;">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-top">
+          <div>
+            <h3 id="group-dispatch-title">Dispatch Group Briefing</h3>
+            <span id="group-dispatch-subtitle" style="font-size: 0.76rem; color: var(--text-muted);">Send tailored WhatsApp intelligence to all active members of this group</span>
+          </div>
+          <button id="btn-close-group-dispatch-modal" class="modal-x">&times;</button>
+        </div>
+        <div class="modal-form" style="padding-top: 10px;">
+          <input type="hidden" id="dispatch-group-id" value="">
+          
+          <div class="input-block">
+            <label style="margin-bottom: 8px; display: block; font-weight: 600;">Select Briefing Type to Dispatch:</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <label id="opt-dispatch-morning" style="display: flex; align-items: flex-start; gap: 10px; background: rgba(16, 185, 129, 0.08); border: 2px solid #10b981; padding: 12px; border-radius: var(--radius-md); cursor: pointer;">
+                <input type="radio" name="group-dispatch-type" value="morning" checked style="margin-top: 3px;">
+                <div>
+                  <div style="font-size: 0.85rem; font-weight: 700; color: #34d399;">☀️ Morning Brief</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted);">Company News & Stock Filings</div>
+                </div>
+              </label>
+
+              <label id="opt-dispatch-evening" style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-default); padding: 12px; border-radius: var(--radius-md); cursor: pointer;">
+                <input type="radio" name="group-dispatch-type" value="evening" style="margin-top: 3px;">
+                <div>
+                  <div style="font-size: 0.85rem; font-weight: 700; color: #a78bfa;">🌙 Evening Brief</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted);">Sector & Macro Policy News</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="input-block" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-default); padding: 12px; border-radius: var(--radius-md); margin-top: 10px;">
+            <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 4px;">Recipients in this group:</div>
+            <div id="dispatch-group-members-summary" style="font-size: 0.82rem; color: #e2e8f0; font-weight: 600;">--</div>
+          </div>
+
+          <div class="modal-bottom" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button type="button" id="btn-cancel-group-dispatch-modal" class="btn-cancel">Cancel</button>
+            <button type="button" id="btn-confirm-group-dispatch" class="terminal-action-btn" style="background: linear-gradient(135deg, #10b981, #059669);">
+              <span>📲 Dispatch via WhatsApp</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: BULK IMPORT CLIENTS FROM EXCEL / CSV -->
+    <div id="modal-import-clients" class="terminal-modal" style="display: none;">
+      <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-top">
+          <div>
+            <h3>Bulk Import Clients from Excel</h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">Upload a spreadsheet with names, WhatsApp numbers, and groups to register multiple clients instantly</span>
+          </div>
+          <button id="btn-close-import-clients-modal" class="modal-x">&times;</button>
+        </div>
+        <form id="form-import-clients" class="modal-form" style="padding-top: 10px;">
+          <!-- Template Download Notice -->
+          <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #c7d2fe;">Need a sample spreadsheet?</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">Download our pre-formatted template with sample clients and group assignments.</div>
+            </div>
+            <a href="/api/analysts/export?template=true&format=xlsx" download="vriddhi_clients_template.xlsx" class="btn-secondary-micro" style="padding: 5px 12px; font-size: 0.72rem; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; color: #a5b4fc; border-color: rgba(99,102,241,0.3);">
+              <span>📥</span> Template (.xlsx)
+            </a>
+          </div>
+
+          <!-- Drag and Drop Zone -->
+          <div class="input-block">
+            <label style="margin-bottom: 6px; font-weight: 600;">Select Excel / CSV File *</label>
+            <div id="dropzone-import-clients" style="border: 2px dashed rgba(99, 102, 241, 0.4); border-radius: 10px; padding: 24px 16px; text-align: center; background: rgba(0,0,0,0.25); cursor: pointer; transition: all 0.2s ease;">
+              <input type="file" id="input-import-clients-file" accept=".xlsx, .xls, .csv" style="display: none;">
+              <div style="font-size: 2.2rem; margin-bottom: 6px;">📊</div>
+              <div id="dropzone-file-name" style="font-size: 0.88rem; font-weight: 700; color: #ffffff; margin-bottom: 4px;">Click or Drag &amp; Drop Excel file here</div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">Supports Microsoft Excel (.xlsx, .xls) and CSV (.csv)</div>
+            </div>
+          </div>
+
+          <!-- Auto-create groups toggle -->
+          <div class="input-block" style="margin-top: 10px;">
+            <label class="toggle-status-card" style="padding: 10px 12px;">
+              <input type="checkbox" id="input-import-auto-groups" checked>
+              <div class="toggle-status-info">
+                <span class="toggle-status-title" style="font-size: 0.82rem;">Auto-Create Missing Groups</span>
+                <span class="toggle-status-desc" style="font-size: 0.72rem;">Automatically create and link any new distribution groups found in your spreadsheet</span>
+              </div>
+            </label>
+          </div>
+
+          <!-- Live import status result box -->
+          <div id="import-clients-result-box" style="display: none; margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 0.8rem;"></div>
+
+          <div class="modal-bottom" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+            <button type="button" id="btn-cancel-import-clients-modal" class="btn-cancel">Cancel</button>
+            <button type="submit" id="btn-submit-import-clients" class="terminal-action-btn" style="background: linear-gradient(135deg, #4f46e5, #06b6d4);">
+              <span>📤 Upload &amp; Import</span>
+            </button>
           </div>
         </form>
       </div>
@@ -2074,6 +2310,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=5.5"></script>
+  <script src="/static/app.js?v=5.9"></script>
 </body>
 </html>

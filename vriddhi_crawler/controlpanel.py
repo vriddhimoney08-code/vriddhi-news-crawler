@@ -55,6 +55,17 @@ class Analyst:
     is_active: bool = True
 
 
+@dataclass
+class ClientGroup:
+    id: str
+    name: str
+    description: str = ""
+    morning_active: bool = True
+    evening_active: bool = True
+    client_ids: list[str] = field(default_factory=list)
+    created_at: str = ""
+
+
 def create_starter_excel(file_path: Path = CONTROL_PANEL_PATH) -> None:
     """Create a structured starter Excel file with sample analysts and companies."""
     wb = openpyxl.Workbook()

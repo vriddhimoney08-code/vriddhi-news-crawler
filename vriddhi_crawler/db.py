@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import DB_PATH, DEFAULT_FOLDERS
-from .controlpanel import Analyst, Company
+from .controlpanel import Analyst, Company, ClientGroup
 
 log = logging.getLogger(__name__)
 
@@ -153,6 +153,16 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
             target_name TEXT,
             details TEXT,
             created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS client_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            morning_active INTEGER DEFAULT 1,
+            evening_active INTEGER DEFAULT 1,
+            client_ids TEXT DEFAULT '[]',
+            created_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at);
         """)
@@ -480,6 +490,69 @@ def delete_analyst(aid: str, db_path: Path = DB_PATH):
     with get_connection(db_path) as conn:
         conn.execute("DELETE FROM analysts WHERE id = ?", (aid,))
         conn.execute("DELETE FROM sent_ledger WHERE analyst_id = ?", (aid,))
+
+
+def get_client_groups(db_path: Path = DB_PATH) -> list[ClientGroup]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute("SELECT * FROM client_groups ORDER BY name ASC").fetchall()
+        out = []
+        for r in rows:
+            keys = r.keys()
+            cids = json.loads(r["client_ids"] or "[]") if "client_ids" in keys and r["client_ids"] else []
+            m_act = bool(r["morning_active"]) if "morning_active" in keys and r["morning_active"] is not None else True
+            e_act = bool(r["evening_active"]) if "evening_active" in keys and r["evening_active"] is not None else True
+            desc = r["description"] if "description" in keys and r["description"] else ""
+            c_at = r["created_at"] if "created_at" in keys and r["created_at"] else ""
+            out.append(ClientGroup(
+                id=r["id"],
+                name=r["name"],
+                description=desc,
+                morning_active=m_act,
+                evening_active=e_act,
+                client_ids=cids,
+                created_at=c_at,
+            ))
+        return out
+
+
+def save_client_group(g: ClientGroup, db_path: Path = DB_PATH) -> ClientGroup:
+    from datetime import datetime, timezone
+    with get_connection(db_path) as conn:
+        now_ts = datetime.now(timezone.utc).isoformat()
+        created = g.created_at or now_ts
+        conn.execute("""
+        INSERT INTO client_groups (id, name, description, morning_active, evening_active, client_ids, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name,
+            description=excluded.description,
+            morning_active=excluded.morning_active,
+            evening_active=excluded.evening_active,
+            client_ids=excluded.client_ids
+        """, (
+            g.id,
+            g.name,
+            g.description,
+            1 if g.morning_active else 0,
+            1 if g.evening_active else 0,
+            json.dumps(g.client_ids or []),
+            created,
+        ))
+    return g
+
+
+def delete_client_group(gid: str, db_path: Path = DB_PATH) -> bool:
+    with get_connection(db_path) as conn:
+        res = conn.execute("DELETE FROM client_groups WHERE id = ?", (gid,))
+        return res.rowcount > 0
+
+
+def get_client_group(gid: str, db_path: Path = DB_PATH) -> ClientGroup | None:
+    groups = get_client_groups(db_path)
+    for g in groups:
+        if g.id == gid:
+            return g
+    return None
 
 
 

@@ -11,7 +11,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,7 +24,7 @@ from .config import (
     DASHBOARD_PASSWORD,
     SESSION_SECRET,
 )
-from .controlpanel import Analyst, Company
+from .controlpanel import Analyst, Company, ClientGroup
 from .db import (
     add_folder,
     add_source,
@@ -53,6 +53,10 @@ from .db import (
     log_audit_event,
     get_audit_logs,
     clear_audit_logs,
+    get_client_groups,
+    save_client_group,
+    delete_client_group,
+    get_client_group,
 )
 from .http import Fetcher
 from .pdf import generate_analyst_digest, get_clean_digest_filename, render_digest_html
@@ -187,11 +191,18 @@ STATIC_DIR = Path(__file__).resolve().parent / "ui"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-@app.get("/", response_class=FileResponse)
+@app.get("/", response_class=HTMLResponse)
 def serve_dashboard():
-    """Serve the single-page application dashboard."""
+    """Serve the single-page application dashboard with no-cache headers."""
     index_file = STATIC_DIR / "index.html"
-    return FileResponse(str(index_file))
+    return HTMLResponse(
+        content=index_file.read_text(encoding="utf-8"),
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 
 @app.get("/api/stats")
@@ -901,6 +912,8 @@ def import_watchlist_bulk(req: BulkImportRequest):
     return {"status": "ok", "imported": added}
 
 
+from .client_importer import generate_clients_workbook, generate_clients_csv, parse_client_sheet, import_clients_records
+
 class AnalystCreate(BaseModel):
     id: str = ""
     name: str
@@ -910,6 +923,210 @@ class AnalystCreate(BaseModel):
     assigned_folders: list[str] = []
     macro_sectors: list[str] = ["ALL"]
     is_active: bool = True
+
+
+class ClientGroupCreate(BaseModel):
+    id: str = ""
+    name: str
+    description: str = ""
+    morning_active: bool = True
+    evening_active: bool = True
+    client_ids: list[str] = []
+
+
+class GroupDispatchAction(BaseModel):
+    type: str = "morning"  # "morning" or "evening"
+
+
+# =========================================================================
+# Client Groups Management Endpoints
+# =========================================================================
+
+@app.get("/api/groups")
+def list_client_groups():
+    groups = get_client_groups()
+    analysts_map = {a.id: a for a in get_analysts()}
+    out = []
+    for g in groups:
+        d = asdict(g)
+        members = []
+        for cid in (g.client_ids or []):
+            if cid in analysts_map:
+                a = analysts_map[cid]
+                members.append({
+                    "id": a.id,
+                    "name": a.name,
+                    "phone": a.phone,
+                    "is_active": getattr(a, "is_active", True)
+                })
+        d["member_count"] = len(members)
+        d["members"] = members
+        out.append(d)
+    return out
+
+
+@app.post("/api/groups")
+def create_or_update_client_group(item: ClientGroupCreate):
+    import re
+    clean_name = item.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+    gid = item.id.strip().lower() or re.sub(r"[^a-z0-9_]+", "_", clean_name.lower()).strip("_")
+    group = ClientGroup(
+        id=gid,
+        name=clean_name,
+        description=item.description.strip(),
+        morning_active=item.morning_active,
+        evening_active=item.evening_active,
+        client_ids=item.client_ids or []
+    )
+    save_client_group(group)
+    log_audit_event("GROUP_UPDATE", group.name, f"Saved client group '{group.name}' with {len(group.client_ids)} members (Morning: {group.morning_active}, Evening: {group.evening_active})")
+    return {"status": "ok", "group": asdict(group)}
+
+
+@app.delete("/api/groups/{group_id}")
+def remove_client_group(group_id: str):
+    g = get_client_group(group_id)
+    name = g.name if g else group_id
+    deleted = delete_client_group(group_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Group not found")
+    log_audit_event("GROUP_DELETE", name, f"Deleted client group '{name}' (ID: {group_id})")
+    return {"status": "ok", "message": f"Deleted group {name}"}
+
+
+@app.post("/api/groups/{group_id}/dispatch")
+def dispatch_group_briefing(group_id: str, action: GroupDispatchAction):
+    g = get_client_group(group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    from .whatsapp import send_whatsapp_digest, send_whatsapp_macro_digest
+    from .pdf import generate_macro_digest
+
+    analysts_map = {a.id: a for a in get_analysts()}
+    target_analysts = [analysts_map[cid] for cid in (g.client_ids or []) if cid in analysts_map and getattr(analysts_map[cid], "is_active", True)]
+
+    if not target_analysts:
+        return {"status": "no_op", "message": f"No active clients found in group '{g.name}'", "results": []}
+
+    public_base = os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io"
+    results = []
+
+    if action.type == "morning":
+        for a in target_analysts:
+            stories = get_unsent_stories_for_analyst(a.id)
+            if not stories:
+                results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "ledger_clean", "message": "No unsent stories currently queued"})
+                continue
+
+            file_path, _ = generate_analyst_digest(a.id, a.name, stories)
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
+            res = send_whatsapp_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                stories=stories,
+                pdf_path=file_path,
+                public_pdf_url=public_pdf_url
+            )
+            st = res.get("status", "sent")
+            if st in ("sent", "simulated"):
+                mark_sent([s["id"] for s in stories], a.id)
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": st, "message": res.get("message")})
+
+        sent_count = len([r for r in results if r["status"] == "sent"])
+        record_dispatch_run(f"group_morning_{g.id}", recipients_count=sent_count, stories_count=sum(r["count"] for r in results), status="COMPLETED" if sent_count > 0 else "CLEAN", details=results)
+
+    elif action.type == "evening":
+        for a in target_analysts:
+            stories = get_macro_stories_for_analyst(a.id, hours=24, limit=100)
+            if not stories:
+                results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": 0, "status": "no_updates", "message": "No macro policy updates today"})
+                continue
+
+            file_path, _ = generate_macro_digest(a.id, a.name, stories)
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
+            res = send_whatsapp_macro_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                stories=stories,
+                pdf_path=file_path,
+                public_pdf_url=public_pdf_url
+            )
+            st = res.get("status", "sent")
+            results.append({"id": a.id, "name": a.name, "phone": a.phone, "count": len(stories), "status": st, "message": res.get("message")})
+
+        sent_count = len([r for r in results if r["status"] == "sent"])
+        record_dispatch_run(f"group_evening_{g.id}", recipients_count=sent_count, stories_count=sum(r["count"] for r in results), status="COMPLETED" if sent_count > 0 else "CLEAN", details=results)
+
+    else:
+        raise HTTPException(status_code=400, detail="Action type must be 'morning' or 'evening'")
+
+    log_audit_event("GROUP_DISPATCH", g.name, f"Dispatched {action.type} brief to group '{g.name}' ({len(target_analysts)} recipients)")
+    return {"status": "ok", "group": g.name, "type": action.type, "total_recipients": len(target_analysts), "results": results}
+
+
+@app.get("/api/analysts/export")
+def export_clients_data(format: str = "xlsx", template: bool = False):
+    """Export all registered clients or a sample template as Excel or CSV."""
+    from datetime import datetime
+    today_str = datetime.now().strftime("%Y%m%d")
+    is_template = str(template).lower() in ["1", "true", "yes"]
+
+    if format.lower() == "csv":
+        csv_data = generate_clients_csv(include_template=is_template)
+        filename = "vriddhi_clients_template.csv" if is_template else f"vriddhi_clients_{today_str}.csv"
+        return Response(
+            content=csv_data,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    else:
+        xlsx_bytes = generate_clients_workbook(include_template=is_template)
+        filename = "vriddhi_clients_template.xlsx" if is_template else f"vriddhi_clients_{today_str}.xlsx"
+        return Response(
+            content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+
+@app.post("/api/analysts/import")
+async def import_clients_file(
+    file: UploadFile = File(...),
+    auto_create_groups: bool = True
+):
+    """Bulk import clients and distribution group assignments from Excel (.xlsx) or CSV."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith(".xlsx") or filename_lower.endswith(".xls") or filename_lower.endswith(".csv")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel (.xlsx/.xls) or CSV (.csv) file.")
+
+    try:
+        content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(e)}")
+
+    parsed = parse_client_sheet(content, file.filename)
+    if "error" in parsed:
+        return JSONResponse(status_code=400, content={"status": "error", "message": parsed["error"]})
+
+    records = parsed.get("records", [])
+    if not records:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "No valid client rows found in spreadsheet."})
+
+    result = import_clients_records(records, auto_create_groups=auto_create_groups)
+    log_audit_event(
+        "CLIENT_BULK_IMPORT",
+        "System",
+        f"Bulk imported from {file.filename}: {result['imported_count']} new, {result['updated_count']} updated, {result['groups_created_count']} groups created"
+    )
+    return result
 
 
 @app.get("/api/analysts")

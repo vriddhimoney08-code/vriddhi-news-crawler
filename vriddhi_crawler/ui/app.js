@@ -3,6 +3,8 @@
 document.addEventListener("DOMContentLoaded", () => {
   // State
   let analystsList = [];
+  let clientGroups = [];
+  let selectedGroupId = null;
   let currentAnalystId = "rahul";
   let companiesList = [];
 
@@ -301,6 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await loadMacroSectors();
       const res = await fetch("/api/analysts");
       analystsList = await res.json();
+      await loadGroups();
 
       renderAnalystSelectOptions();
 
@@ -369,6 +372,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let filtered = [...analystsList];
+
+    if (selectedGroupId) {
+      const grp = clientGroups.find(g => g.id === selectedGroupId);
+      if (grp) {
+        filtered = filtered.filter(a => (grp.client_ids || []).includes(a.id));
+      }
+    }
+
     if (clientSearchQuery) {
       filtered = filtered.filter(a => {
         const name = (a.name || "").toLowerCase();
@@ -453,6 +464,13 @@ document.addEventListener("DOMContentLoaded", () => {
                   <span class="client-phone-badge" title="WhatsApp Delivery Number">💬 +91 ${a.phone}</span>
                   ${a.email ? `<span class="client-email-badge" title="Email: ${a.email}">✉️ ${a.email}</span>` : ''}
                 </div>
+                ${(() => {
+                  const belongingGroups = clientGroups.filter(g => (g.client_ids || []).includes(a.id));
+                  if (!belongingGroups.length) return '';
+                  return `<div class="client-groups-chips" style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                    ${belongingGroups.map(g => `<span class="group-badge-chip" onclick="window.selectClientGroup('${g.id}')" style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.68rem; background: rgba(99, 102, 241, 0.12); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.25); padding: 1px 6px; border-radius: 4px; cursor: pointer;" title="Group: ${escapeHtml(g.name)} (Click to filter)">📁 ${escapeHtml(g.name)}</span>`).join('')}
+                  </div>`;
+                })()}
               </div>
             </div>
           </td>
@@ -770,6 +788,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAnalystFoldersCheckboxes(a.assigned_folders || []);
     renderAnalystCompaniesCheckboxes(a.assigned_companies || []);
     renderAnalystSectorsCheckboxes(a.macro_sectors || ["ALL"]);
+    renderAnalystGroupsCheckboxes(a.id);
 
     const btnPing = document.getElementById("btn-test-ping-client");
     if (btnPing) {
@@ -860,6 +879,39 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   };
+
+  function renderAnalystGroupsCheckboxes(clientId = null) {
+    const container = document.getElementById("analyst-groups-checkboxes");
+    if (!container) return;
+
+    if (!clientGroups.length) {
+      container.innerHTML = `
+        <div style="padding: 10px; color: var(--text-dim); text-align: center; font-size: 0.78rem;">
+          No client groups created yet. Click <strong>"+ New Group"</strong> in the directory to create distribution lists.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = clientGroups.map(g => {
+      const isMember = clientId ? (g.client_ids || []).includes(clientId) : false;
+      const morningBadge = g.morning_active !== false ? '<span style="color: #34d399; font-size: 0.7rem; font-weight: 700; background: rgba(16,185,129,0.15); padding: 1px 6px; border-radius: 4px;">☀️ Morning</span>' : '';
+      const eveningBadge = g.evening_active !== false ? '<span style="color: #a78bfa; font-size: 0.7rem; font-weight: 700; background: rgba(139,92,246,0.15); padding: 1px 6px; border-radius: 4px;">🌙 Evening</span>' : '';
+
+      return `
+        <label class="folder-checkbox-card" style="padding: 7px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); margin-bottom: 4px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" value="${g.id}" class="chk-analyst-group" ${isMember ? "checked" : ""}>
+            <span style="font-size: 0.84rem; font-weight: 700; color: #ffffff;">📁 ${escapeHtml(g.name)}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; gap: 5px;">${morningBadge} ${eveningBadge}</div>
+            <span class="folder-checkbox-count" style="font-size: 0.72rem; color: var(--text-dim);">${(g.client_ids || []).length} members</span>
+          </div>
+        </label>
+      `;
+    }).join("");
+  }
 
   function renderAnalystFoldersCheckboxes(assigned = []) {
     const container = document.getElementById("analyst-folders-checkboxes");
@@ -1004,6 +1056,7 @@ document.addEventListener("DOMContentLoaded", () => {
       renderAnalystFoldersCheckboxes([]);
       renderAnalystCompaniesCheckboxes([]);
       renderAnalystSectorsCheckboxes(["ALL"]);
+      renderAnalystGroupsCheckboxes(null);
       modalAddAnalyst.classList.add("open");
     });
   }
@@ -1058,6 +1111,40 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify(payload)
         });
         if (res.ok) {
+          const resData = await res.json();
+          const savedClientId = resData.analyst?.id || id || name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+          const selectedGroupIds = Array.from(document.querySelectorAll(".chk-analyst-group:checked")).map(cb => cb.value);
+
+          // Synchronize group memberships
+          for (const g of clientGroups) {
+            const memberSet = new Set(g.client_ids || []);
+            const shouldBeMember = selectedGroupIds.includes(g.id);
+            let changed = false;
+
+            if (shouldBeMember && !memberSet.has(savedClientId)) {
+              memberSet.add(savedClientId);
+              changed = true;
+            } else if (!shouldBeMember && memberSet.has(savedClientId)) {
+              memberSet.delete(savedClientId);
+              changed = true;
+            }
+
+            if (changed) {
+              await fetch("/api/groups", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: g.id,
+                  name: g.name,
+                  description: g.description || "",
+                  morning_active: g.morning_active !== false,
+                  evening_active: g.evening_active !== false,
+                  client_ids: Array.from(memberSet)
+                })
+              });
+            }
+          }
+
           showToast(`Saved client: ${name}!`);
           modalAddAnalyst.classList.remove("open");
           formAddAnalyst.reset();
@@ -1066,6 +1153,557 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch(err) {
         showToast("Failed to save client", true);
+      }
+    });
+  }
+
+  // =========================================================================
+  // Client Groups & Targeted Distribution Management
+  // =========================================================================
+
+  const clientGroupTabs = document.getElementById("client-group-tabs");
+  const activeGroupBanner = document.getElementById("active-group-banner");
+  const activeGroupName = document.getElementById("active-group-name");
+  const activeGroupCount = document.getElementById("active-group-count");
+  const activeGroupMorningPill = document.getElementById("active-group-morning-pill");
+  const activeGroupEveningPill = document.getElementById("active-group-evening-pill");
+  const activeGroupDesc = document.getElementById("active-group-desc");
+  const btnOpenCreateGroup = document.getElementById("btn-open-create-group");
+  const btnEditActiveGroup = document.getElementById("btn-edit-active-group");
+  const btnDeleteActiveGroup = document.getElementById("btn-delete-active-group");
+  const btnDispatchGroupBrief = document.getElementById("btn-dispatch-group-brief");
+
+  const modalGroup = document.getElementById("modal-group");
+  const formGroup = document.getElementById("form-group");
+  const groupModalTitle = document.getElementById("group-modal-title");
+  const inputGroupId = document.getElementById("input-group-id");
+  const inputGroupName = document.getElementById("input-group-name");
+  const inputGroupDesc = document.getElementById("input-group-desc");
+  const inputGroupMorning = document.getElementById("input-group-morning");
+  const inputGroupEvening = document.getElementById("input-group-evening");
+  const groupClientsChecklist = document.getElementById("group-clients-checklist");
+  const btnGroupSelectAll = document.getElementById("btn-group-select-all");
+  const btnGroupDeselectAll = document.getElementById("btn-group-deselect-all");
+  const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
+  const btnCancelGroupModal = document.getElementById("btn-cancel-group-modal");
+
+  const modalGroupDispatch = document.getElementById("modal-group-dispatch");
+  const dispatchGroupId = document.getElementById("dispatch-group-id");
+  const dispatchGroupMembersSummary = document.getElementById("dispatch-group-members-summary");
+  const btnCloseGroupDispatchModal = document.getElementById("btn-close-group-dispatch-modal");
+  const btnCancelGroupDispatchModal = document.getElementById("btn-cancel-group-dispatch-modal");
+  const btnConfirmGroupDispatch = document.getElementById("btn-confirm-group-dispatch");
+  const optDispatchMorning = document.getElementById("opt-dispatch-morning");
+  const optDispatchEvening = document.getElementById("opt-dispatch-evening");
+
+  async function loadGroups() {
+    try {
+      const res = await fetch("/api/groups");
+      if (res.ok) {
+        clientGroups = await res.json();
+        renderGroupTabs();
+        updateActiveGroupBanner();
+      }
+    } catch (e) {
+      console.warn("Failed to load client groups", e);
+    }
+  }
+
+  function renderGroupTabs() {
+    if (!clientGroupTabs) return;
+
+    let html = `
+      <button type="button" class="folder-tab-btn ${selectedGroupId === null ? 'active' : ''}" onclick="window.selectClientGroup(null)" title="Show all registered clients">
+        <span>All Clients</span>
+        <span class="folder-tab-count">${analystsList.length}</span>
+      </button>
+    `;
+
+    clientGroups.forEach(g => {
+      const isActive = selectedGroupId === g.id;
+      const cnt = (g.client_ids || []).length;
+      html += `
+        <button type="button" class="folder-tab-btn ${isActive ? 'active' : ''}" onclick="window.selectClientGroup('${g.id}')" title="Group: ${escapeHtml(g.name)} (${cnt} members)">
+          <span>📁 ${escapeHtml(g.name)}</span>
+          <span class="folder-tab-count">${cnt}</span>
+        </button>
+      `;
+    });
+
+    clientGroupTabs.innerHTML = html;
+  }
+
+  window.selectClientGroup = (gid) => {
+    selectedGroupId = gid;
+    renderGroupTabs();
+    updateActiveGroupBanner();
+    renderAnalystsTable();
+  };
+
+  function updateActiveGroupBanner() {
+    if (!activeGroupBanner) return;
+
+    if (!selectedGroupId) {
+      activeGroupBanner.style.display = "none";
+      return;
+    }
+
+    const g = clientGroups.find(x => x.id === selectedGroupId);
+    if (!g) {
+      activeGroupBanner.style.display = "none";
+      return;
+    }
+
+    activeGroupBanner.style.display = "flex";
+    if (activeGroupName) activeGroupName.textContent = g.name;
+    if (activeGroupCount) activeGroupCount.textContent = `${(g.client_ids || []).length} Members`;
+
+    if (activeGroupMorningPill) {
+      activeGroupMorningPill.textContent = g.morning_active !== false ? "☀️ Morning: ON" : "☀️ Morning: OFF";
+      activeGroupMorningPill.style.background = g.morning_active !== false ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)";
+      activeGroupMorningPill.style.color = g.morning_active !== false ? "#34d399" : "var(--text-muted)";
+      activeGroupMorningPill.style.borderColor = g.morning_active !== false ? "rgba(16, 185, 129, 0.3)" : "var(--border-default)";
+    }
+
+    if (activeGroupEveningPill) {
+      activeGroupEveningPill.textContent = g.evening_active !== false ? "🌙 Evening: ON" : "🌙 Evening: OFF";
+      activeGroupEveningPill.style.background = g.evening_active !== false ? "rgba(139, 92, 246, 0.15)" : "rgba(255, 255, 255, 0.05)";
+      activeGroupEveningPill.style.color = g.evening_active !== false ? "#a78bfa" : "var(--text-muted)";
+      activeGroupEveningPill.style.borderColor = g.evening_active !== false ? "rgba(139, 92, 246, 0.3)" : "var(--border-default)";
+    }
+
+    if (activeGroupDesc) {
+      activeGroupDesc.textContent = g.description ? `• ${g.description}` : "";
+    }
+  }
+
+  function openGroupModal(groupId = null) {
+    if (!modalGroup) return;
+
+    const g = groupId ? clientGroups.find(x => x.id === groupId) : null;
+
+    if (groupModalTitle) {
+      groupModalTitle.textContent = g ? `Edit Client Group: ${g.name}` : "Create Client Group";
+    }
+
+    if (inputGroupId) inputGroupId.value = g ? g.id : "";
+    if (inputGroupName) inputGroupName.value = g ? g.name : "";
+    if (inputGroupDesc) inputGroupDesc.value = g ? (g.description || "") : "";
+    if (inputGroupMorning) inputGroupMorning.checked = g ? (g.morning_active !== false) : true;
+    if (inputGroupEvening) inputGroupEvening.checked = g ? (g.evening_active !== false) : true;
+
+    // Render member checklist
+    if (groupClientsChecklist) {
+      const memberIds = g ? (g.client_ids || []) : [];
+      if (analystsList.length === 0) {
+        groupClientsChecklist.innerHTML = `<div style="padding: 10px; color: var(--text-dim); text-align: center; font-size: 0.8rem;">No clients registered yet.</div>`;
+      } else {
+        groupClientsChecklist.innerHTML = analystsList.map(a => {
+          const isChecked = memberIds.includes(a.id);
+          return `
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: pointer;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" value="${a.id}" class="chk-group-member" ${isChecked ? "checked" : ""}>
+                <span style="font-size: 0.84rem; font-weight: 600; color: #fff;">${escapeHtml(a.name)}</span>
+              </div>
+              <span style="font-size: 0.76rem; color: #94a3b8; font-family: var(--font-mono);">+91 ${escapeHtml(a.phone)}</span>
+            </label>
+          `;
+        }).join("");
+      }
+    }
+
+    modalGroup.style.display = "flex";
+    modalGroup.classList.add("open");
+  }
+
+  function closeGroupModal() {
+    if (modalGroup) {
+      modalGroup.classList.remove("open");
+      modalGroup.style.display = "none";
+    }
+  }
+
+  if (btnOpenCreateGroup) {
+    btnOpenCreateGroup.addEventListener("click", () => openGroupModal(null));
+  }
+  if (btnEditActiveGroup) {
+    btnEditActiveGroup.addEventListener("click", () => openGroupModal(selectedGroupId));
+  }
+  if (btnCloseGroupModal) btnCloseGroupModal.addEventListener("click", closeGroupModal);
+  if (btnCancelGroupModal) btnCancelGroupModal.addEventListener("click", closeGroupModal);
+
+  if (btnGroupSelectAll) {
+    btnGroupSelectAll.addEventListener("click", () => {
+      document.querySelectorAll(".chk-group-member").forEach(cb => cb.checked = true);
+    });
+  }
+  if (btnGroupDeselectAll) {
+    btnGroupDeselectAll.addEventListener("click", () => {
+      document.querySelectorAll(".chk-group-member").forEach(cb => cb.checked = false);
+    });
+  }
+
+  if (formGroup) {
+    formGroup.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = (inputGroupName.value || "").trim();
+      if (!name) return;
+
+      const checkedIds = Array.from(document.querySelectorAll(".chk-group-member:checked")).map(cb => cb.value);
+
+      const payload = {
+        id: (inputGroupId.value || "").trim(),
+        name: name,
+        description: (inputGroupDesc.value || "").trim(),
+        morning_active: inputGroupMorning ? inputGroupMorning.checked : true,
+        evening_active: inputGroupEvening ? inputGroupEvening.checked : true,
+        client_ids: checkedIds
+      };
+
+      try {
+        const res = await fetch("/api/groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          showToast(`Saved group '${name}' with ${checkedIds.length} members!`);
+          closeGroupModal();
+          await loadGroups();
+          if (data.group && data.group.id) {
+            window.selectClientGroup(data.group.id);
+          }
+        } else {
+          showToast("Failed to save group", true);
+        }
+      } catch (err) {
+        showToast("Error saving group: " + err, true);
+      }
+    });
+  }
+
+  if (btnDeleteActiveGroup) {
+    btnDeleteActiveGroup.addEventListener("click", () => {
+      if (!selectedGroupId) return;
+      const g = clientGroups.find(x => x.id === selectedGroupId);
+      if (!g) return;
+
+      showDangerModal({
+        title: `Delete Group: ${g.name}`,
+        subtitle: "This will remove the group but will NOT delete any clients",
+        message: `Are you sure you want to delete the distribution list <strong>"${escapeHtml(g.name)}"</strong>? Group members will remain registered in your client directory.`,
+        confirmText: "Yes, Delete Group",
+        onConfirm: async () => {
+          const res = await fetch(`/api/groups/${g.id}`, { method: "DELETE" });
+          if (res.ok) {
+            showToast(`Deleted group '${g.name}'`);
+            selectedGroupId = null;
+            await loadGroups();
+            renderAnalystsTable();
+          } else {
+            showToast("Failed to delete group", true);
+          }
+        }
+      });
+    });
+  }
+
+  // Group Dispatch Modal Logic
+  function openGroupDispatchModal() {
+    if (!modalGroupDispatch || !selectedGroupId) return;
+    const g = clientGroups.find(x => x.id === selectedGroupId);
+    if (!g) return;
+
+    if (dispatchGroupId) dispatchGroupId.value = g.id;
+
+    // List member names
+    const analystsMap = new Map(analystsList.map(a => [a.id, a]));
+    const memberNames = (g.client_ids || []).map(cid => analystsMap.get(cid)?.name).filter(Boolean);
+
+    if (dispatchGroupMembersSummary) {
+      if (memberNames.length) {
+        dispatchGroupMembersSummary.innerHTML = `
+          <div><strong>${memberNames.length} recipients:</strong> ${escapeHtml(memberNames.join(", "))}</div>
+          <div style="font-size: 0.72rem; color: #a5b4fc; margin-top: 4px;">Group settings: ${g.morning_active !== false ? '☀️ Morning Active' : 'Morning Paused'} | ${g.evening_active !== false ? '🌙 Evening Active' : 'Evening Paused'}</div>
+        `;
+      } else {
+        dispatchGroupMembersSummary.innerHTML = `<span style="color: #fb7185;">No active clients in this group. Edit group to assign members first.</span>`;
+      }
+    }
+
+    modalGroupDispatch.style.display = "flex";
+    modalGroupDispatch.classList.add("open");
+  }
+
+  function closeGroupDispatchModal() {
+    if (modalGroupDispatch) {
+      modalGroupDispatch.classList.remove("open");
+      modalGroupDispatch.style.display = "none";
+    }
+  }
+
+  if (btnDispatchGroupBrief) {
+    btnDispatchGroupBrief.addEventListener("click", openGroupDispatchModal);
+  }
+  if (btnCloseGroupDispatchModal) btnCloseGroupDispatchModal.addEventListener("click", closeGroupDispatchModal);
+  if (btnCancelGroupDispatchModal) btnCancelGroupDispatchModal.addEventListener("click", closeGroupDispatchModal);
+
+  // Radio button toggle styling for group dispatch
+  document.querySelectorAll("input[name='group-dispatch-type']").forEach(radio => {
+    radio.addEventListener("change", (e) => {
+      const val = e.target.value;
+      if (optDispatchMorning && optDispatchEvening) {
+        if (val === "morning") {
+          optDispatchMorning.style.border = "2px solid #10b981";
+          optDispatchMorning.style.background = "rgba(16, 185, 129, 0.08)";
+          optDispatchEvening.style.border = "1px solid var(--border-default)";
+          optDispatchEvening.style.background = "rgba(255, 255, 255, 0.04)";
+        } else {
+          optDispatchEvening.style.border = "2px solid #8b5cf6";
+          optDispatchEvening.style.background = "rgba(139, 92, 246, 0.08)";
+          optDispatchMorning.style.border = "1px solid var(--border-default)";
+          optDispatchMorning.style.background = "rgba(255, 255, 255, 0.04)";
+        }
+      }
+    });
+  });
+
+  if (btnConfirmGroupDispatch) {
+    btnConfirmGroupDispatch.addEventListener("click", async () => {
+      const gid = dispatchGroupId ? dispatchGroupId.value : selectedGroupId;
+      if (!gid) return;
+
+      const g = clientGroups.find(x => x.id === gid);
+      const groupName = g ? g.name : "Group";
+      const selectedTypeInput = document.querySelector("input[name='group-dispatch-type']:checked");
+      const dispatchType = selectedTypeInput ? selectedTypeInput.value : "morning";
+
+      btnConfirmGroupDispatch.disabled = true;
+      btnConfirmGroupDispatch.innerHTML = `<span>⏳ Dispatching...</span>`;
+
+      try {
+        const res = await fetch(`/api/groups/${gid}/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: dispatchType })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          showToast(`Dispatched ${dispatchType} brief to ${data.total_recipients} recipients in '${groupName}'!`);
+          closeGroupDispatchModal();
+          loadStats();
+          loadHistory();
+        } else {
+          showToast(data.message || "Group dispatch completed with notes", false);
+          closeGroupDispatchModal();
+        }
+      } catch (err) {
+        showToast("Group dispatch failed: " + err, true);
+      } finally {
+        btnConfirmGroupDispatch.disabled = false;
+        btnConfirmGroupDispatch.innerHTML = `<span>📲 Dispatch via WhatsApp</span>`;
+      }
+    });
+  }
+
+  // =========================================================================
+  // Client Excel & CSV Import / Export Handlers
+  // =========================================================================
+  const btnExportClientsXlsx = document.getElementById("btn-export-clients-xlsx");
+  const btnOpenImportClients = document.getElementById("btn-open-import-clients");
+  const modalImportClients = document.getElementById("modal-import-clients");
+  const btnCloseImportClientsModal = document.getElementById("btn-close-import-clients-modal");
+  const btnCancelImportClientsModal = document.getElementById("btn-cancel-import-clients-modal");
+  const formImportClients = document.getElementById("form-import-clients");
+  const dropzoneImportClients = document.getElementById("dropzone-import-clients");
+  const inputImportClientsFile = document.getElementById("input-import-clients-file");
+  const dropzoneFileName = document.getElementById("dropzone-file-name");
+  const importClientsResultBox = document.getElementById("import-clients-result-box");
+  const btnSubmitImportClients = document.getElementById("btn-submit-import-clients");
+
+  if (btnExportClientsXlsx) {
+    btnExportClientsXlsx.addEventListener("click", () => {
+      showToast("Downloading clients spreadsheet...");
+      window.location.href = "/api/analysts/export?format=xlsx";
+    });
+  }
+
+  function openImportClientsModal() {
+    if (!modalImportClients) return;
+    if (formImportClients) formImportClients.reset();
+    if (dropzoneFileName) {
+      dropzoneFileName.textContent = "Click or Drag & Drop Excel file here";
+      dropzoneFileName.style.color = "#ffffff";
+    }
+    if (importClientsResultBox) {
+      importClientsResultBox.style.display = "none";
+      importClientsResultBox.innerHTML = "";
+    }
+    if (btnSubmitImportClients) {
+      btnSubmitImportClients.disabled = false;
+      btnSubmitImportClients.innerHTML = `<span>📤 Upload &amp; Import</span>`;
+    }
+    modalImportClients.classList.add("open");
+  }
+
+  function closeImportClientsModal() {
+    if (modalImportClients) modalImportClients.classList.remove("open");
+  }
+
+  if (btnOpenImportClients) {
+    btnOpenImportClients.addEventListener("click", openImportClientsModal);
+  }
+  const btnShortcutOpenImport = document.getElementById("btn-shortcut-open-import");
+  if (btnShortcutOpenImport) {
+    btnShortcutOpenImport.addEventListener("click", () => {
+      if (modalAddAnalyst) modalAddAnalyst.classList.remove("open");
+      openImportClientsModal();
+    });
+  }
+  if (btnCloseImportClientsModal) {
+    btnCloseImportClientsModal.addEventListener("click", closeImportClientsModal);
+  }
+  if (btnCancelImportClientsModal) {
+    btnCancelImportClientsModal.addEventListener("click", closeImportClientsModal);
+  }
+
+  if (dropzoneImportClients && inputImportClientsFile) {
+    dropzoneImportClients.addEventListener("click", () => {
+      inputImportClientsFile.click();
+    });
+
+    dropzoneImportClients.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzoneImportClients.style.borderColor = "#6366f1";
+      dropzoneImportClients.style.background = "rgba(99, 102, 241, 0.12)";
+    });
+
+    dropzoneImportClients.addEventListener("dragleave", () => {
+      dropzoneImportClients.style.borderColor = "rgba(99, 102, 241, 0.4)";
+      dropzoneImportClients.style.background = "rgba(0,0,0,0.25)";
+    });
+
+    dropzoneImportClients.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzoneImportClients.style.borderColor = "rgba(99, 102, 241, 0.4)";
+      dropzoneImportClients.style.background = "rgba(0,0,0,0.25)";
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        inputImportClientsFile.files = e.dataTransfer.files;
+        handleSelectedImportFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    inputImportClientsFile.addEventListener("change", () => {
+      if (inputImportClientsFile.files && inputImportClientsFile.files.length) {
+        handleSelectedImportFile(inputImportClientsFile.files[0]);
+      }
+    });
+  }
+
+  function handleSelectedImportFile(file) {
+    if (!file || !dropzoneFileName) return;
+    const sizeKb = (file.size / 1024).toFixed(1);
+    dropzoneFileName.innerHTML = `📄 <strong>${escapeHtml(file.name)}</strong> <span style="font-size: 0.76rem; color: #a5b4fc;">(${sizeKb} KB)</span>`;
+    dropzoneFileName.style.color = "#34d399";
+  }
+
+  if (formImportClients) {
+    formImportClients.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const files = inputImportClientsFile ? inputImportClientsFile.files : null;
+      if (!files || !files.length) {
+        showToast("Please choose an Excel (.xlsx) or CSV file first", true);
+        return;
+      }
+
+      const file = files[0];
+      const autoCreateGroups = document.getElementById("input-import-auto-groups") ? document.getElementById("input-import-auto-groups").checked : true;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      if (btnSubmitImportClients) {
+        btnSubmitImportClients.disabled = true;
+        btnSubmitImportClients.innerHTML = `<span>⏳ Processing Spreadsheet...</span>`;
+      }
+      if (importClientsResultBox) {
+        importClientsResultBox.style.display = "block";
+        importClientsResultBox.style.background = "rgba(99, 102, 241, 0.1)";
+        importClientsResultBox.style.border = "1px solid rgba(99, 102, 241, 0.3)";
+        importClientsResultBox.style.color = "#c7d2fe";
+        importClientsResultBox.innerHTML = `Parsing client records and linking distribution groups...`;
+      }
+
+      try {
+        const res = await fetch(`/api/analysts/import?auto_create_groups=${autoCreateGroups}`, {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          let summaryHtml = `
+            <div style="font-weight: 700; color: #34d399; margin-bottom: 6px;">
+              ✅ Successfully processed spreadsheet!
+            </div>
+            <div style="color: #e2e8f0; font-size: 0.78rem; line-height: 1.5;">
+              • <strong>${data.imported_count || 0}</strong> new clients registered<br>
+              • <strong>${data.updated_count || 0}</strong> existing clients updated<br>
+              • <strong>${data.groups_created_count || 0}</strong> new distribution groups created
+            </div>
+          `;
+
+          if (data.errors && data.errors.length) {
+            summaryHtml += `
+              <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); color: #fb7185; font-size: 0.72rem;">
+                <strong>⚠️ Notes on skipped rows:</strong><br>
+                ${data.errors.map(err => `• ${escapeHtml(err)}`).join("<br>")}
+              </div>
+            `;
+          }
+
+          if (importClientsResultBox) {
+            importClientsResultBox.style.background = "rgba(16, 185, 129, 0.12)";
+            importClientsResultBox.style.border = "1px solid rgba(16, 185, 129, 0.35)";
+            importClientsResultBox.innerHTML = summaryHtml;
+          }
+
+          showToast(`Imported ${data.imported_count || 0} clients successfully!`);
+          await loadAnalysts();
+          loadStats();
+
+          if (!data.errors || !data.errors.length) {
+            setTimeout(() => {
+              closeImportClientsModal();
+            }, 2200);
+          }
+        } else {
+          const errMsg = data.message || data.detail || "Failed to import spreadsheet";
+          if (importClientsResultBox) {
+            importClientsResultBox.style.background = "rgba(244, 63, 94, 0.12)";
+            importClientsResultBox.style.border = "1px solid rgba(244, 63, 94, 0.35)";
+            importClientsResultBox.style.color = "#fda4af";
+            importClientsResultBox.innerHTML = `<strong>❌ Import Error:</strong> ${escapeHtml(errMsg)}`;
+          }
+          showToast(errMsg, true);
+        }
+      } catch (err) {
+        if (importClientsResultBox) {
+          importClientsResultBox.style.background = "rgba(244, 63, 94, 0.12)";
+          importClientsResultBox.style.border = "1px solid rgba(244, 63, 94, 0.35)";
+          importClientsResultBox.style.color = "#fda4af";
+          importClientsResultBox.innerHTML = `<strong>❌ Network Error:</strong> ${escapeHtml(String(err))}`;
+        }
+        showToast("Import failed: " + err, true);
+      } finally {
+        if (btnSubmitImportClients) {
+          btnSubmitImportClients.disabled = false;
+          btnSubmitImportClients.innerHTML = `<span>📤 Upload &amp; Import</span>`;
+        }
       }
     });
   }

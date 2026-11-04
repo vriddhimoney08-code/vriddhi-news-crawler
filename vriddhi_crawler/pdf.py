@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import DIGESTS_DIR, GROUP_LOGOS_DIR, IST
-from .db import get_analysts, get_companies, get_client_groups, get_client_group
+from .db import get_analysts, get_companies, get_client_groups, get_client_group, get_corporate_logo
 
 log = logging.getLogger(__name__)
 
@@ -33,49 +33,78 @@ def get_vriddhi_logo_data_uri() -> str:
 
 
 def get_group_logo_data_uri(analyst_id: str | None = None, group_id: str | None = None) -> str:
-    """Retrieve and base64-encode the client group corporate white-label logo for PDF rendering."""
-    target_logo_filename: str = ""
+    """Retrieve the base64-encoded corporate white-label logo Data URI.
+    Prioritizes SQLite database storage (corporate_logos table & logo_data column),
+    falling back to disk storage in GROUP_LOGOS_DIR.
+    """
+    # 1. Direct analyst logo from SQLite corporate_logos table
+    if analyst_id:
+        try:
+            cl = get_corporate_logo("analyst", analyst_id)
+            if cl and cl.get("logo_data"):
+                return cl["logo_data"]
+        except Exception:
+            pass
 
+    # 2. Direct group logo from SQLite corporate_logos table
     if group_id:
         try:
-            g = get_client_group(group_id)
-            if g and g.logo_path:
-                target_logo_filename = g.logo_path
-        except Exception as e:
-            log.warning("Failed resolving group %s logo: %s", group_id, e)
+            cl = get_corporate_logo("group", group_id)
+            if cl and cl.get("logo_data"):
+                return cl["logo_data"]
+        except Exception:
+            pass
 
-    if not target_logo_filename and analyst_id:
+    # 3. Check Analyst object in DB (analyst.logo_data or analyst.group_id)
+    target_group_id = group_id or ""
+    if analyst_id:
+        try:
+            for a in get_analysts():
+                if a.id == analyst_id:
+                    if getattr(a, "logo_data", ""):
+                        return a.logo_data
+                    if getattr(a, "group_id", ""):
+                        target_group_id = a.group_id
+                    break
+        except Exception as e:
+            log.warning("Failed resolving analyst %s profile for logo: %s", analyst_id, e)
+
+    # 4. Check Group object in DB
+    if not target_group_id and analyst_id:
         try:
             groups = get_client_groups()
             for g in groups:
-                if analyst_id in (g.client_ids or []) and g.logo_path:
-                    target_logo_filename = g.logo_path
+                if analyst_id in (g.client_ids or []):
+                    target_group_id = g.id
+                    if getattr(g, "logo_data", ""):
+                        return g.logo_data
                     break
         except Exception as e:
             log.warning("Failed resolving analyst %s group logo: %s", analyst_id, e)
 
-    if not target_logo_filename:
-        return ""
+    if target_group_id:
+        try:
+            cl = get_corporate_logo("group", target_group_id)
+            if cl and cl.get("logo_data"):
+                return cl["logo_data"]
+            g = get_client_group(target_group_id)
+            if g and getattr(g, "logo_data", ""):
+                return g.logo_data
+            if g and g.logo_path:
+                target_logo_filename = g.logo_path
+                logo_file = GROUP_LOGOS_DIR / target_logo_filename
+                if logo_file.exists() and logo_file.is_file():
+                    ext = logo_file.suffix.lower()
+                    mime = "image/png"
+                    if ext in (".jpg", ".jpeg"): mime = "image/jpeg"
+                    elif ext == ".svg": mime = "image/svg+xml"
+                    elif ext == ".webp": mime = "image/webp"
+                    raw_b64 = base64.b64encode(logo_file.read_bytes()).decode("ascii")
+                    return f"data:{mime};base64,{raw_b64}"
+        except Exception as e:
+            log.warning("Failed resolving target group %s logo: %s", target_group_id, e)
 
-    logo_file = GROUP_LOGOS_DIR / target_logo_filename
-    if not logo_file.exists() or not logo_file.is_file():
-        return ""
-
-    ext = logo_file.suffix.lower()
-    mime = "image/png"
-    if ext in (".jpg", ".jpeg"):
-        mime = "image/jpeg"
-    elif ext == ".svg":
-        mime = "image/svg+xml"
-    elif ext == ".webp":
-        mime = "image/webp"
-
-    try:
-        raw_b64 = base64.b64encode(logo_file.read_bytes()).decode("ascii")
-        return f"data:{mime};base64,{raw_b64}"
-    except Exception as e:
-        log.warning("Error encoding group logo file %s: %s", logo_file, e)
-        return ""
+    return ""
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>

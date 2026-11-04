@@ -1,5 +1,6 @@
 from __future__ import annotations
 """Database operations, SQLite schema, deduplication fingerprints, and sent ledger."""
+import base64
 import logging
 import json
 import sqlite3
@@ -14,7 +15,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 from pathlib import Path
 from typing import Any
 
-from .config import DB_PATH, DEFAULT_FOLDERS
+from .config import DB_PATH, DEFAULT_FOLDERS, GROUP_LOGOS_DIR
 from .controlpanel import Analyst, Company, ClientGroup
 
 log = logging.getLogger(__name__)
@@ -163,14 +164,31 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
             evening_active INTEGER DEFAULT 1,
             client_ids TEXT DEFAULT '[]',
             created_at TEXT,
-            logo_path TEXT DEFAULT ''
+            logo_path TEXT DEFAULT '',
+            logo_data TEXT DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS corporate_logos (
+            id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            logo_data TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at);
+        CREATE INDEX IF NOT EXISTS idx_corp_logos_entity ON corporate_logos(entity_type, entity_id);
         """)
 
-        # Safe migration for logo_path on client_groups
+        # Safe migration for logo_path and logo_data on client_groups
         try:
             conn.execute("ALTER TABLE client_groups ADD COLUMN logo_path TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE client_groups ADD COLUMN logo_data TEXT DEFAULT ''")
         except Exception:
             pass
 
@@ -180,23 +198,57 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
         except Exception:
             pass
 
-        # Safe migration for assigned_folders column on analysts
+        # Safe migration for assigned_folders, macro_sectors, is_active, group_id, logo_path, logo_data on analysts
         try:
             conn.execute("ALTER TABLE analysts ADD COLUMN assigned_folders TEXT DEFAULT '[]'")
         except Exception:
             pass
-
-        # Safe migration for macro_sectors column on analysts
         try:
             conn.execute("ALTER TABLE analysts ADD COLUMN macro_sectors TEXT DEFAULT '[\"ALL\"]'")
         except Exception:
             pass
-
-        # Safe migration for is_active column on analysts
         try:
             conn.execute("ALTER TABLE analysts ADD COLUMN is_active INTEGER DEFAULT 1")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE analysts ADD COLUMN group_id TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE analysts ADD COLUMN logo_path TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE analysts ADD COLUMN logo_data TEXT DEFAULT ''")
+        except Exception:
+            pass
+
+        # Auto-migrate any existing disk logos into corporate_logos table & client_groups.logo_data
+        try:
+            c_groups = conn.execute("SELECT id, logo_path, logo_data FROM client_groups WHERE logo_path != ''").fetchall()
+            for cg in c_groups:
+                cg_keys = cg.keys()
+                l_data = cg["logo_data"] if "logo_data" in cg_keys and cg["logo_data"] else ""
+                l_path = cg["logo_path"] if "logo_path" in cg_keys and cg["logo_path"] else ""
+                if not l_data and l_path:
+                    disk_p = GROUP_LOGOS_DIR / l_path
+                    if disk_p.exists() and disk_p.is_file():
+                        ext = disk_p.suffix.lower()
+                        mime = "image/png"
+                        if ext in (".jpg", ".jpeg"): mime = "image/jpeg"
+                        elif ext == ".svg": mime = "image/svg+xml"
+                        elif ext == ".webp": mime = "image/webp"
+                        b64_str = base64.b64encode(disk_p.read_bytes()).decode("ascii")
+                        uri = f"data:{mime};base64,{b64_str}"
+                        conn.execute("UPDATE client_groups SET logo_data = ? WHERE id = ?", (uri, cg["id"]))
+                        conn.execute("""
+                            INSERT INTO corporate_logos (id, entity_type, entity_id, filename, mime_type, logo_data, created_at, updated_at)
+                            VALUES (?, 'group', ?, ?, ?, ?, datetime('now'), datetime('now'))
+                            ON CONFLICT(id) DO UPDATE SET logo_data=excluded.logo_data, updated_at=excluded.updated_at
+                        """, (f"group_{cg['id']}", cg["id"], l_path, mime, uri))
+        except Exception as e:
+            log.warning("Disk-to-DB logo migration notice: %s", e)
 
         # Safe migration for is_excluded on stories and macro_stories
         try:
@@ -461,6 +513,9 @@ def get_analysts(db_path: Path = DB_PATH) -> list[Analyst]:
             flds = json.loads(r["assigned_folders"] or "[]") if "assigned_folders" in keys and r["assigned_folders"] else []
             sectors = json.loads(r["macro_sectors"] or '["ALL"]') if "macro_sectors" in keys and r["macro_sectors"] else ["ALL"]
             is_act = bool(r["is_active"]) if "is_active" in keys and r["is_active"] is not None else True
+            g_id = r["group_id"] if "group_id" in keys and r["group_id"] else ""
+            l_path = r["logo_path"] if "logo_path" in keys and r["logo_path"] else ""
+            l_data = r["logo_data"] if "logo_data" in keys and r["logo_data"] else ""
             out.append(Analyst(
                 id=r["id"],
                 name=r["name"],
@@ -470,6 +525,9 @@ def get_analysts(db_path: Path = DB_PATH) -> list[Analyst]:
                 assigned_folders=flds,
                 macro_sectors=sectors,
                 is_active=is_act,
+                group_id=g_id,
+                logo_path=l_path,
+                logo_data=l_data,
             ))
         return out
 
@@ -479,9 +537,12 @@ def save_analyst(a: Analyst, db_path: Path = DB_PATH):
         folders_json = json.dumps(getattr(a, "assigned_folders", []))
         sectors_json = json.dumps(getattr(a, "macro_sectors", ["ALL"]))
         is_act = 1 if getattr(a, "is_active", True) else 0
+        g_id = getattr(a, "group_id", "") or ""
+        l_path = getattr(a, "logo_path", "") or ""
+        l_data = getattr(a, "logo_data", "") or ""
         conn.execute("""
-        INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders, macro_sectors, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders, macro_sectors, is_active, group_id, logo_path, logo_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             phone=excluded.phone,
@@ -489,14 +550,59 @@ def save_analyst(a: Analyst, db_path: Path = DB_PATH):
             assigned_companies=excluded.assigned_companies,
             assigned_folders=excluded.assigned_folders,
             macro_sectors=excluded.macro_sectors,
-            is_active=excluded.is_active
-        """, (a.id, a.name, a.phone, a.email, json.dumps(a.assigned_companies), folders_json, sectors_json, is_act))
+            is_active=excluded.is_active,
+            group_id=excluded.group_id,
+            logo_path=CASE WHEN excluded.logo_path != '' THEN excluded.logo_path ELSE analysts.logo_path END,
+            logo_data=CASE WHEN excluded.logo_data != '' THEN excluded.logo_data ELSE analysts.logo_data END
+        """, (a.id, a.name, a.phone, a.email, json.dumps(a.assigned_companies), folders_json, sectors_json, is_act, g_id, l_path, l_data))
 
 
 def delete_analyst(aid: str, db_path: Path = DB_PATH):
     with get_connection(db_path) as conn:
         conn.execute("DELETE FROM analysts WHERE id = ?", (aid,))
         conn.execute("DELETE FROM sent_ledger WHERE analyst_id = ?", (aid,))
+
+
+def save_corporate_logo(
+    entity_type: str,
+    entity_id: str,
+    filename: str,
+    mime_type: str,
+    logo_data: str,
+    db_path: Path = DB_PATH
+) -> None:
+    """Save or update corporate white-label logo binary/data URI in dedicated SQLite corporate_logos table."""
+    logo_id = f"{entity_type}_{entity_id}"
+    now_ts = datetime.now(timezone.utc).isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute("""
+        INSERT INTO corporate_logos (id, entity_type, entity_id, filename, mime_type, logo_data, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            filename=excluded.filename,
+            mime_type=excluded.mime_type,
+            logo_data=excluded.logo_data,
+            updated_at=excluded.updated_at
+        """, (logo_id, entity_type, entity_id, filename, mime_type, logo_data, now_ts, now_ts))
+
+
+def get_corporate_logo(entity_type: str, entity_id: str, db_path: Path = DB_PATH) -> dict | None:
+    """Retrieve corporate white-label logo from dedicated SQLite corporate_logos table."""
+    logo_id = f"{entity_type}_{entity_id}"
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM corporate_logos WHERE id = ?", (logo_id,)).fetchone()
+        if row:
+            return dict(row)
+        row = conn.execute("SELECT * FROM corporate_logos WHERE entity_id = ? AND entity_type = ?", (entity_id, entity_type)).fetchone()
+        return dict(row) if row else None
+
+
+def delete_corporate_logo(entity_type: str, entity_id: str, db_path: Path = DB_PATH) -> bool:
+    """Delete corporate white-label logo from dedicated SQLite corporate_logos table."""
+    logo_id = f"{entity_type}_{entity_id}"
+    with get_connection(db_path) as conn:
+        res = conn.execute("DELETE FROM corporate_logos WHERE id = ? OR (entity_id = ? AND entity_type = ?)", (logo_id, entity_id, entity_type))
+        return res.rowcount > 0
 
 
 def get_client_groups(db_path: Path = DB_PATH) -> list[ClientGroup]:
@@ -511,6 +617,7 @@ def get_client_groups(db_path: Path = DB_PATH) -> list[ClientGroup]:
             desc = r["description"] if "description" in keys and r["description"] else ""
             c_at = r["created_at"] if "created_at" in keys and r["created_at"] else ""
             l_path = r["logo_path"] if "logo_path" in keys and r["logo_path"] else ""
+            l_data = r["logo_data"] if "logo_data" in keys and r["logo_data"] else ""
             out.append(ClientGroup(
                 id=r["id"],
                 name=r["name"],
@@ -520,6 +627,7 @@ def get_client_groups(db_path: Path = DB_PATH) -> list[ClientGroup]:
                 client_ids=cids,
                 created_at=c_at,
                 logo_path=l_path,
+                logo_data=l_data,
             ))
         return out
 
@@ -530,15 +638,16 @@ def save_client_group(g: ClientGroup, db_path: Path = DB_PATH) -> ClientGroup:
         now_ts = datetime.now(timezone.utc).isoformat()
         created = g.created_at or now_ts
         conn.execute("""
-        INSERT INTO client_groups (id, name, description, morning_active, evening_active, client_ids, created_at, logo_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO client_groups (id, name, description, morning_active, evening_active, client_ids, created_at, logo_path, logo_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             description=excluded.description,
             morning_active=excluded.morning_active,
             evening_active=excluded.evening_active,
             client_ids=excluded.client_ids,
-            logo_path=excluded.logo_path
+            logo_path=CASE WHEN excluded.logo_path != '' THEN excluded.logo_path ELSE client_groups.logo_path END,
+            logo_data=CASE WHEN excluded.logo_data != '' THEN excluded.logo_data ELSE client_groups.logo_data END
         """, (
             g.id,
             g.name,
@@ -548,6 +657,7 @@ def save_client_group(g: ClientGroup, db_path: Path = DB_PATH) -> ClientGroup:
             json.dumps(g.client_ids or []),
             created,
             g.logo_path or "",
+            getattr(g, "logo_data", "") or "",
         ))
     return g
 

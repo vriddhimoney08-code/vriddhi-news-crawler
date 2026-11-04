@@ -924,6 +924,9 @@ class AnalystCreate(BaseModel):
     assigned_folders: list[str] = []
     macro_sectors: list[str] = ["ALL"]
     is_active: bool = True
+    group_id: str = ""
+    logo_path: str = ""
+    logo_data: str = ""
 
 
 class ClientGroupCreate(BaseModel):
@@ -934,6 +937,7 @@ class ClientGroupCreate(BaseModel):
     evening_active: bool = True
     client_ids: list[str] = []
     logo_path: str = ""
+    logo_data: str = ""
 
 
 class GroupDispatchAction(BaseModel):
@@ -974,6 +978,15 @@ def create_or_update_client_group(item: ClientGroupCreate):
     if not clean_name:
         raise HTTPException(status_code=400, detail="Group name is required")
     gid = item.id.strip().lower() or re.sub(r"[^a-z0-9_]+", "_", clean_name.lower()).strip("_")
+    
+    # If group exists, preserve existing logo if not explicitly passed
+    existing_g = get_client_group(gid)
+    l_path = item.logo_path or ""
+    l_data = getattr(item, "logo_data", "") or ""
+    if not l_path and existing_g:
+        l_path = existing_g.logo_path or ""
+        l_data = getattr(existing_g, "logo_data", "") or ""
+
     group = ClientGroup(
         id=gid,
         name=clean_name,
@@ -981,10 +994,11 @@ def create_or_update_client_group(item: ClientGroupCreate):
         morning_active=item.morning_active,
         evening_active=item.evening_active,
         client_ids=item.client_ids or [],
-        logo_path=item.logo_path or ""
+        logo_path=l_path,
+        logo_data=l_data
     )
     save_client_group(group)
-    log_audit_event("GROUP_UPDATE", group.name, f"Saved client group '{group.name}' with {len(group.client_ids)} members (Morning: {group.morning_active}, Evening: {group.evening_active})")
+    log_audit_event("GROUP_UPDATE", group.name, f"Saved client group '{group.name}' with {len(group.client_ids)} members (Morning: {group.morning_active}, Evening: {group.evening_active}, Logo: {'Yes' if l_path or l_data else 'No'})")
     return {"status": "ok", "group": asdict(group)}
 
 
@@ -1001,7 +1015,7 @@ def remove_client_group(group_id: str):
 
 @app.post("/api/groups/{group_id}/logo")
 async def upload_group_logo(group_id: str, file: UploadFile = File(...)):
-    """Upload custom corporate white-label logo for a client group (PNG, JPG, SVG, WEBP)."""
+    """Upload custom corporate white-label logo for a client group (PNG, JPG, SVG, WEBP). Saves to SQLite DB and disk."""
     g = get_client_group(group_id)
     if not g:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -1021,11 +1035,31 @@ async def upload_group_logo(group_id: str, file: UploadFile = File(...)):
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-    target_path.write_bytes(content)
+    # 1. Write to disk
+    try:
+        target_path.write_bytes(content)
+    except Exception as e:
+        log.warning("Could not write logo to disk %s: %s", target_path, e)
+
+    # 2. Encode to Base64 Data URI for direct DB storage
+    mime = "image/png"
+    if ext in (".jpg", ".jpeg"): mime = "image/jpeg"
+    elif ext == ".svg": mime = "image/svg+xml"
+    elif ext == ".webp": mime = "image/webp"
+    raw_b64 = base64.b64encode(content).decode("ascii")
+    data_uri = f"data:{mime};base64,{raw_b64}"
+
+    # 3. Save to corporate_logos dedicated SQLite table
+    from .db import save_corporate_logo
+    save_corporate_logo("group", group_id, filename, mime, data_uri)
+
+    # 4. Save to client_groups table
     g.logo_path = filename
+    g.logo_data = data_uri
     save_client_group(g)
-    log_audit_event("GROUP_LOGO_UPDATE", g.name, f"Uploaded custom corporate logo '{filename}' for group '{g.name}'")
-    return {"status": "ok", "logo_path": filename}
+
+    log_audit_event("GROUP_LOGO_UPDATE", g.name, f"Uploaded custom corporate logo '{filename}' for group '{g.name}' (saved to SQLite DB and disk)")
+    return {"status": "ok", "logo_path": filename, "logo_data": data_uri}
 
 
 @app.delete("/api/groups/{group_id}/logo")
@@ -1036,7 +1070,11 @@ def delete_group_logo(group_id: str):
         raise HTTPException(status_code=404, detail="Group not found")
     old_file = g.logo_path
     g.logo_path = ""
-    save_client_group(g)
+    g.logo_data = ""
+    from .db import delete_corporate_logo, get_connection
+    delete_corporate_logo("group", group_id)
+    with get_connection() as conn:
+        conn.execute("UPDATE client_groups SET logo_path = '', logo_data = '' WHERE id = ?", (g.id,))
     if old_file:
         file_path = GROUP_LOGOS_DIR / old_file
         if file_path.exists():
@@ -1050,13 +1088,32 @@ def delete_group_logo(group_id: str):
 
 @app.get("/api/groups/logo/{filename}")
 def get_group_logo(filename: str):
-    """Serve uploaded group logo image."""
+    """Serve uploaded group logo image from disk or directly from SQLite DB."""
     import re
     safe_name = re.sub(r"[^a-zA-Z0-9_\.-]", "", filename)
     file_path = GROUP_LOGOS_DIR / safe_name
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Logo not found")
-    return FileResponse(path=str(file_path))
+    if file_path.exists() and file_path.is_file():
+        ext = file_path.suffix.lower()
+        media_type = "image/png"
+        if ext in [".jpg", ".jpeg"]: media_type = "image/jpeg"
+        elif ext == ".svg": media_type = "image/svg+xml"
+        elif ext == ".webp": media_type = "image/webp"
+        return FileResponse(path=str(file_path), media_type=media_type)
+
+    # Fallback to SQLite DB
+    from .db import get_connection
+    with get_connection() as conn:
+        row = conn.execute("SELECT logo_data FROM corporate_logos WHERE filename = ? OR id LIKE ?", (safe_name, f"%{safe_name}%")).fetchone()
+        if not row:
+            row = conn.execute("SELECT logo_data FROM client_groups WHERE logo_path = ?", (safe_name,)).fetchone()
+        if row and row["logo_data"]:
+            m = re.match(r"^data:(.*?);base64,(.*)$", row["logo_data"])
+            if m:
+                m_type = m.group(1)
+                b_bytes = base64.b64decode(m.group(2))
+                return Response(content=b_bytes, media_type=m_type)
+
+    raise HTTPException(status_code=404, detail="Logo not found")
 
 
 @app.post("/api/groups/{group_id}/dispatch")
@@ -1194,7 +1251,22 @@ async def import_clients_file(
 
 @app.get("/api/analysts")
 def list_analysts():
-    return [asdict(a) for a in get_analysts()]
+    analysts = get_analysts()
+    groups = get_client_groups()
+    aid_to_grp = {}
+    for g in groups:
+        for cid in (g.client_ids or []):
+            aid_to_grp[cid] = {"group_id": g.id, "group_name": g.name, "group_logo_path": g.logo_path}
+
+    out = []
+    for a in analysts:
+        d = asdict(a)
+        grp_info = aid_to_grp.get(a.id) or {}
+        d["group_id"] = getattr(a, "group_id", "") or grp_info.get("group_id", "")
+        d["group_name"] = grp_info.get("group_name", "")
+        d["group_logo_path"] = getattr(a, "logo_path", "") or grp_info.get("group_logo_path", "")
+        out.append(d)
+    return out
 
 
 @app.get("/api/macro-sectors")
@@ -1217,6 +1289,7 @@ def list_macro_sectors():
 @app.post("/api/analysts")
 def create_or_update_analyst(item: AnalystCreate):
     aid = item.id.strip().lower() or item.name.strip().lower().replace(" ", "_")
+    target_group_id = (item.group_id or "").strip().lower()
     analyst = Analyst(
         id=aid,
         name=item.name.strip(),
@@ -1225,10 +1298,32 @@ def create_or_update_analyst(item: AnalystCreate):
         assigned_companies=item.assigned_companies,
         assigned_folders=item.assigned_folders,
         macro_sectors=item.macro_sectors or ["ALL"],
-        is_active=item.is_active
+        is_active=item.is_active,
+        group_id=target_group_id,
+        logo_path=getattr(item, "logo_path", "") or "",
+        logo_data=getattr(item, "logo_data", "") or ""
     )
     save_analyst(analyst)
-    log_audit_event("CLIENT_UPDATE", analyst.name, f"Saved client {analyst.name} (Phone: {analyst.phone}, Active: {analyst.is_active}, Sectors: {len(analyst.macro_sectors)})")
+
+    # Sync group membership automatically
+    try:
+        groups = get_client_groups()
+        for g in groups:
+            cur_members = list(g.client_ids or [])
+            if g.id == target_group_id:
+                if aid not in cur_members:
+                    cur_members.append(aid)
+                    g.client_ids = cur_members
+                    save_client_group(g)
+            else:
+                if aid in cur_members:
+                    cur_members = [x for x in cur_members if x != aid]
+                    g.client_ids = cur_members
+                    save_client_group(g)
+    except Exception as e:
+        log.warning("Failed syncing group membership for analyst %s: %s", aid, e)
+
+    log_audit_event("CLIENT_UPDATE", analyst.name, f"Saved client {analyst.name} (Phone: {analyst.phone}, Active: {analyst.is_active}, Group: {target_group_id or 'None'})")
     return {"status": "ok", "analyst": asdict(analyst)}
 
 

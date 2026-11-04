@@ -53,6 +53,9 @@ class Analyst:
     assigned_folders: list[str] = field(default_factory=list)
     macro_sectors: list[str] = field(default_factory=lambda: ["ALL"])
     is_active: bool = True
+    group_id: str = ""
+    logo_path: str = ""
+    logo_data: str = ""
 
 
 @dataclass
@@ -65,6 +68,7 @@ class ClientGroup:
     client_ids: list[str] = field(default_factory=list)
     created_at: str = ""
     logo_path: str = ""
+    logo_data: str = ""
 
 
 def create_starter_excel(file_path: Path = CONTROL_PANEL_PATH) -> None:

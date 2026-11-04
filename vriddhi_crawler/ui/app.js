@@ -789,6 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAnalystCompaniesCheckboxes(a.assigned_companies || []);
     renderAnalystSectorsCheckboxes(a.macro_sectors || ["ALL"]);
     renderAnalystGroupsCheckboxes(a.id);
+    renderAnalystGroupDropdown(a);
 
     const btnPing = document.getElementById("btn-test-ping-client");
     if (btnPing) {
@@ -880,7 +881,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  function renderAnalystGroupsCheckboxes(clientId = null) {
+  
+  function renderAnalystGroupDropdown(client = null) {
+    const sel = document.getElementById("input-analyst-group");
+    if (!sel) return;
+    let html = '<option value="">-- No Group (Direct Vriddhi Client) --</option>';
+    clientGroups.forEach(g => {
+      html += `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`;
+    });
+    sel.innerHTML = html;
+    if (client) {
+      const currentGid = client.group_id || (clientGroups.find(g => (g.client_ids || []).includes(client.id))?.id) || "";
+      sel.value = currentGid;
+    } else {
+      sel.value = selectedGroupId || "";
+    }
+  }
+
+function renderAnalystGroupsCheckboxes(clientId = null) {
     const container = document.getElementById("analyst-groups-checkboxes");
     if (!container) return;
 
@@ -1057,6 +1075,7 @@ document.addEventListener("DOMContentLoaded", () => {
       renderAnalystCompaniesCheckboxes([]);
       renderAnalystSectorsCheckboxes(["ALL"]);
       renderAnalystGroupsCheckboxes(null);
+      renderAnalystGroupDropdown(null);
       modalAddAnalyst.classList.add("open");
     });
   }
@@ -1093,6 +1112,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const checkedSectorBoxes = document.querySelectorAll('input[name="assigned_macro_sector"]:checked');
       const assignedSectors = Array.from(checkedSectorBoxes).map(cb => cb.value);
 
+      const selGroup = document.getElementById("input-analyst-group");
+      const targetGroupId = selGroup ? selGroup.value.trim() : "";
+
       const payload = {
         id: id || name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16),
         name,
@@ -1101,7 +1123,8 @@ document.addEventListener("DOMContentLoaded", () => {
         assigned_companies: assignedCompanies,
         assigned_folders: assignedFolders,
         macro_sectors: assignedSectors.length ? assignedSectors : ["ALL"],
-        is_active: is_active
+        is_active: is_active,
+        group_id: targetGroupId
       };
 
       try {
@@ -1315,15 +1338,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset logo file picker and load existing logo preview
     pendingGroupLogoFile = null;
     if (inputGroupLogoFile) inputGroupLogoFile.value = "";
-    if (g && g.logo_path) {
-      if (inputGroupLogoPath) inputGroupLogoPath.value = g.logo_path;
+    if (g && (g.logo_data || g.logo_path)) {
+      if (inputGroupLogoPath) inputGroupLogoPath.value = g.logo_path || "";
       if (groupLogoPreviewImg) {
-        groupLogoPreviewImg.src = `/api/groups/logo/${encodeURIComponent(g.logo_path)}?t=${Date.now()}`;
+        groupLogoPreviewImg.src = g.logo_data || `/api/groups/logo/${encodeURIComponent(g.logo_path)}?t=${Date.now()}`;
         groupLogoPreviewImg.style.display = "block";
       }
       if (groupLogoEmptyText) groupLogoEmptyText.style.display = "none";
       if (btnRemoveGroupLogo) btnRemoveGroupLogo.style.display = "inline-flex";
-      if (groupLogoBadge) groupLogoBadge.style.display = "inline-block";
+      if (groupLogoBadge) {
+        groupLogoBadge.textContent = "✓ Stored in SQLite Database";
+        groupLogoBadge.style.display = "inline-block";
+      }
     } else {
       if (inputGroupLogoPath) inputGroupLogoPath.value = "";
       if (groupLogoPreviewImg) {
@@ -1412,13 +1438,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
             if (inputGroupLogoPath) inputGroupLogoPath.value = data.logo_path;
             if (groupLogoPreviewImg) {
-              groupLogoPreviewImg.src = `/api/groups/logo/${encodeURIComponent(data.logo_path)}?t=${Date.now()}`;
+              groupLogoPreviewImg.src = data.logo_data || `/api/groups/logo/${encodeURIComponent(data.logo_path)}?t=${Date.now()}`;
               groupLogoPreviewImg.style.display = "block";
             }
             if (groupLogoEmptyText) groupLogoEmptyText.style.display = "none";
             if (btnRemoveGroupLogo) btnRemoveGroupLogo.style.display = "inline-flex";
-            if (groupLogoBadge) groupLogoBadge.style.display = "inline-block";
-            showToast("Group logo updated!");
+            if (groupLogoBadge) {
+              groupLogoBadge.textContent = "✓ Stored in SQLite Database";
+              groupLogoBadge.style.display = "inline-block";
+            }
+            showToast("✓ Group logo stored in database!");
             await loadGroups();
           } else {
             showToast("Failed to upload group logo", true);

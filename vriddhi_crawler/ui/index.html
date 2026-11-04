@@ -1569,6 +1569,14 @@
             <input type="email" id="input-analyst-email" placeholder="e.g. vikram@example.com">
           </div>
           <div class="input-block">
+            <label style="display: flex; align-items: center; justify-content: space-between;">
+              <span>Client Group / Corporate Partner <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">(Determines White-Label PDF Branding)</span></span>
+            </label>
+            <select id="input-analyst-group" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 9px 12px; color: #ffffff; font-size: 0.85rem;">
+              <option value="">-- No Group (Direct Vriddhi Client) --</option>
+            </select>
+          </div>
+          <div class="input-block">
             <label class="toggle-status-card">
               <input type="checkbox" id="input-analyst-active" checked>
               <div class="toggle-status-info">
@@ -1652,7 +1660,7 @@
           <div class="input-block">
             <label style="display: flex; align-items: center; justify-content: space-between;">
               <span>White-Label Corporate Logo <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional - Embedded in Member PDFs)</span></span>
-              <span id="group-logo-badge" style="font-size: 0.7rem; color: #34d399; font-weight: 600; display: none;">✓ Logo Attached</span>
+              <span id="group-logo-badge" style="font-size: 0.7rem; color: #34d399; font-weight: 600; display: none;">✓ Stored in SQLite Database</span>
             </label>
             <div style="display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,0.03); border: 1px dashed var(--border-default); border-radius: var(--radius-md); padding: 12px 14px;">
               <div id="group-logo-preview-box" style="width: 140px; height: 50px; background: #ffffff; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 4px; border: 1px solid #e2e8f0; overflow: hidden; flex-shrink: 0;">
@@ -2339,6 +2347,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=6.1"></script>
+  <script src="/static/app.js?v=6.2"></script>
 </body>
 </html>

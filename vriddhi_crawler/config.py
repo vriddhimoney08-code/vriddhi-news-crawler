@@ -12,11 +12,13 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DIGESTS_DIR = DATA_DIR / "digests"
+GROUP_LOGOS_DIR = DATA_DIR / "group_logos"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Ensure data and logs directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DIGESTS_DIR.mkdir(parents=True, exist_ok=True)
+GROUP_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load environment variables

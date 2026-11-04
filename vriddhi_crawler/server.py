@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from .config import (
     DIGESTS_DIR,
+    GROUP_LOGOS_DIR,
     PORT,
     DASHBOARD_USERNAME,
     DASHBOARD_PASSWORD,
@@ -932,6 +933,7 @@ class ClientGroupCreate(BaseModel):
     morning_active: bool = True
     evening_active: bool = True
     client_ids: list[str] = []
+    logo_path: str = ""
 
 
 class GroupDispatchAction(BaseModel):
@@ -978,7 +980,8 @@ def create_or_update_client_group(item: ClientGroupCreate):
         description=item.description.strip(),
         morning_active=item.morning_active,
         evening_active=item.evening_active,
-        client_ids=item.client_ids or []
+        client_ids=item.client_ids or [],
+        logo_path=item.logo_path or ""
     )
     save_client_group(group)
     log_audit_event("GROUP_UPDATE", group.name, f"Saved client group '{group.name}' with {len(group.client_ids)} members (Morning: {group.morning_active}, Evening: {group.evening_active})")
@@ -994,6 +997,66 @@ def remove_client_group(group_id: str):
         raise HTTPException(status_code=404, detail="Group not found")
     log_audit_event("GROUP_DELETE", name, f"Deleted client group '{name}' (ID: {group_id})")
     return {"status": "ok", "message": f"Deleted group {name}"}
+
+
+@app.post("/api/groups/{group_id}/logo")
+async def upload_group_logo(group_id: str, file: UploadFile = File(...)):
+    """Upload custom corporate white-label logo for a client group (PNG, JPG, SVG, WEBP)."""
+    g = get_client_group(group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in [".png", ".jpg", ".jpeg", ".webp", ".svg"]:
+        raise HTTPException(status_code=400, detail="Only PNG, JPG, JPEG, WEBP, or SVG images are supported.")
+
+    import re
+    safe_name = re.sub(r"[^a-zA-Z0-9_\.-]", "_", file.filename)
+    filename = f"{group_id}_{safe_name}"
+    target_path = GROUP_LOGOS_DIR / filename
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+    target_path.write_bytes(content)
+    g.logo_path = filename
+    save_client_group(g)
+    log_audit_event("GROUP_LOGO_UPDATE", g.name, f"Uploaded custom corporate logo '{filename}' for group '{g.name}'")
+    return {"status": "ok", "logo_path": filename}
+
+
+@app.delete("/api/groups/{group_id}/logo")
+def delete_group_logo(group_id: str):
+    """Remove custom corporate white-label logo from a client group."""
+    g = get_client_group(group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    old_file = g.logo_path
+    g.logo_path = ""
+    save_client_group(g)
+    if old_file:
+        file_path = GROUP_LOGOS_DIR / old_file
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+    log_audit_event("GROUP_LOGO_DELETE", g.name, f"Removed custom corporate logo from group '{g.name}'")
+    return {"status": "ok", "message": "Group logo removed"}
+
+
+@app.get("/api/groups/logo/{filename}")
+def get_group_logo(filename: str):
+    """Serve uploaded group logo image."""
+    import re
+    safe_name = re.sub(r"[^a-zA-Z0-9_\.-]", "", filename)
+    file_path = GROUP_LOGOS_DIR / safe_name
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Logo not found")
+    return FileResponse(path=str(file_path))
 
 
 @app.post("/api/groups/{group_id}/dispatch")

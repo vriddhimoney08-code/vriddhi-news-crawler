@@ -64,6 +64,7 @@ class ClientGroup:
     evening_active: bool = True
     client_ids: list[str] = field(default_factory=list)
     created_at: str = ""
+    logo_path: str = ""
 
 
 def create_starter_excel(file_path: Path = CONTROL_PANEL_PATH) -> None:

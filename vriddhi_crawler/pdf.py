@@ -7,8 +7,8 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import DIGESTS_DIR, IST
-from .db import get_analysts, get_companies
+from .config import DIGESTS_DIR, GROUP_LOGOS_DIR, IST
+from .db import get_analysts, get_companies, get_client_groups, get_client_group
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +30,52 @@ def get_vriddhi_logo_data_uri() -> str:
         _VRIDDHI_LOGO_CACHE = f"data:image/png;base64,{raw_b64}"
         return _VRIDDHI_LOGO_CACHE
     return ""
+
+
+def get_group_logo_data_uri(analyst_id: str | None = None, group_id: str | None = None) -> str:
+    """Retrieve and base64-encode the client group corporate white-label logo for PDF rendering."""
+    target_logo_filename: str = ""
+
+    if group_id:
+        try:
+            g = get_client_group(group_id)
+            if g and g.logo_path:
+                target_logo_filename = g.logo_path
+        except Exception as e:
+            log.warning("Failed resolving group %s logo: %s", group_id, e)
+
+    if not target_logo_filename and analyst_id:
+        try:
+            groups = get_client_groups()
+            for g in groups:
+                if analyst_id in (g.client_ids or []) and g.logo_path:
+                    target_logo_filename = g.logo_path
+                    break
+        except Exception as e:
+            log.warning("Failed resolving analyst %s group logo: %s", analyst_id, e)
+
+    if not target_logo_filename:
+        return ""
+
+    logo_file = GROUP_LOGOS_DIR / target_logo_filename
+    if not logo_file.exists() or not logo_file.is_file():
+        return ""
+
+    ext = logo_file.suffix.lower()
+    mime = "image/png"
+    if ext in (".jpg", ".jpeg"):
+        mime = "image/jpeg"
+    elif ext == ".svg":
+        mime = "image/svg+xml"
+    elif ext == ".webp":
+        mime = "image/webp"
+
+    try:
+        raw_b64 = base64.b64encode(logo_file.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{raw_b64}"
+    except Exception as e:
+        log.warning("Error encoding group logo file %s: %s", logo_file, e)
+        return ""
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -134,6 +180,40 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   .meta-pills strong {
+    color: #0f172a;
+  }
+
+  /* Dual-Wing White-Label Masthead Option 1 */
+  .client-brand-wing {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .client-group-logo {
+    max-height: 44px;
+    max-width: 180px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .meta-ribbon-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 7px 16px;
+    border-radius: 24px;
+    font-size: 8pt;
+    color: #334155;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  .meta-ribbon-bar strong {
     color: #0f172a;
   }
 
@@ -571,6 +651,34 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
 
 <!-- Masthead -->
+{% if group_logo_b64 %}
+<div class="masthead">
+  <div class="brand-row" style="margin-bottom: 6px;">
+    <div class="brand-group">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="masthead-rect-logo" alt="Vriddhi - Building wealth with wisdom" />
+      {% endif %}
+      <div class="brand-v-divider"></div>
+      <div>
+        <div class="brand-desk-title">EQUITY RESEARCH DESK</div>
+        <div class="brand-sub">Daily Executive Intelligence Digest</div>
+      </div>
+    </div>
+    <div class="client-brand-wing">
+      <img src="{{ group_logo_b64 }}" class="client-group-logo" alt="Client Logo" />
+    </div>
+  </div>
+  <div class="meta-ribbon-bar">
+    <span><strong>Client:</strong> {{ analyst_name }}</span>
+    <span>&bull;</span>
+    <span><strong>Portfolios:</strong> {{ assigned_folders_str }}</span>
+    <span>&bull;</span>
+    <span>{{ date_str }}</span>
+    <span>&bull;</span>
+    <span style="color:#059669;font-weight:700;">{{ total_items }} Stories ({{ total_filings }} Filings)</span>
+  </div>
+</div>
+{% else %}
 <div class="masthead">
   <div class="brand-row">
     <div class="brand-group">
@@ -594,6 +702,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- 24-Hour Coverage Window Notice -->
 <div class="coverage-window-banner">
@@ -760,6 +869,7 @@ def render_digest_html(
     analyst_id: str | None = None,
     assigned_folders: list[str] | None = None,
     assigned_companies: list[str] | None = None,
+    group_logo_b64: str | None = None,
 ) -> str:
     """Render the HTML digest with portfolio-specific groupings for the given analyst and stories."""
     from jinja2 import Template  # type: ignore
@@ -931,9 +1041,13 @@ def render_digest_html(
     coverage_window_start = yesterday_8am.strftime("%d-%b-%Y 08:00 AM IST")
     coverage_window_end = today_8am.strftime("%d-%b-%Y 08:00 AM IST")
 
+    if group_logo_b64 is None and analyst_id:
+        group_logo_b64 = get_group_logo_data_uri(analyst_id=analyst_id)
+
     template = Template(HTML_TEMPLATE)
     return template.render(
         logo_data_uri=get_vriddhi_logo_data_uri(),
+        group_logo_b64=group_logo_b64 or "",
         analyst_name=analyst_name,
         assigned_folders_str=assigned_folders_str,
         date_str=date_str,
@@ -1165,6 +1279,40 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
     font-weight: 600;
     color: #0f172a;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  /* Dual-Wing White-Label Masthead Option 1 */
+  .client-brand-wing {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .client-group-logo {
+    max-height: 44px;
+    max-width: 180px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .meta-ribbon-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-size: 8pt;
+    color: #334155;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  .meta-ribbon-bar strong {
+    color: #0f172a;
   }
 
   .meta-sub-row {
@@ -1516,6 +1664,34 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
 
 <!-- Masthead -->
+{% if group_logo_b64 %}
+<div class="masthead">
+  <div class="brand-row" style="margin-bottom: 6px;">
+    <div class="brand-group">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="masthead-rect-logo" alt="Vriddhi - Building wealth with wisdom" />
+      {% endif %}
+      <div class="brand-v-divider"></div>
+      <div>
+        <div class="brand-desk-title">POST-MARKET MACRO DESK</div>
+        <div class="brand-sub">Sovereign &amp; Regulatory Policy Briefing</div>
+      </div>
+    </div>
+    <div class="client-brand-wing">
+      <img src="{{ group_logo_b64 }}" class="client-group-logo" alt="Client Logo" />
+    </div>
+  </div>
+  <div class="meta-ribbon-bar">
+    <span><strong>Client:</strong> {{ analyst_name }}</span>
+    <span>&bull;</span>
+    <span><strong>Focus:</strong> {{ sectors_label }}</span>
+    <span>&bull;</span>
+    <span>{{ date_str }} (Evening Wrap)</span>
+    <span>&bull;</span>
+    <span style="color:#059669;font-weight:700;">{{ total_items }} Verified Directives ({{ tier1_count }} Tier-1)</span>
+  </div>
+</div>
+{% else %}
 <div class="masthead">
   <div class="brand-row">
     <div class="brand-group">
@@ -1537,6 +1713,7 @@ MACRO_HTML_TEMPLATE = """<!DOCTYPE html>
     <div>{{ total_items }} Verified Policy Directives &bull; {{ tier1_count }} Sovereign/Tier-1</div>
   </div>
 </div>
+{% endif %}
 
 <!-- 24-Hour Policy Coverage Window Notice -->
 <div class="coverage-window-banner">
@@ -1646,6 +1823,7 @@ def render_macro_digest_html(
     stories: list[dict],
     benchmarks: dict | None = None,
     date_str: str | None = None,
+    group_logo_b64: str | None = None,
 ) -> str:
     """Render the HTML digest for the Post-Market Macro & Policy Briefing."""
     from jinja2 import Template
@@ -1767,9 +1945,13 @@ def render_macro_digest_html(
             "count": len(sorted_sec_stories),
         })
 
+    if group_logo_b64 is None and analyst_id:
+        group_logo_b64 = get_group_logo_data_uri(analyst_id=analyst_id)
+
     template = Template(MACRO_HTML_TEMPLATE)
     return template.render(
         logo_data_uri=get_vriddhi_logo_data_uri(),
+        group_logo_b64=group_logo_b64 or "",
         analyst_name=analyst_name,
         sectors_label=sectors_label,
         date_str=date_str,

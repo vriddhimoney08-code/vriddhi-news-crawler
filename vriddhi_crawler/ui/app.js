@@ -1187,6 +1187,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
   const btnCancelGroupModal = document.getElementById("btn-cancel-group-modal");
 
+  const inputGroupLogoFile = document.getElementById("input-group-logo-file");
+  const inputGroupLogoPath = document.getElementById("input-group-logo-path");
+  const groupLogoPreviewImg = document.getElementById("group-logo-preview-img");
+  const groupLogoEmptyText = document.getElementById("group-logo-empty-text");
+  const btnUploadGroupLogo = document.getElementById("btn-upload-group-logo");
+  const btnRemoveGroupLogo = document.getElementById("btn-remove-group-logo");
+  const groupLogoBadge = document.getElementById("group-logo-badge");
+  const activeGroupLogo = document.getElementById("active-group-logo");
+
+  let pendingGroupLogoFile = null;
+
   const modalGroupDispatch = document.getElementById("modal-group-dispatch");
   const dispatchGroupId = document.getElementById("dispatch-group-id");
   const dispatchGroupMembersSummary = document.getElementById("dispatch-group-members-summary");
@@ -1275,6 +1286,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeGroupDesc) {
       activeGroupDesc.textContent = g.description ? `• ${g.description}` : "";
     }
+
+    if (activeGroupLogo) {
+      if (g.logo_path) {
+        activeGroupLogo.src = `/api/groups/logo/${encodeURIComponent(g.logo_path)}?t=${Date.now()}`;
+        activeGroupLogo.style.display = "inline-block";
+      } else {
+        activeGroupLogo.style.display = "none";
+      }
+    }
   }
 
   function openGroupModal(groupId = null) {
@@ -1291,6 +1311,29 @@ document.addEventListener("DOMContentLoaded", () => {
     if (inputGroupDesc) inputGroupDesc.value = g ? (g.description || "") : "";
     if (inputGroupMorning) inputGroupMorning.checked = g ? (g.morning_active !== false) : true;
     if (inputGroupEvening) inputGroupEvening.checked = g ? (g.evening_active !== false) : true;
+
+    // Reset logo file picker and load existing logo preview
+    pendingGroupLogoFile = null;
+    if (inputGroupLogoFile) inputGroupLogoFile.value = "";
+    if (g && g.logo_path) {
+      if (inputGroupLogoPath) inputGroupLogoPath.value = g.logo_path;
+      if (groupLogoPreviewImg) {
+        groupLogoPreviewImg.src = `/api/groups/logo/${encodeURIComponent(g.logo_path)}?t=${Date.now()}`;
+        groupLogoPreviewImg.style.display = "block";
+      }
+      if (groupLogoEmptyText) groupLogoEmptyText.style.display = "none";
+      if (btnRemoveGroupLogo) btnRemoveGroupLogo.style.display = "inline-flex";
+      if (groupLogoBadge) groupLogoBadge.style.display = "inline-block";
+    } else {
+      if (inputGroupLogoPath) inputGroupLogoPath.value = "";
+      if (groupLogoPreviewImg) {
+        groupLogoPreviewImg.src = "";
+        groupLogoPreviewImg.style.display = "none";
+      }
+      if (groupLogoEmptyText) groupLogoEmptyText.style.display = "block";
+      if (btnRemoveGroupLogo) btnRemoveGroupLogo.style.display = "none";
+      if (groupLogoBadge) groupLogoBadge.style.display = "none";
+    }
 
     // Render member checklist
     if (groupClientsChecklist) {
@@ -1344,6 +1387,88 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (btnUploadGroupLogo && inputGroupLogoFile) {
+    btnUploadGroupLogo.addEventListener("click", () => {
+      inputGroupLogoFile.click();
+    });
+  }
+
+  if (inputGroupLogoFile) {
+    inputGroupLogoFile.addEventListener("change", async () => {
+      const file = inputGroupLogoFile.files && inputGroupLogoFile.files[0];
+      if (!file) return;
+
+      const currentGid = (inputGroupId ? inputGroupId.value : "").trim();
+      if (currentGid) {
+        // Direct upload for existing group
+        const fd = new FormData();
+        fd.append("file", file);
+        try {
+          const res = await fetch(`/api/groups/${currentGid}/logo`, {
+            method: "POST",
+            body: fd
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (inputGroupLogoPath) inputGroupLogoPath.value = data.logo_path;
+            if (groupLogoPreviewImg) {
+              groupLogoPreviewImg.src = `/api/groups/logo/${encodeURIComponent(data.logo_path)}?t=${Date.now()}`;
+              groupLogoPreviewImg.style.display = "block";
+            }
+            if (groupLogoEmptyText) groupLogoEmptyText.style.display = "none";
+            if (btnRemoveGroupLogo) btnRemoveGroupLogo.style.display = "inline-flex";
+            if (groupLogoBadge) groupLogoBadge.style.display = "inline-block";
+            showToast("Group logo updated!");
+            await loadGroups();
+          } else {
+            showToast("Failed to upload group logo", true);
+          }
+        } catch (err) {
+          showToast("Upload error: " + err, true);
+        }
+      } else {
+        // Pending upload for new group
+        pendingGroupLogoFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (groupLogoPreviewImg) {
+            groupLogoPreviewImg.src = e.target.result;
+            groupLogoPreviewImg.style.display = "block";
+          }
+          if (groupLogoEmptyText) groupLogoEmptyText.style.display = "none";
+          if (btnRemoveGroupLogo) btnRemoveGroupLogo.style.display = "inline-flex";
+          if (groupLogoBadge) groupLogoBadge.style.display = "inline-block";
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  if (btnRemoveGroupLogo) {
+    btnRemoveGroupLogo.addEventListener("click", async () => {
+      const currentGid = (inputGroupId ? inputGroupId.value : "").trim();
+      if (currentGid && inputGroupLogoPath && inputGroupLogoPath.value) {
+        try {
+          await fetch(`/api/groups/${currentGid}/logo`, { method: "DELETE" });
+          showToast("Removed group logo");
+        } catch (e) {
+          console.warn("Error removing group logo:", e);
+        }
+      }
+      pendingGroupLogoFile = null;
+      if (inputGroupLogoFile) inputGroupLogoFile.value = "";
+      if (inputGroupLogoPath) inputGroupLogoPath.value = "";
+      if (groupLogoPreviewImg) {
+        groupLogoPreviewImg.src = "";
+        groupLogoPreviewImg.style.display = "none";
+      }
+      if (groupLogoEmptyText) groupLogoEmptyText.style.display = "block";
+      btnRemoveGroupLogo.style.display = "none";
+      if (groupLogoBadge) groupLogoBadge.style.display = "none";
+      await loadGroups();
+    });
+  }
+
   if (formGroup) {
     formGroup.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -1358,7 +1483,8 @@ document.addEventListener("DOMContentLoaded", () => {
         description: (inputGroupDesc.value || "").trim(),
         morning_active: inputGroupMorning ? inputGroupMorning.checked : true,
         evening_active: inputGroupEvening ? inputGroupEvening.checked : true,
-        client_ids: checkedIds
+        client_ids: checkedIds,
+        logo_path: (inputGroupLogoPath ? inputGroupLogoPath.value : "").trim()
       };
 
       try {
@@ -1370,6 +1496,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (res.ok) {
           const data = await res.json();
+          const savedGid = data.group && data.group.id;
+          if (pendingGroupLogoFile && savedGid) {
+            const fd = new FormData();
+            fd.append("file", pendingGroupLogoFile);
+            try {
+              await fetch(`/api/groups/${savedGid}/logo`, { method: "POST", body: fd });
+            } catch (err) {
+              console.warn("Failed uploading pending group logo:", err);
+            }
+            pendingGroupLogoFile = null;
+          }
           showToast(`Saved group '${name}' with ${checkedIds.length} members!`);
           closeGroupModal();
           await loadGroups();

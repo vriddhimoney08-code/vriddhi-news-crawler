@@ -162,10 +162,17 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
             morning_active INTEGER DEFAULT 1,
             evening_active INTEGER DEFAULT 1,
             client_ids TEXT DEFAULT '[]',
-            created_at TEXT
+            created_at TEXT,
+            logo_path TEXT DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at);
         """)
+
+        # Safe migration for logo_path on client_groups
+        try:
+            conn.execute("ALTER TABLE client_groups ADD COLUMN logo_path TEXT DEFAULT ''")
+        except Exception:
+            pass
 
         # Safe migration for folder column
         try:
@@ -503,6 +510,7 @@ def get_client_groups(db_path: Path = DB_PATH) -> list[ClientGroup]:
             e_act = bool(r["evening_active"]) if "evening_active" in keys and r["evening_active"] is not None else True
             desc = r["description"] if "description" in keys and r["description"] else ""
             c_at = r["created_at"] if "created_at" in keys and r["created_at"] else ""
+            l_path = r["logo_path"] if "logo_path" in keys and r["logo_path"] else ""
             out.append(ClientGroup(
                 id=r["id"],
                 name=r["name"],
@@ -511,6 +519,7 @@ def get_client_groups(db_path: Path = DB_PATH) -> list[ClientGroup]:
                 evening_active=e_act,
                 client_ids=cids,
                 created_at=c_at,
+                logo_path=l_path,
             ))
         return out
 
@@ -521,14 +530,15 @@ def save_client_group(g: ClientGroup, db_path: Path = DB_PATH) -> ClientGroup:
         now_ts = datetime.now(timezone.utc).isoformat()
         created = g.created_at or now_ts
         conn.execute("""
-        INSERT INTO client_groups (id, name, description, morning_active, evening_active, client_ids, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO client_groups (id, name, description, morning_active, evening_active, client_ids, created_at, logo_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             description=excluded.description,
             morning_active=excluded.morning_active,
             evening_active=excluded.evening_active,
-            client_ids=excluded.client_ids
+            client_ids=excluded.client_ids,
+            logo_path=excluded.logo_path
         """, (
             g.id,
             g.name,
@@ -537,6 +547,7 @@ def save_client_group(g: ClientGroup, db_path: Path = DB_PATH) -> ClientGroup:
             1 if g.evening_active else 0,
             json.dumps(g.client_ids or []),
             created,
+            g.logo_path or "",
         ))
     return g
 

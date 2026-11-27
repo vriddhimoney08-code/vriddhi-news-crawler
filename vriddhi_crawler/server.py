@@ -1,6 +1,7 @@
 """FastAPI Application for Vriddhi News Crawler Web Dashboard on port 3009."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -10,6 +11,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,6 +60,17 @@ from .db import (
     save_client_group,
     delete_client_group,
     get_client_group,
+    get_custom_news_topics,
+    add_custom_news_topics,
+    set_custom_news_topic_selected,
+    set_all_custom_news_topics_selected,
+    delete_custom_news_topic,
+    save_custom_news_articles,
+    get_custom_news_state,
+    get_custom_news_schedule,
+    save_custom_news_schedule,
+    should_fire_custom_news_now,
+    get_custom_news_digest_for_analyst,
 )
 from .http import Fetcher
 from .pdf import generate_analyst_digest, get_clean_digest_filename, render_digest_html
@@ -923,6 +936,7 @@ class AnalystCreate(BaseModel):
     assigned_companies: list[str] = []
     assigned_folders: list[str] = []
     macro_sectors: list[str] = ["ALL"]
+    assigned_news_topics: list[str] = []
     is_active: bool = True
     group_id: str = ""
     logo_path: str = ""
@@ -954,7 +968,7 @@ def list_client_groups():
     analysts_map = {a.id: a for a in get_analysts()}
     out = []
     for g in groups:
-        d = asdict(g)
+        d: dict[str, Any] = asdict(g)
         members = []
         for cid in (g.client_ids or []):
             if cid in analysts_map:
@@ -1122,6 +1136,7 @@ def dispatch_group_briefing(group_id: str, action: GroupDispatchAction):
     if not g:
         raise HTTPException(status_code=404, detail="Group not found")
 
+    from .db import get_macro_stories_for_analyst
     from .whatsapp import send_whatsapp_digest, send_whatsapp_macro_digest
     from .pdf import generate_macro_digest
 
@@ -1298,6 +1313,7 @@ def create_or_update_analyst(item: AnalystCreate):
         assigned_companies=item.assigned_companies,
         assigned_folders=item.assigned_folders,
         macro_sectors=item.macro_sectors or ["ALL"],
+        assigned_news_topics=item.assigned_news_topics or [],
         is_active=item.is_active,
         group_id=target_group_id,
         logo_path=getattr(item, "logo_path", "") or "",
@@ -1459,12 +1475,19 @@ def get_scheduler_status():
     all_analysts = get_analysts()
     active_analysts = [a for a in all_analysts if getattr(a, "is_active", True)]
     recent_runs = get_dispatch_runs(15)
+    news_sched = get_custom_news_schedule()
 
     return {
         "morning_time": morning_time,
         "morning_active": morning_active,
         "evening_time": evening_time,
         "evening_active": evening_active,
+        "news_time": news_sched["dispatch_time"],
+        "news_time_12h": news_sched["dispatch_time_12h"],
+        "news_active": news_sched["dispatch_active"],
+        "news_window_hours": news_sched["window_hours"],
+        "news_window_label": news_sched["window_label"],
+        "next_news_run": news_sched["next_run_ist"],
         "crawl_interval_minutes": crawl_interval,
         "next_morning_run": compute_next_run(morning_time) if morning_active else "Delivery Paused",
         "next_evening_run": compute_next_run(evening_time) if evening_active else "Delivery Paused",
@@ -2161,6 +2184,495 @@ def clean_database():
     raw_conn.execute("VACUUM")
     raw_conn.close()
     return {"status": "cleaned", "message": "SQLite database vacuumed and optimized. Historical logs pruned."}
+
+
+# =========================================================================
+# Isolated Custom Web News Tracker Endpoints ("News" Tab Only)
+# =========================================================================
+
+class CustomNewsTopicsCreate(BaseModel):
+    names: list[str] = []
+    raw_input: str = ""
+
+
+class CustomNewsTopicSelectUpdate(BaseModel):
+    is_selected: bool
+
+
+class CustomNewsFetchRequest(BaseModel):
+    hours: int = 24
+    topic_ids: list[str] | None = None
+    scope: str = "all"
+
+
+@app.get("/api/custom-news")
+def api_get_custom_news(
+    hours: int = 24,
+    topic_ids: str | None = None,
+    q: str | None = None,
+    scope: str = "all",
+):
+    """Return saved custom news topics and SQLite-persisted articles grouped by topic."""
+    parsed_ids = [x.strip() for x in topic_ids.split(",") if x.strip()] if topic_ids else None
+    return get_custom_news_state(hours=hours, topic_ids=parsed_ids, search=q, scope=scope)
+
+
+@app.post("/api/custom-news/topics")
+def api_add_custom_news_topics(payload: CustomNewsTopicsCreate):
+    """Save one or multiple custom topic/company names permanently for the News tab."""
+    import re
+    names: list[str] = list(payload.names or [])
+    if payload.raw_input:
+        parts = re.split(r"[,;\r\n]+", payload.raw_input)
+        names.extend(parts)
+    cleaned = [re.sub(r"\s+", " ", n.strip()) for n in names if n and n.strip()]
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Please enter at least one company or topic name.")
+    res = add_custom_news_topics(cleaned)
+    return {
+        "status": "ok",
+        "added": res["added"],
+        "skipped": res["skipped"],
+        "topics": res["topics"],
+    }
+
+
+@app.patch("/api/custom-news/topics/{topic_id}")
+def api_toggle_custom_news_topic(topic_id: str, payload: CustomNewsTopicSelectUpdate):
+    """Toggle selection state for a saved custom news topic."""
+    updated = set_custom_news_topic_selected(topic_id, payload.is_selected)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return {"status": "ok", "topic_id": topic_id, "is_selected": payload.is_selected}
+
+
+@app.post("/api/custom-news/topics/select-all")
+def api_select_all_custom_news_topics(payload: CustomNewsTopicSelectUpdate):
+    """Select or clear selection for all saved custom news topics."""
+    count = set_all_custom_news_topics_selected(payload.is_selected)
+    return {"status": "ok", "updated": count, "is_selected": payload.is_selected}
+
+
+@app.delete("/api/custom-news/topics/{topic_id}")
+def api_delete_custom_news_topic(topic_id: str):
+    """Permanently delete a saved custom news topic and its cached articles."""
+    deleted = delete_custom_news_topic(topic_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return {"status": "deleted", "topic_id": topic_id}
+
+
+@app.post("/api/custom-news/fetch")
+def api_fetch_custom_news(payload: CustomNewsFetchRequest):
+    """Fetch live multi-engine web news (Google, Bing, Yahoo, GDELT + Data Sources RSS) and persist unique articles."""
+    from .sources.custom_news import fetch_multi_engine_news_batch
+
+    hours_val = payload.hours if payload.hours in (24, 48, 720, 4320, 8760) else 24
+    scope_val = "financial" if (payload.scope or "all").strip().lower() == "financial" else "all"
+    all_topics = get_custom_news_topics()
+    if not all_topics:
+        return {
+            **get_custom_news_state(hours=hours_val, scope=scope_val),
+            "fetch_summary": {
+                "fetched_topics": 0,
+                "total_found": 0,
+                "duplicates_removed": 0,
+                "engine_counts": {},
+                "errors": [],
+            },
+        }
+
+    if payload.topic_ids:
+        requested = set(payload.topic_ids)
+        target_topics = [t for t in all_topics if t["id"] in requested]
+        # Ensure explicitly refreshed topics are selected so their results appear immediately
+        for t in target_topics:
+            if not t.get("is_selected"):
+                set_custom_news_topic_selected(t["id"], True)
+    else:
+        selected = [t for t in all_topics if t.get("is_selected")]
+        target_topics = selected if selected else all_topics
+
+    if not target_topics:
+        raise HTTPException(status_code=404, detail="No matching saved topics found to fetch.")
+
+    # Read active Data Sources RSS feeds strictly read-only for keyword matching
+    try:
+        active_rss_sources = [
+            s for s in get_sources()
+            if s.get("is_active", 1) and str(s.get("type") or "").strip().lower() == "rss"
+        ]
+    except Exception:
+        active_rss_sources = []
+
+    max_per_topic = 100 if hours_val >= 4320 else (75 if hours_val >= 720 else 50)
+    batch = fetch_multi_engine_news_batch(
+        target_topics,
+        hours=hours_val,
+        rss_sources=active_rss_sources,
+        max_per_topic=max_per_topic,
+    )
+    failed_ids = batch.get("failed_topic_ids") or set()
+
+    for t in target_topics:
+        tid = t["id"]
+        if tid in failed_ids:
+            continue
+        items = batch["results_by_topic"].get(tid, [])
+        save_custom_news_articles(tid, t["name"], items, fetched_hours=hours_val)
+
+    state = get_custom_news_state(hours=hours_val, scope=scope_val)
+    state["fetch_summary"] = {
+        "fetched_topics": len(target_topics),
+        "total_found": batch["total_found"],
+        "duplicates_removed": batch.get("duplicates_removed", 0),
+        "engine_counts": batch.get("engine_counts", {}),
+        "errors": batch["errors"],
+    }
+    return state
+
+
+# =========================================================================
+# Custom News WhatsApp Schedule, PDF Digest Preview & Broadcast Endpoints
+# =========================================================================
+
+class CustomNewsScheduleUpdate(BaseModel):
+    dispatch_time: str | None = None
+    dispatch_active: bool | None = None
+    window_hours: int | None = None
+    interakt_template: str | None = None
+    frequency: str | None = None
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+
+
+@app.get("/api/custom-news/schedule")
+def api_get_custom_news_schedule():
+    """Return editable WhatsApp delivery time, frequency, active status, and saved digest window for News tab."""
+    return {"status": "ok", **get_custom_news_schedule()}
+
+
+@app.post("/api/custom-news/schedule")
+def api_save_custom_news_schedule(payload: CustomNewsScheduleUpdate):
+    """Save editable WhatsApp delivery time, frequency, day, active status, and digest window for News tab."""
+    updated = save_custom_news_schedule(
+        dispatch_time=payload.dispatch_time,
+        dispatch_active=payload.dispatch_active,
+        window_hours=payload.window_hours,
+        interakt_template=payload.interakt_template,
+        frequency=payload.frequency,
+        day_of_week=payload.day_of_week,
+        day_of_month=payload.day_of_month,
+    )
+    log_audit_event(
+        "NEWS_SCHEDULE_UPDATE",
+        "News Digest",
+        f"Updated News WhatsApp schedule: {updated['frequency_summary']} at {updated['dispatch_time']} IST, Window={updated['window_label']}, Active={updated['dispatch_active']}",
+    )
+    return {"status": "ok", **updated}
+
+
+@app.get("/api/custom-news/digest/meta/{analyst_id}")
+def get_custom_news_digest_meta(analyst_id: str):
+    """Return metadata for a client's personalized News PDF digest."""
+    from .pdf import get_clean_news_digest_filename
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    digest_data = get_custom_news_digest_for_analyst(analyst_id)
+    sched = get_custom_news_schedule()
+    pdf_filename = get_clean_news_digest_filename(analyst.name, ext=".pdf")
+
+    return {
+        "analyst_id": analyst.id,
+        "name": analyst.name,
+        "phone": analyst.phone,
+        "email": analyst.email,
+        "assigned_topics": digest_data["assigned_topic_names"],
+        "assigned_topic_ids": digest_data["assigned_topic_ids"],
+        "topics_count": len(digest_data["topic_groups"]),
+        "total_stories": digest_data["total_articles"],
+        "topics_with_news": digest_data["topics_with_news"],
+        "topics_without_news": digest_data["topics_without_news"],
+        "window_hours": digest_data["hours"],
+        "window_label": digest_data["window_label"],
+        "dispatch_time": sched["dispatch_time"],
+        "dispatch_time_12h": sched["dispatch_time_12h"],
+        "frequency": sched["frequency"],
+        "frequency_label": sched["frequency_label"],
+        "frequency_summary": sched["frequency_summary"],
+        "pdf_name": pdf_filename,
+    }
+
+
+@app.get("/api/custom-news/digest/preview/{analyst_id}", response_class=HTMLResponse)
+def preview_custom_news_digest(analyst_id: str):
+    """Render the personalized News Briefing HTML preview for the requested client."""
+    from .pdf import render_news_digest_html
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    digest_data = get_custom_news_digest_for_analyst(analyst_id)
+    html_output = render_news_digest_html(analyst.name, analyst.id, digest_data)
+
+    return HTMLResponse(
+        content=html_output,
+        status_code=200,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@app.get("/api/custom-news/digest/download/{analyst_id}")
+def download_custom_news_digest_pdf(analyst_id: str):
+    """Generate and download the personalized News Briefing PDF."""
+    from .pdf import generate_news_digest
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    digest_data = get_custom_news_digest_for_analyst(analyst_id)
+    file_path, _ = generate_news_digest(analyst.id, analyst.name, digest_data)
+
+    media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "text/html"
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=file_path.name,
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_path.name}"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+@app.post("/api/custom-news/digest/send/{analyst_id}")
+def dispatch_custom_news_digest(analyst_id: str):
+    """Generate and dispatch a client's personalized News PDF via WhatsApp (sends 'No news from this topic' if 0 articles)."""
+    from .pdf import generate_news_digest
+    from .whatsapp import send_whatsapp_news_digest
+
+    analysts = {a.id: a for a in get_analysts()}
+    analyst = analysts.get(analyst_id)
+    if not analyst:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+
+    digest_data = get_custom_news_digest_for_analyst(analyst_id)
+    if not digest_data["assigned_topic_ids"]:
+        return {
+            "status": "no_op",
+            "message": f"No News tab topics are assigned to {analyst.name}. Edit client to assign topics first.",
+            "count": 0,
+        }
+
+    file_path, _ = generate_news_digest(analyst.id, analyst.name, digest_data)
+    public_base = os.getenv("BASE_URL") or get_ngrok_public_url()
+    cb = int(datetime.now().timestamp())
+    public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}" if public_base else None
+
+    wa_result = send_whatsapp_news_digest(
+        analyst_name=analyst.name,
+        analyst_phone=analyst.phone,
+        digest_data=digest_data,
+        pdf_path=file_path,
+        public_pdf_url=public_pdf_url,
+    )
+
+    dispatch_msg = wa_result.get(
+        "message",
+        f"Dispatched News PDF ({digest_data['total_articles']} articles across {len(digest_data['topic_groups'])} topics) to {analyst.name}",
+    )
+    return {
+        "status": wa_result.get("status", "sent"),
+        "mode": wa_result.get("mode", "simulated"),
+        "message": dispatch_msg,
+        "recipient": wa_result.get("recipient"),
+        "file": file_path.name,
+        "count": digest_data["total_articles"],
+        "topics_count": len(digest_data["topic_groups"]),
+    }
+
+
+@app.api_route("/api/cron/news-broadcast", methods=["GET", "POST"])
+def trigger_cron_news_broadcast(run_fetch: bool = True):
+    """Automated or manual broadcast of personalized News Tab PDFs to all active clients with assigned News topics."""
+    from .pdf import generate_news_digest
+    from .sources.custom_news import fetch_multi_engine_news_batch
+    from .whatsapp import send_whatsapp_news_digest
+
+    sched = get_custom_news_schedule()
+    if not sched["dispatch_active"]:
+        log.warning("[CRON] News Tab WhatsApp Broadcast is PAUSED. Skipping dispatch.")
+        record_dispatch_run(
+            "custom_news",
+            recipients_count=0,
+            stories_count=0,
+            status="PAUSED",
+            details=[{"status": "paused", "msg": "News delivery paused in schedule"}],
+        )
+        return {
+            "status": "paused",
+            "message": "News Briefing WhatsApp broadcast is currently PAUSED.",
+            "dispatched_count": 0,
+        }
+
+    all_analysts = get_analysts()
+    assigned_clients = [
+        a for a in all_analysts
+        if getattr(a, "is_active", True) and len(getattr(a, "assigned_news_topics", []) or []) > 0
+    ]
+    if not assigned_clients:
+        record_dispatch_run(
+            "custom_news",
+            recipients_count=0,
+            stories_count=0,
+            status="CLEAN",
+            details=[{"status": "no_clients", "msg": "No active clients have assigned News topics"}],
+        )
+        return {
+            "status": "no_op",
+            "message": "No active clients have News tab topics assigned yet.",
+            "total_clients": 0,
+            "dispatched_count": 0,
+            "results": [],
+        }
+
+    hours_val = sched["window_hours"]
+    if run_fetch:
+        try:
+            needed_ids = {tid for a in assigned_clients for tid in (getattr(a, "assigned_news_topics", []) or [])}
+            all_topics = get_custom_news_topics()
+            target_topics = [t for t in all_topics if t["id"] in needed_ids]
+            if target_topics:
+                active_rss = [
+                    s for s in get_sources()
+                    if s.get("is_active", 1) and str(s.get("type") or "").strip().lower() == "rss"
+                ]
+                max_per_topic = 100 if hours_val >= 4320 else (75 if hours_val >= 720 else 50)
+                batch = fetch_multi_engine_news_batch(
+                    target_topics,
+                    hours=hours_val,
+                    rss_sources=active_rss,
+                    max_per_topic=max_per_topic,
+                )
+                failed_ids = batch.get("failed_topic_ids") or set()
+                for t in target_topics:
+                    if t["id"] not in failed_ids:
+                        save_custom_news_articles(t["id"], t["name"], batch["results_by_topic"].get(t["id"], []), fetched_hours=hours_val)
+        except Exception as fetch_err:
+            log.warning("[CRON] News pre-broadcast fetch warning: %s", fetch_err)
+
+    public_base = os.getenv("BASE_URL") or get_ngrok_public_url() or "https://35.244.60.224.sslip.io"
+    results = []
+
+    for a in assigned_clients:
+        digest_data = get_custom_news_digest_for_analyst(a.id, hours=hours_val)
+        if not digest_data["assigned_topic_ids"]:
+            continue
+        try:
+            file_path, _ = generate_news_digest(a.id, a.name, digest_data)
+            cb = int(datetime.now().timestamp())
+            public_pdf_url = f"{public_base.rstrip('/')}/api/digest/file/{file_path.name}?t={cb}"
+            wa_result = send_whatsapp_news_digest(
+                analyst_name=a.name,
+                analyst_phone=a.phone,
+                digest_data=digest_data,
+                pdf_path=file_path,
+                public_pdf_url=public_pdf_url,
+            )
+            results.append({
+                "id": a.id,
+                "name": a.name,
+                "phone": a.phone,
+                "count": digest_data["total_articles"],
+                "topics": len(digest_data["topic_groups"]),
+                "status": wa_result.get("status", "sent"),
+                "message": wa_result.get("message"),
+            })
+        except Exception as err:
+            log.error("[CRON] Failed to send News PDF to %s: %s", a.name, err)
+            results.append({
+                "id": a.id,
+                "name": a.name,
+                "phone": a.phone,
+                "count": digest_data["total_articles"],
+                "status": "error",
+                "error": str(err),
+            })
+
+    sent_count = len([r for r in results if r["status"] in ("sent", "simulated")])
+    total_articles = sum(r["count"] for r in results)
+    run_status = "COMPLETED" if sent_count > 0 else "PARTIAL"
+    record_dispatch_run("custom_news", recipients_count=sent_count, stories_count=total_articles, status=run_status, details=results)
+
+    return {
+        "status": "success",
+        "broadcast": "custom_news_briefing",
+        "window_label": sched["window_label"],
+        "total_clients": len(assigned_clients),
+        "dispatched_count": sent_count,
+        "results": results,
+    }
+
+
+@app.post("/api/scheduler/trigger-news")
+def manual_trigger_news(crawl: bool = True):
+    """Manual on-demand trigger of the News Tab PDF WhatsApp broadcast."""
+    log_audit_event("MANUAL_TRIGGER", "News Tab Digest", "Initiated manual News tab WhatsApp broadcast from web terminal")
+    return trigger_cron_news_broadcast(run_fetch=crawl)
+
+
+_NEWS_TIMER_STARTED = False
+
+
+def _start_custom_news_timer_loop() -> None:
+    """Background IST timer that fires the News WhatsApp broadcast at the editable dispatch_time."""
+    global _NEWS_TIMER_STARTED
+    if _NEWS_TIMER_STARTED:
+        return
+    _NEWS_TIMER_STARTED = True
+
+    import threading
+    from .config import IST
+
+    def _loop() -> None:
+        last_fired_key = ""
+        while True:
+            try:
+                sched = get_custom_news_schedule()
+                now_ist = datetime.now(IST)
+                hhmm = now_ist.strftime("%H:%M")
+                slot_key = f"{now_ist.strftime('%Y-%m-%d')} {hhmm}"
+                if should_fire_custom_news_now(sched, now_ist) and slot_key != last_fired_key:
+                    last_fired_key = slot_key
+                    log.info(
+                        "[TIMER] Triggering scheduled %s News WhatsApp broadcast at %s IST",
+                        sched.get("frequency_summary", "Daily"),
+                        hhmm,
+                    )
+                    trigger_cron_news_broadcast(run_fetch=True)
+            except Exception as exc:
+                log.warning("[TIMER] Custom news timer check error: %s", exc)
+            time.sleep(25)
+
+    t = threading.Thread(target=_loop, name="custom-news-whatsapp-timer", daemon=True)
+    t.start()
+
+
+@app.on_event("startup")
+def _on_startup_timers():
+    _start_custom_news_timer_loop()
 
 
 def start():

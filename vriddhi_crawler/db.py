@@ -180,7 +180,79 @@ def init_db(db_path: Path = DB_PATH, seed_defaults: bool = True) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at);
         CREATE INDEX IF NOT EXISTS idx_corp_logos_entity ON corporate_logos(entity_type, entity_id);
+
+        CREATE TABLE IF NOT EXISTS custom_news_topics (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            is_selected INTEGER DEFAULT 1,
+            last_fetched_at TEXT,
+            last_fetched_hours INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS custom_news_articles (
+            id TEXT PRIMARY KEY,
+            topic_id TEXT NOT NULL,
+            topic_name TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT DEFAULT '',
+            publisher TEXT DEFAULT 'Google News',
+            source_engine TEXT DEFAULT 'Google News',
+            url TEXT NOT NULL,
+            published_at TEXT NOT NULL,
+            fetched_at TEXT NOT NULL,
+            FOREIGN KEY (topic_id) REFERENCES custom_news_topics(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_news_topic ON custom_news_articles(topic_id);
+        CREATE INDEX IF NOT EXISTS idx_custom_news_published ON custom_news_articles(published_at);
+
+        CREATE TABLE IF NOT EXISTS custom_news_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            dispatch_time TEXT NOT NULL DEFAULT '11:00',
+            dispatch_active INTEGER NOT NULL DEFAULT 1,
+            window_hours INTEGER NOT NULL DEFAULT 24,
+            interakt_template TEXT DEFAULT '',
+            updated_at TEXT
+        );
         """)
+
+        # Safe migration for source_engine on custom_news_articles
+        try:
+            conn.execute("ALTER TABLE custom_news_articles ADD COLUMN source_engine TEXT DEFAULT 'Google News'")
+        except Exception:
+            pass
+
+        # Safe migration for assigned_news_topics on analysts (defaults to [] so no client gets news until assigned)
+        try:
+            conn.execute("ALTER TABLE analysts ADD COLUMN assigned_news_topics TEXT DEFAULT '[]'")
+        except Exception:
+            pass
+
+        # Seed single-row default schedule settings for News tab WhatsApp delivery
+        try:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO custom_news_settings (id, dispatch_time, dispatch_active, window_hours, interakt_template, updated_at)
+                VALUES (1, '11:00', 1, 24, '', ?)
+                """,
+                (datetime.now(UTC).isoformat(),),
+            )
+        except Exception:
+            pass
+
+        # Safe migrations for frequency, day_of_week, day_of_month on custom_news_settings
+        try:
+            conn.execute("ALTER TABLE custom_news_settings ADD COLUMN frequency TEXT NOT NULL DEFAULT 'daily'")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE custom_news_settings ADD COLUMN day_of_week INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE custom_news_settings ADD COLUMN day_of_month INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass
 
         # Safe migration for logo_path and logo_data on client_groups
         try:
@@ -512,6 +584,7 @@ def get_analysts(db_path: Path = DB_PATH) -> list[Analyst]:
             keys = r.keys()
             flds = json.loads(r["assigned_folders"] or "[]") if "assigned_folders" in keys and r["assigned_folders"] else []
             sectors = json.loads(r["macro_sectors"] or '["ALL"]') if "macro_sectors" in keys and r["macro_sectors"] else ["ALL"]
+            news_topics = json.loads(r["assigned_news_topics"] or "[]") if "assigned_news_topics" in keys and r["assigned_news_topics"] else []
             is_act = bool(r["is_active"]) if "is_active" in keys and r["is_active"] is not None else True
             g_id = r["group_id"] if "group_id" in keys and r["group_id"] else ""
             l_path = r["logo_path"] if "logo_path" in keys and r["logo_path"] else ""
@@ -524,6 +597,7 @@ def get_analysts(db_path: Path = DB_PATH) -> list[Analyst]:
                 assigned_companies=json.loads(r["assigned_companies"] or "[]"),
                 assigned_folders=flds,
                 macro_sectors=sectors,
+                assigned_news_topics=news_topics,
                 is_active=is_act,
                 group_id=g_id,
                 logo_path=l_path,
@@ -536,13 +610,14 @@ def save_analyst(a: Analyst, db_path: Path = DB_PATH):
     with get_connection(db_path) as conn:
         folders_json = json.dumps(getattr(a, "assigned_folders", []))
         sectors_json = json.dumps(getattr(a, "macro_sectors", ["ALL"]))
+        news_topics_json = json.dumps(getattr(a, "assigned_news_topics", []) or [])
         is_act = 1 if getattr(a, "is_active", True) else 0
         g_id = getattr(a, "group_id", "") or ""
         l_path = getattr(a, "logo_path", "") or ""
         l_data = getattr(a, "logo_data", "") or ""
         conn.execute("""
-        INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders, macro_sectors, is_active, group_id, logo_path, logo_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO analysts (id, name, phone, email, assigned_companies, assigned_folders, macro_sectors, assigned_news_topics, is_active, group_id, logo_path, logo_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             phone=excluded.phone,
@@ -550,11 +625,12 @@ def save_analyst(a: Analyst, db_path: Path = DB_PATH):
             assigned_companies=excluded.assigned_companies,
             assigned_folders=excluded.assigned_folders,
             macro_sectors=excluded.macro_sectors,
+            assigned_news_topics=excluded.assigned_news_topics,
             is_active=excluded.is_active,
             group_id=excluded.group_id,
             logo_path=CASE WHEN excluded.logo_path != '' THEN excluded.logo_path ELSE analysts.logo_path END,
             logo_data=CASE WHEN excluded.logo_data != '' THEN excluded.logo_data ELSE analysts.logo_data END
-        """, (a.id, a.name, a.phone, a.email, json.dumps(a.assigned_companies), folders_json, sectors_json, is_act, g_id, l_path, l_data))
+        """, (a.id, a.name, a.phone, a.email, json.dumps(a.assigned_companies), folders_json, sectors_json, news_topics_json, is_act, g_id, l_path, l_data))
 
 
 def delete_analyst(aid: str, db_path: Path = DB_PATH):
@@ -1996,6 +2072,814 @@ def get_macro_stories_for_analyst(
                 break
 
         return matched
+
+
+# =========================================================================
+# Isolated Custom Web News Tracker (News Tab Only)
+# =========================================================================
+
+def _slugify_topic_id(name: str) -> str:
+    """Create a deterministic normalized ID for a custom news topic name."""
+    import hashlib
+    import re
+    clean = re.sub(r"\s+", " ", (name or "").strip())
+    slug = re.sub(r"[^a-z0-9]+", "-", clean.lower()).strip("-")
+    if not slug:
+        slug = "topic-" + hashlib.sha1(clean.lower().encode("utf-8")).hexdigest()[:10]
+    return slug
+
+
+def _format_ist_timestamp(iso_str: str | None) -> str:
+    """Format a UTC ISO timestamp into a readable IST string."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+    except Exception:
+        return iso_str
+
+
+def get_custom_news_topics(db_path: Path = DB_PATH) -> list[dict]:
+    """Return all saved custom news topics in insertion order."""
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM custom_news_topics ORDER BY ROWID ASC"
+        ).fetchall()
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["is_selected"] = bool(d.get("is_selected", 1))
+        d["last_fetched_hours"] = int(d.get("last_fetched_hours") or 0)
+        d["last_fetched_ist"] = _format_ist_timestamp(d.get("last_fetched_at"))
+        out.append(d)
+    return out
+
+
+def add_custom_news_topics(names: list[str], db_path: Path = DB_PATH) -> dict:
+    """Persist one or more custom topic/company names (case-insensitive deduplication)."""
+    import re
+    now_utc = datetime.now(UTC).isoformat()
+    added: list[dict] = []
+    skipped: list[str] = []
+
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            existing_rows = conn.execute("SELECT id, name FROM custom_news_topics").fetchall()
+            existing_ids = {r["id"] for r in existing_rows}
+            existing_lower = {r["name"].strip().lower() for r in existing_rows}
+
+            for raw_name in names:
+                clean_name = re.sub(r"\s+", " ", (raw_name or "").strip())
+                if not clean_name:
+                    continue
+                low = clean_name.lower()
+                tid = _slugify_topic_id(clean_name)
+                if low in existing_lower or tid in existing_ids:
+                    skipped.append(clean_name)
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO custom_news_topics (id, name, is_selected, last_fetched_at, last_fetched_hours, created_at)
+                    VALUES (?, ?, 1, NULL, 0, ?)
+                    """,
+                    (tid, clean_name, now_utc),
+                )
+                existing_ids.add(tid)
+                existing_lower.add(low)
+                added.append({
+                    "id": tid,
+                    "name": clean_name,
+                    "is_selected": True,
+                    "last_fetched_at": None,
+                    "last_fetched_hours": 0,
+                    "last_fetched_ist": "",
+                    "created_at": now_utc,
+                })
+    finally:
+        conn.close()
+
+    return {
+        "added": added,
+        "skipped": skipped,
+        "topics": get_custom_news_topics(db_path),
+    }
+
+
+def set_custom_news_topic_selected(topic_id: str, is_selected: bool, db_path: Path = DB_PATH) -> bool:
+    """Persist selection state for a single saved custom news topic."""
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            res = conn.execute(
+                "UPDATE custom_news_topics SET is_selected = ? WHERE id = ?",
+                (1 if is_selected else 0, topic_id),
+            )
+            return res.rowcount > 0
+    finally:
+        conn.close()
+
+
+def set_all_custom_news_topics_selected(is_selected: bool, db_path: Path = DB_PATH) -> int:
+    """Select or deselect all saved custom news topics."""
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            res = conn.execute(
+                "UPDATE custom_news_topics SET is_selected = ?",
+                (1 if is_selected else 0,),
+            )
+            return res.rowcount
+    finally:
+        conn.close()
+
+
+def delete_custom_news_topic(topic_id: str, db_path: Path = DB_PATH) -> bool:
+    """Permanently delete a saved custom news topic, its cached articles, and unlink it from clients."""
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            conn.execute("DELETE FROM custom_news_articles WHERE topic_id = ?", (topic_id,))
+            res = conn.execute("DELETE FROM custom_news_topics WHERE id = ?", (topic_id,))
+            # Unlink removed topic from any client's assigned_news_topics
+            try:
+                rows = conn.execute("SELECT id, assigned_news_topics FROM analysts").fetchall()
+                for r in rows:
+                    assigned = json.loads(r["assigned_news_topics"] or "[]")
+                    if topic_id in assigned:
+                        updated = [x for x in assigned if x != topic_id]
+                        conn.execute(
+                            "UPDATE analysts SET assigned_news_topics = ? WHERE id = ?",
+                            (json.dumps(updated), r["id"]),
+                        )
+            except Exception:
+                pass
+            return res.rowcount > 0
+    finally:
+        conn.close()
+
+
+def _parse_utc_iso(iso_str: str | None) -> datetime | None:
+    if not iso_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+    except Exception:
+        return None
+
+
+def _is_redirect_news_url(url: str | None) -> bool:
+    u = (url or "").lower()
+    return ("news.google.com/" in u) or ("bing.com/news/apiclick" in u)
+
+
+def save_custom_news_articles(
+    topic_id: str,
+    topic_name: str,
+    articles: list[dict],
+    fetched_hours: int = 24,
+    db_path: Path = DB_PATH,
+) -> int:
+    """Upsert fetched custom news articles with cross-source deduplication and 95-day retention."""
+    import re
+    from .normalize import canonical_url, clean_text
+    from .sources.custom_news import are_same_topic_duplicates, is_paid_or_paywalled_news, is_relevant_to_topic
+
+    now_utc = datetime.now(UTC)
+    now_iso = now_utc.isoformat()
+    prune_cutoff = (now_utc - timedelta(days=370)).isoformat()
+    saved = 0
+
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            # Load existing cached rows for this topic so repeat / multi-engine fetches never create duplicates
+            existing_rows = conn.execute(
+                """
+                SELECT id, title, summary, publisher, source_engine, url, published_at
+                FROM custom_news_articles
+                WHERE topic_id = ? AND published_at >= ?
+                """,
+                (topic_id, prune_cutoff),
+            ).fetchall()
+
+            existing_items: list[dict] = []
+            for r in existing_rows:
+                keys = r.keys()
+                ex_title = r["title"] or ""
+                existing_items.append({
+                    "id": r["id"],
+                    "title": ex_title,
+                    "summary": r["summary"] or "",
+                    "publisher": r["publisher"] or "Google News",
+                    "source_engine": (r["source_engine"] if "source_engine" in keys and r["source_engine"] else "Google News"),
+                    "url": r["url"] or "",
+                    "canon": canonical_url(r["url"]),
+                    "exact": re.sub(r"[^a-z0-9]+", " ", clean_text(ex_title).lower()).strip(),
+                    "dt": _parse_utc_iso(r["published_at"]),
+                })
+
+            for art in articles:
+                new_title = art["title"]
+                new_url = art["url"]
+                new_summary = art.get("summary") or ""
+                new_publisher = art.get("publisher") or "Google News"
+                new_engine = art.get("source_engine") or "Google News"
+                if is_paid_or_paywalled_news(new_title, new_publisher, new_url, new_summary):
+                    continue
+                if not is_relevant_to_topic(topic_name, new_title, new_summary, new_url):
+                    continue
+                new_canon = canonical_url(new_url)
+                new_exact = re.sub(r"[^a-z0-9]+", " ", clean_text(new_title).lower()).strip()
+                new_dt = _parse_utc_iso(art.get("published_at"))
+
+                matched_existing = None
+                for ex in existing_items:
+                    if ex["id"] == art["id"]:
+                        matched_existing = ex
+                        break
+                    if new_canon and ex["canon"] and new_canon == ex["canon"]:
+                        matched_existing = ex
+                        break
+                    if new_exact and ex["exact"] and new_exact == ex["exact"]:
+                        matched_existing = ex
+                        break
+                    # Topic-aware near-duplicate headline check within 72h (never falsely merges distinct stories)
+                    if new_dt and ex["dt"] and abs((new_dt - ex["dt"]).total_seconds()) <= 72 * 3600:
+                        if are_same_topic_duplicates(ex["title"], new_title, topic_name):
+                            matched_existing = ex
+                            break
+
+                if matched_existing is not None:
+                    # Upgrade existing row in-place if the incoming copy has a direct link or richer summary
+                    best_url = matched_existing["url"]
+                    best_engine = matched_existing["source_engine"]
+                    if _is_redirect_news_url(best_url) and not _is_redirect_news_url(new_url):
+                        best_url = new_url
+                        best_engine = new_engine
+                    best_summary = matched_existing["summary"]
+                    if len(new_summary) > len(best_summary) + 15:
+                        best_summary = new_summary
+                    best_pub = matched_existing["publisher"]
+                    if best_pub in ("Google News", "Bing News", "Yahoo News", "GDELT", "") and new_publisher not in ("Google News", ""):
+                        best_pub = new_publisher
+
+                    if (
+                        best_url != matched_existing["url"]
+                        or best_summary != matched_existing["summary"]
+                        or best_pub != matched_existing["publisher"]
+                        or best_engine != matched_existing["source_engine"]
+                    ):
+                        conn.execute(
+                            """
+                            UPDATE custom_news_articles
+                            SET url = ?, summary = ?, publisher = ?, source_engine = ?, fetched_at = ?
+                            WHERE id = ?
+                            """,
+                            (best_url, best_summary, best_pub, best_engine, now_iso, matched_existing["id"]),
+                        )
+                        matched_existing["url"] = best_url
+                        matched_existing["canon"] = canonical_url(best_url)
+                        matched_existing["summary"] = best_summary
+                        matched_existing["publisher"] = best_pub
+                        matched_existing["source_engine"] = best_engine
+                    continue
+
+                conn.execute(
+                    """
+                    INSERT INTO custom_news_articles (
+                        id, topic_id, topic_name, title, summary, publisher, source_engine, url, published_at, fetched_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        topic_name = excluded.topic_name,
+                        title = excluded.title,
+                        summary = excluded.summary,
+                        publisher = excluded.publisher,
+                        source_engine = excluded.source_engine,
+                        url = excluded.url,
+                        published_at = excluded.published_at,
+                        fetched_at = excluded.fetched_at
+                    """,
+                    (
+                        art["id"],
+                        topic_id,
+                        topic_name,
+                        new_title,
+                        new_summary,
+                        new_publisher,
+                        new_engine,
+                        new_url,
+                        art["published_at"],
+                        now_iso,
+                    ),
+                )
+                existing_items.append({
+                    "id": art["id"],
+                    "title": new_title,
+                    "summary": new_summary,
+                    "publisher": new_publisher,
+                    "source_engine": new_engine,
+                    "url": new_url,
+                    "canon": new_canon,
+                    "exact": new_exact,
+                    "dt": new_dt,
+                })
+                saved += 1
+
+            # Prune articles older than 370 days (just over 1 Year) for this topic so cache stays lean
+            conn.execute(
+                "DELETE FROM custom_news_articles WHERE topic_id = ? AND published_at < ?",
+                (topic_id, prune_cutoff),
+            )
+
+            # Keep track of the widest window recently fetched (reset if last fetch > 6h ago)
+            row = conn.execute(
+                "SELECT last_fetched_at, last_fetched_hours FROM custom_news_topics WHERE id = ?",
+                (topic_id,),
+            ).fetchone()
+            effective_hours = fetched_hours
+            if row and row["last_fetched_at"]:
+                try:
+                    prev_dt = datetime.fromisoformat(str(row["last_fetched_at"]).replace("Z", "+00:00"))
+                    if prev_dt.tzinfo is None:
+                        prev_dt = prev_dt.replace(tzinfo=UTC)
+                    if (now_utc - prev_dt) < timedelta(hours=6):
+                        effective_hours = max(effective_hours, int(row["last_fetched_hours"] or 0))
+                except Exception:
+                    pass
+
+            conn.execute(
+                """
+                UPDATE custom_news_topics
+                SET last_fetched_at = ?, last_fetched_hours = ?
+                WHERE id = ?
+                """,
+                (now_iso, effective_hours, topic_id),
+            )
+    finally:
+        conn.close()
+
+    return saved
+
+
+def get_custom_news_state(
+    hours: int = 24,
+    topic_ids: list[str] | None = None,
+    search: str | None = None,
+    scope: str = "all",
+    db_path: Path = DB_PATH,
+) -> dict:
+    """Return saved custom news topics and cached articles grouped by topic for the requested time window."""
+    from .normalize import is_reputable_publisher
+    from .sources.custom_news import is_paid_or_paywalled_news, is_relevant_to_topic
+
+    hours_val = hours if hours in (24, 48, 720, 4320, 8760) else 24
+    start_utc, end_utc = get_live_window(hours=hours_val)
+    topics = get_custom_news_topics(db_path)
+
+    selected_filter = set(topic_ids) if topic_ids else None
+    search_q = (search or "").strip().lower()
+    financial_only = (scope or "all").strip().lower() == "financial"
+
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM custom_news_articles
+            WHERE published_at >= ? AND published_at <= ?
+            ORDER BY published_at DESC
+            """,
+            (start_utc, end_utc),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    articles_by_topic: dict[str, list[dict]] = {}
+    paid_ids_to_prune: list[str] = []
+    for r in rows:
+        d = dict(r)
+        if not d.get("source_engine"):
+            d["source_engine"] = "Google News"
+        if is_paid_or_paywalled_news(
+            d.get("title") or "",
+            d.get("publisher") or "",
+            d.get("url"),
+            d.get("summary") or "",
+        ) or not is_relevant_to_topic(
+            d.get("topic_name") or "",
+            d.get("title") or "",
+            d.get("summary") or "",
+            d.get("url"),
+        ):
+            paid_ids_to_prune.append(d["id"])
+            continue
+        if financial_only and not is_reputable_publisher(d.get("publisher") or "", d.get("url"), "news"):
+            continue
+        if search_q:
+            haystack = f"{d.get('title', '')} {d.get('summary', '')} {d.get('publisher', '')} {d.get('topic_name', '')}".lower()
+            if search_q not in haystack:
+                continue
+        d["published_ist"] = _format_ist_timestamp(d.get("published_at"))
+        articles_by_topic.setdefault(d["topic_id"], []).append(d)
+
+    # Cleanly remove any previously cached paywalled rows from SQLite
+    if paid_ids_to_prune:
+        pconn = get_connection(db_path)
+        try:
+            with pconn:
+                pconn.executemany(
+                    "DELETE FROM custom_news_articles WHERE id = ?",
+                    [(pid,) for pid in paid_ids_to_prune],
+                )
+        finally:
+            pconn.close()
+
+    # Annotate every saved topic with article count in this window
+    latest_fetched_at: str | None = None
+    for t in topics:
+        t_articles = articles_by_topic.get(t["id"], [])
+        t["article_count"] = len(t_articles)
+        if t.get("last_fetched_at"):
+            if not latest_fetched_at or str(t["last_fetched_at"]) > latest_fetched_at:
+                latest_fetched_at = str(t["last_fetched_at"])
+
+    # Build grouped view for either explicitly passed topic_ids, or all selected topics (falling back to all if none selected)
+    any_selected = any(t["is_selected"] for t in topics)
+    groups: list[dict] = []
+    total_articles = 0
+    needs_wider_fetch = False
+
+    for t in topics:
+        if selected_filter is not None:
+            if t["id"] not in selected_filter:
+                continue
+        elif any_selected and not t["is_selected"]:
+            continue
+
+        t_articles = articles_by_topic.get(t["id"], [])
+        total_articles += len(t_articles)
+        if t.get("last_fetched_at") and int(t.get("last_fetched_hours") or 0) < hours_val:
+            needs_wider_fetch = True
+
+        groups.append({
+            "topic_id": t["id"],
+            "topic_name": t["name"],
+            "is_selected": t["is_selected"],
+            "last_fetched_at": t.get("last_fetched_at"),
+            "last_fetched_ist": t.get("last_fetched_ist", ""),
+            "last_fetched_hours": int(t.get("last_fetched_hours") or 0),
+            "article_count": len(t_articles),
+            "articles": t_articles,
+        })
+
+    return {
+        "status": "ok",
+        "hours": hours_val,
+        "scope": "financial" if financial_only else "all",
+        "topics": topics,
+        "groups": groups,
+        "total_articles": total_articles,
+        "last_fetched_at": latest_fetched_at,
+        "last_fetched_ist": _format_ist_timestamp(latest_fetched_at),
+        "needs_wider_fetch": needs_wider_fetch,
+    }
+
+
+CUSTOM_NEWS_WINDOW_LABELS: dict[int, str] = {
+    24: "Last 24 hrs",
+    48: "Last 48 hrs",
+    720: "Last 1M",
+    4320: "Last 6M",
+    8760: "Last 1 Year",
+}
+
+CUSTOM_NEWS_FREQUENCIES: dict[str, str] = {
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+}
+
+CUSTOM_NEWS_WEEKDAYS: list[str] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+CUSTOM_NEWS_QUARTER_MONTHS: tuple[int, ...] = (1, 4, 7, 10)  # Jan, Apr, Jul, Oct
+
+
+def _ordinal_day(day: int) -> str:
+    if 11 <= (day % 100) <= 13:
+        return f"{day}th"
+    suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+def _format_frequency_summary(frequency: str, day_of_week: int, day_of_month: int) -> str:
+    if frequency == "weekly":
+        wd = CUSTOM_NEWS_WEEKDAYS[day_of_week] if 0 <= day_of_week <= 6 else "Mon"
+        return f"Weekly ({wd})"
+    if frequency == "monthly":
+        return f"Monthly ({_ordinal_day(day_of_month)})"
+    if frequency == "quarterly":
+        return f"Quarterly ({_ordinal_day(day_of_month)} of Jan/Apr/Jul/Oct)"
+    return "Daily"
+
+
+def _format_time_12h(hhmm: str) -> str:
+    """Convert 24-hour 'HH:MM' into 'hh:mm AM/PM'."""
+    try:
+        parts = [int(p) for p in hhmm.strip().split(":")]
+        dt = datetime(2026, 1, 1, parts[0], parts[1])
+        return dt.strftime("%I:%M %p")
+    except Exception:
+        return hhmm or "11:00 AM"
+
+
+def should_fire_custom_news_now(sched: dict[str, Any], now_ist: datetime | None = None) -> bool:
+    """Return True if the saved News WhatsApp schedule matches the current IST date and minute."""
+    if not sched.get("dispatch_active"):
+        return False
+    cur = now_ist if now_ist is not None else datetime.now(IST)
+    if cur.strftime("%H:%M") != str(sched.get("dispatch_time") or "").strip():
+        return False
+
+    freq = str(sched.get("frequency") or "daily").strip().lower()
+    if freq == "weekly":
+        return cur.weekday() == int(sched.get("day_of_week", 0))
+    if freq == "monthly":
+        return cur.day == int(sched.get("day_of_month", 1))
+    if freq == "quarterly":
+        return (cur.month in CUSTOM_NEWS_QUARTER_MONTHS) and (cur.day == int(sched.get("day_of_month", 1)))
+    return True
+
+
+def _compute_next_ist_run(
+    hhmm: str,
+    frequency: str = "daily",
+    day_of_week: int = 0,
+    day_of_month: int = 1,
+    now_ist: datetime | None = None,
+) -> str:
+    """Return human-readable next scheduled IST run for Daily, Weekly, Monthly, or Quarterly."""
+    try:
+        parts = [int(p) for p in hhmm.strip().split(":")]
+        hour, minute = parts[0], parts[1]
+        cur = now_ist if now_ist is not None else datetime.now(IST)
+        freq = frequency if frequency in CUSTOM_NEWS_FREQUENCIES else "daily"
+        dow = day_of_week if 0 <= day_of_week <= 6 else 0
+        dom = day_of_month if 1 <= day_of_month <= 28 else 1
+
+        target: datetime | None = None
+        if freq == "daily":
+            cand = cur.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            target = cand if cand > cur else cand + timedelta(days=1)
+        elif freq == "weekly":
+            days_ahead = (dow - cur.weekday()) % 7
+            cand = (cur + timedelta(days=days_ahead)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if cand <= cur:
+                cand += timedelta(days=7)
+            target = cand
+        elif freq == "monthly":
+            y, m = cur.year, cur.month
+            cand = datetime(y, m, dom, hour, minute, tzinfo=IST)
+            if cand <= cur:
+                if m == 12:
+                    y, m = y + 1, 1
+                else:
+                    m += 1
+                cand = datetime(y, m, dom, hour, minute, tzinfo=IST)
+            target = cand
+        else:  # quarterly (Jan, Apr, Jul, Oct)
+            for year in (cur.year, cur.year + 1):
+                for month in CUSTOM_NEWS_QUARTER_MONTHS:
+                    cand = datetime(year, month, dom, hour, minute, tzinfo=IST)
+                    if cand > cur:
+                        target = cand
+                        break
+                if target is not None:
+                    break
+
+        if target is None:
+            return f"Scheduled at {hhmm} IST"
+
+        time_str = target.strftime("%I:%M %p IST")
+        if target.date() == cur.date():
+            return f"Today, {time_str}"
+        if target.date() == (cur + timedelta(days=1)).date():
+            return f"Tomorrow, {time_str}"
+        if freq == "weekly":
+            return f"{target.strftime('%a, %d %b')} • {time_str}"
+        return f"{target.strftime('%d %b %Y')} • {time_str}" if target.year != cur.year else f"{target.strftime('%d %b')} • {time_str}"
+    except Exception:
+        return f"Scheduled at {hhmm} IST"
+
+
+def get_custom_news_schedule(db_path: Path = DB_PATH) -> dict[str, Any]:
+    """Return editable WhatsApp delivery schedule, frequency & saved time window for the News tab."""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute("SELECT * FROM custom_news_settings WHERE id = 1").fetchone()
+    finally:
+        conn.close()
+
+    keys = row.keys() if row else []
+    dispatch_time = (row["dispatch_time"] if row and row["dispatch_time"] else "11:00").strip()
+    dispatch_active = bool(row["dispatch_active"]) if row and row["dispatch_active"] is not None else True
+    raw_hours = int(row["window_hours"]) if row and row["window_hours"] else 24
+    if raw_hours == 168:
+        window_hours = 720
+    elif raw_hours == 2160:
+        window_hours = 4320
+    else:
+        window_hours = raw_hours if raw_hours in CUSTOM_NEWS_WINDOW_LABELS else 24
+    interakt_template = (row["interakt_template"] if row and row["interakt_template"] else "").strip()
+    updated_at = (row["updated_at"] if row and row["updated_at"] else "")
+
+    raw_freq = str(row["frequency"]).strip().lower() if (row and "frequency" in keys and row["frequency"]) else "daily"
+    frequency = raw_freq if raw_freq in CUSTOM_NEWS_FREQUENCIES else "daily"
+    raw_dow = int(row["day_of_week"]) if (row and "day_of_week" in keys and row["day_of_week"] is not None) else 0
+    day_of_week = raw_dow if 0 <= raw_dow <= 6 else 0
+    raw_dom = int(row["day_of_month"]) if (row and "day_of_month" in keys and row["day_of_month"] is not None) else 1
+    day_of_month = raw_dom if 1 <= raw_dom <= 28 else 1
+
+    assigned_clients = [
+        a for a in get_analysts(db_path)
+        if getattr(a, "is_active", True) and len(getattr(a, "assigned_news_topics", []) or []) > 0
+    ]
+
+    return {
+        "dispatch_time": dispatch_time,
+        "dispatch_time_12h": _format_time_12h(dispatch_time),
+        "dispatch_active": dispatch_active,
+        "window_hours": window_hours,
+        "window_label": CUSTOM_NEWS_WINDOW_LABELS.get(window_hours, "Last 24 hrs"),
+        "frequency": frequency,
+        "frequency_label": CUSTOM_NEWS_FREQUENCIES.get(frequency, "Daily"),
+        "frequency_summary": _format_frequency_summary(frequency, day_of_week, day_of_month),
+        "day_of_week": day_of_week,
+        "day_of_month": day_of_month,
+        "interakt_template": interakt_template,
+        "updated_at": updated_at,
+        "next_run_ist": (
+            _compute_next_ist_run(dispatch_time, frequency, day_of_week, day_of_month)
+            if dispatch_active
+            else "Delivery Paused"
+        ),
+        "assigned_clients_count": len(assigned_clients),
+    }
+
+
+def save_custom_news_schedule(
+    dispatch_time: str | None = None,
+    dispatch_active: bool | None = None,
+    window_hours: int | None = None,
+    interakt_template: str | None = None,
+    frequency: str | None = None,
+    day_of_week: int | None = None,
+    day_of_month: int | None = None,
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """Persist editable WhatsApp send time, frequency, day, active flag, and digest window for the News tab."""
+    import re
+    current = get_custom_news_schedule(db_path)
+
+    new_time = current["dispatch_time"]
+    if dispatch_time is not None:
+        cleaned_t = dispatch_time.strip()
+        if re.match(r"^([01]\d|2[0-3]):[0-5]\d$", cleaned_t):
+            new_time = cleaned_t
+
+    new_active = current["dispatch_active"] if dispatch_active is None else bool(dispatch_active)
+
+    new_hours = current["window_hours"]
+    if window_hours is not None and window_hours in CUSTOM_NEWS_WINDOW_LABELS:
+        new_hours = window_hours
+
+    new_freq = current["frequency"]
+    if frequency is not None:
+        cleaned_f = frequency.strip().lower()
+        if cleaned_f in CUSTOM_NEWS_FREQUENCIES:
+            new_freq = cleaned_f
+
+    new_dow = current["day_of_week"]
+    if day_of_week is not None and 0 <= day_of_week <= 6:
+        new_dow = day_of_week
+
+    new_dom = current["day_of_month"]
+    if day_of_month is not None and 1 <= day_of_month <= 28:
+        new_dom = day_of_month
+
+    new_tpl = current["interakt_template"] if interakt_template is None else interakt_template.strip()
+    now_iso = datetime.now(UTC).isoformat()
+
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO custom_news_settings (
+                    id, dispatch_time, dispatch_active, window_hours, interakt_template,
+                    frequency, day_of_week, day_of_month, updated_at
+                )
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    dispatch_time = excluded.dispatch_time,
+                    dispatch_active = excluded.dispatch_active,
+                    window_hours = excluded.window_hours,
+                    interakt_template = excluded.interakt_template,
+                    frequency = excluded.frequency,
+                    day_of_week = excluded.day_of_week,
+                    day_of_month = excluded.day_of_month,
+                    updated_at = excluded.updated_at
+                """,
+                (new_time, 1 if new_active else 0, new_hours, new_tpl, new_freq, new_dow, new_dom, now_iso),
+            )
+    finally:
+        conn.close()
+
+    return get_custom_news_schedule(db_path)
+
+
+def get_custom_news_digest_for_analyst(
+    analyst_id: str,
+    hours: int | None = None,
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """Compile a client's personalized News PDF dataset across their assigned News tab topics.
+
+    Always returns every assigned topic (even with 0 articles -> 'No news from this topic')
+    and always includes all unique free articles within the saved window (no cross-day sent-ledger suppression).
+    """
+    sched = get_custom_news_schedule(db_path)
+    hours_val = hours if (hours is not None and hours in CUSTOM_NEWS_WINDOW_LABELS) else sched["window_hours"]
+    window_label = CUSTOM_NEWS_WINDOW_LABELS.get(hours_val, "Last 24 hrs")
+
+    analysts = {a.id: a for a in get_analysts(db_path)}
+    analyst = analysts.get(analyst_id)
+    assigned_ids = list(getattr(analyst, "assigned_news_topics", []) or []) if analyst else []
+
+    all_topics = {t["id"]: t for t in get_custom_news_topics(db_path)}
+    valid_assigned_ids = [tid for tid in assigned_ids if tid in all_topics]
+
+    if not valid_assigned_ids:
+        return {
+            "analyst_id": analyst_id,
+            "analyst_name": analyst.name if analyst else analyst_id,
+            "hours": hours_val,
+            "window_label": window_label,
+            "assigned_topic_ids": [],
+            "assigned_topic_names": [],
+            "topic_groups": [],
+            "total_articles": 0,
+            "topics_with_news": 0,
+            "topics_without_news": 0,
+        }
+
+    state = get_custom_news_state(hours=hours_val, topic_ids=valid_assigned_ids, scope="all", db_path=db_path)
+    group_map = {g["topic_id"]: g for g in state.get("groups", [])}
+
+    topic_groups: list[dict[str, Any]] = []
+    total_articles = 0
+    topics_with_news = 0
+    topics_without_news = 0
+
+    for tid in valid_assigned_ids:
+        t_info = all_topics[tid]
+        g = group_map.get(tid)
+        arts = list(g.get("articles", [])) if g else []
+        cnt = len(arts)
+        total_articles += cnt
+        if cnt > 0:
+            topics_with_news += 1
+        else:
+            topics_without_news += 1
+        topic_groups.append({
+            "topic_id": tid,
+            "topic_name": t_info["name"],
+            "count": cnt,
+            "articles": arts,
+            "last_fetched_ist": t_info.get("last_fetched_ist", ""),
+        })
+
+    return {
+        "analyst_id": analyst_id,
+        "analyst_name": analyst.name if analyst else analyst_id,
+        "hours": hours_val,
+        "window_label": window_label,
+        "assigned_topic_ids": valid_assigned_ids,
+        "assigned_topic_names": [all_topics[tid]["name"] for tid in valid_assigned_ids],
+        "topic_groups": topic_groups,
+        "total_articles": total_articles,
+        "topics_with_news": topics_with_news,
+        "topics_without_news": topics_without_news,
+    }
+
+
 
 
 

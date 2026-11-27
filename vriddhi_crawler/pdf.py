@@ -2023,3 +2023,659 @@ def generate_macro_digest(analyst_id: str, analyst_name: str, stories: list[dict
         log.info("WeasyPrint direct compilation fallback (%s)", e)
         return html_file, html_content
 
+
+# =========================================================================
+# Custom Web News Tracker PDF & HTML Briefing Template
+# =========================================================================
+
+NEWS_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ analyst_name }}_News_{{ date_str_file }}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+  @page {
+    size: A4;
+    margin: 12mm 12mm 12mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #94a3b8;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #0f172a;
+    background-color: #f8fafc;
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px;
+    font-size: 9.2pt;
+  }
+
+  .masthead {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px 22px;
+    margin-bottom: 14px;
+    color: #0f172a;
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid #10b981;
+  }
+
+  .brand-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .masthead-rect-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+  }
+
+  .brand-v-divider {
+    width: 1px;
+    height: 38px;
+    background: #e2e8f0;
+  }
+
+  .brand-desk-title {
+    font-size: 11pt;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .brand-sub {
+    font-size: 8pt;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    margin-top: 2px;
+  }
+
+  .client-brand-wing {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .client-group-logo {
+    max-height: 44px;
+    max-width: 180px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .analyst-badge {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 7px 14px;
+    border-radius: 24px;
+    font-size: 8pt;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .meta-ribbon-bar, .meta-sub-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 7px 16px;
+    border-radius: 24px;
+    font-size: 8pt;
+    color: #334155;
+  }
+
+  .meta-ribbon-bar strong, .meta-sub-row strong {
+    color: #0f172a;
+  }
+
+  .coverage-window-banner {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #10b981;
+    border-radius: 8px;
+    padding: 9px 14px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .coverage-icon {
+    font-size: 13pt;
+    line-height: 1;
+    margin-top: 1px;
+  }
+
+  .coverage-content {
+    flex: 1;
+  }
+
+  .coverage-title {
+    font-size: 8pt;
+    font-weight: 800;
+    color: #047857;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .coverage-details {
+    font-size: 8pt;
+    color: #334155;
+    line-height: 1.4;
+  }
+
+  .coverage-note {
+    font-size: 7.3pt;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  .topic-nav-index {
+    display: block;
+    line-height: 28px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+  }
+
+  .topic-nav-chip {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+    margin-bottom: 5px;
+    padding: 4px 10px;
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 7.6pt;
+    font-weight: 800;
+    color: #1e293b;
+  }
+
+  .topic-nav-chip .chip-count {
+    background: #047857;
+    color: #ffffff;
+    font-size: 6.8pt;
+    padding: 1.5px 6px;
+    border-radius: 10px;
+    font-weight: 800;
+    margin-left: 4px;
+  }
+
+  .topic-nav-chip .chip-count.zero {
+    background: #94a3b8;
+  }
+
+  .section-heading {
+    font-size: 10.2pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #0f172a;
+    margin: 16px 0 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .section-heading::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+    margin-left: 8px;
+  }
+
+  .topic-group-block {
+    margin-bottom: 20px;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .topic-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 45%, #ffffff 100%);
+    border: 1.5px solid #10b981;
+    border-left: 7px solid #047857;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .topic-group-title {
+    font-size: 10.2pt;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .topic-label-badge {
+    font-size: 6.8pt;
+    font-weight: 800;
+    color: #ffffff;
+    background: #047857;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+  }
+
+  .topic-group-count {
+    font-size: 7.5pt;
+    font-weight: 800;
+    color: #ffffff;
+    background: #0f172a;
+    border: 1.5px solid #10b981;
+    padding: 3px 11px;
+    border-radius: 14px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+
+  .topic-group-count.empty {
+    background: #64748b;
+    border-color: #94a3b8;
+  }
+
+  .news-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 11px 14px;
+    margin-bottom: 9px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 5px;
+  }
+
+  .pub-tag {
+    font-size: 7.2pt;
+    font-weight: 800;
+    color: #3730a3;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .engine-tag {
+    font-size: 6.8pt;
+    font-weight: 700;
+    color: #047857;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    padding: 1.5px 7px;
+    border-radius: 10px;
+    margin-left: 5px;
+  }
+
+  .pub-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7.2pt;
+    color: #64748b;
+  }
+
+  .story-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.4;
+    margin: 4px 0 6px 0;
+  }
+
+  .story-title a {
+    color: #0f172a;
+    text-decoration: none;
+  }
+
+  .story-title a:hover {
+    color: #047857;
+    text-decoration: underline;
+  }
+
+  .story-snippet {
+    background: #f8fafc;
+    border-left: 3px solid #10b981;
+    border-radius: 0 5px 5px 0;
+    padding: 5px 10px;
+    font-size: 8.1pt;
+    line-height: 1.45;
+    color: #334155;
+    margin: 5px 0 8px 0;
+  }
+
+  .card-footer {
+    display: block;
+    font-size: 7.5pt;
+    color: #64748b;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #f1f5f9;
+    line-height: 20px;
+    overflow: hidden;
+  }
+
+  .source-meta {
+    font-weight: 600;
+    color: #475569;
+    display: inline-block;
+    float: left;
+    line-height: 20px;
+  }
+
+  .action-link {
+    color: #0284c7;
+    font-weight: 800;
+    font-size: 7.5pt;
+    text-decoration: none;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: #f0f9ff;
+    border: 1.5px solid #0284c7;
+    display: inline-block;
+    float: right;
+    line-height: 14px;
+  }
+
+  .empty-topic-card {
+    background: #f8fafc;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 13px 16px;
+    color: #475569;
+    font-size: 8.4pt;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .empty-topic-title {
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .empty-topic-sub {
+    font-size: 7.6pt;
+    color: #64748b;
+  }
+</style>
+</head>
+<body>
+
+{% if group_logo_b64 %}
+<div class="masthead">
+  <div class="brand-row" style="margin-bottom: 6px;">
+    <div class="brand-group">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="masthead-rect-logo" alt="Vriddhi - Building wealth with wisdom" />
+      {% endif %}
+      <div class="brand-v-divider"></div>
+      <div>
+        <div class="brand-desk-title">WEB NEWS INTELLIGENCE BRIEF</div>
+        <div class="brand-sub">Curated Multi-Source News &bull; {{ window_label }}</div>
+      </div>
+    </div>
+    <div class="client-brand-wing">
+      <img src="{{ group_logo_b64 }}" class="client-group-logo" alt="Client Logo" />
+    </div>
+  </div>
+  <div class="meta-ribbon-bar">
+    <span><strong>Client:</strong> {{ analyst_name }}</span>
+    <span>&bull;</span>
+    <span><strong>Assigned Topics:</strong> {{ topics_count }}</span>
+    <span>&bull;</span>
+    <span>{{ date_str }}</span>
+    <span>&bull;</span>
+    <span style="color:#059669;font-weight:700;">{{ total_articles }} Article{% if total_articles != 1 %}s{% endif %} ({{ window_label }})</span>
+  </div>
+</div>
+{% else %}
+<div class="masthead">
+  <div class="brand-row">
+    <div class="brand-group">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="masthead-rect-logo" alt="Vriddhi - Building wealth with wisdom" />
+      {% endif %}
+      <div class="brand-v-divider"></div>
+      <div>
+        <div class="brand-desk-title">WEB NEWS INTELLIGENCE BRIEF</div>
+        <div class="brand-sub">Curated Multi-Source News &bull; {{ window_label }}</div>
+      </div>
+    </div>
+    <div class="analyst-badge">
+      &#128100; {{ analyst_name }} &bull; {{ topics_count }} Topic{% if topics_count != 1 %}s{% endif %}
+    </div>
+  </div>
+  <div class="meta-sub-row">
+    <div>Date: <strong>{{ date_str }}</strong></div>
+    <div><strong>Window:</strong> {{ window_label }} &bull; {{ total_articles }} Article{% if total_articles != 1 %}s{% endif %}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="coverage-window-banner">
+  <div class="coverage-icon">&#128240;</div>
+  <div class="coverage-content">
+    <div class="coverage-title">Tracked Topics Coverage &bull; {{ window_label }}</div>
+    <div class="coverage-details">
+      <strong>Timeframe:</strong> {{ coverage_window_start }} &mdash; {{ coverage_window_end }} &bull;
+      <strong>Engines:</strong> Google News, Bing News, Yahoo News, GDELT &amp; RSS Feeds (Deduplicated)
+    </div>
+    <div class="coverage-note">
+      * Every assigned topic is reported below. Topics with zero coverage in this window explicitly indicate &ldquo;No news from this topic&rdquo;.
+    </div>
+  </div>
+</div>
+
+{% if not topic_groups %}
+<div class="news-card" style="text-align: center; color: #64748b; padding: 28px 18px;">
+  <div style="font-size: 10pt; font-weight: 700; color: #334155; margin-bottom: 4px;">No News Topics Assigned Yet</div>
+  <div>Go to <strong>Clients &amp; Subscribers &rarr; Edit</strong> to assign News tab topics to <strong>{{ analyst_name }}</strong>.</div>
+</div>
+{% else %}
+
+<div class="section-heading">&#128240; Tracked Topics Breakdown</div>
+
+{% if topic_groups|length > 1 %}
+<div class="topic-nav-index">
+  {% for tg in topic_groups %}
+  <a href="#topic-{{ loop.index }}" class="topic-nav-chip">
+    <span>{{ tg.topic_name }}</span>
+    <span class="chip-count {% if tg.count == 0 %}zero{% endif %}">{{ tg.count }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% for tg in topic_groups %}
+<div class="topic-group-block" id="topic-{{ loop.index }}">
+  <div class="topic-group-header">
+    <div class="topic-group-title">
+      <span class="topic-label-badge">TOPIC</span>
+      <span>{{ tg.topic_name }}</span>
+    </div>
+    <span class="topic-group-count {% if tg.count == 0 %}empty{% endif %}">
+      {% if tg.count == 0 %}NO NEWS{% else %}{{ tg.count }} ARTICLE{% if tg.count != 1 %}S{% endif %}{% endif %}
+    </span>
+  </div>
+
+  {% if tg.articles %}
+    {% for art in tg.articles %}
+    <div class="news-card">
+      <div class="card-top">
+        <div>
+          <span class="pub-tag">{{ art.publisher or 'Web News' }}</span>
+          <span class="engine-tag">{{ art.source_engine or 'Google News' }}</span>
+        </div>
+        <span class="pub-time">{{ art.published_ist or '' }}</span>
+      </div>
+
+      <div class="story-title">
+        <a href="{{ art.url or '#' }}" target="_blank" rel="noopener noreferrer">{{ art.title }}</a>
+      </div>
+
+      {% if art.summary %}
+      <div class="story-snippet">{{ art.summary }}</div>
+      {% endif %}
+
+      <div class="card-footer">
+        <span class="source-meta">&#128240; {{ art.publisher or 'Web News' }}</span>
+        <a href="{{ art.url or '#' }}" target="_blank" rel="noopener noreferrer" class="action-link">Go to website &rarr;</a>
+        <div style="clear: both;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-topic-card">
+      <div>
+        <div class="empty-topic-title">No news from this topic</div>
+        <div class="empty-topic-sub">No news articles were found for <strong>{{ tg.topic_name }}</strong> in the {{ window_label }} window.</div>
+      </div>
+      <span style="font-size: 7.5pt; font-weight: 700; color: #64748b; white-space: nowrap;">Checked &bull; {{ window_label }}</span>
+    </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% endif %}
+
+</body>
+</html>
+"""
+
+
+def get_clean_news_digest_filename(analyst_name: str, ext: str = ".pdf") -> str:
+    now = datetime.now(IST)
+    date_str = now.strftime("%d-%m-%Y")
+    words = [w for w in analyst_name.strip().split() if w]
+    sanitized_words = ["".join(c for c in w if c.isalnum() or c == "_") for w in words]
+    clean_name = "_".join(w for w in sanitized_words if w) or "Client"
+    return f"{clean_name}_News_{date_str}{ext}"
+
+
+def render_news_digest_html(
+    analyst_name: str,
+    analyst_id: str,
+    digest_data: dict,
+    date_str: str | None = None,
+    group_logo_b64: str | None = None,
+) -> str:
+    """Render the executive HTML digest for a client's assigned News tab topics."""
+    from jinja2 import Template
+
+    now_ist = datetime.now(IST)
+    if not date_str:
+        date_str = now_ist.strftime("%d %b %Y")
+    date_str_file = now_ist.strftime("%d-%m-%Y")
+
+    hours_val = int(digest_data.get("hours") or 24)
+    window_label = str(digest_data.get("window_label") or "Last 24 hrs")
+    start_ist = now_ist - timedelta(hours=hours_val)
+    coverage_window_start = start_ist.strftime("%d-%b-%Y %I:%M %p IST")
+    coverage_window_end = now_ist.strftime("%d-%b-%Y %I:%M %p IST")
+
+    topic_groups = digest_data.get("topic_groups") or []
+    total_articles = int(digest_data.get("total_articles") or 0)
+
+    if group_logo_b64 is None and analyst_id:
+        group_logo_b64 = get_group_logo_data_uri(analyst_id=analyst_id)
+
+    template = Template(NEWS_HTML_TEMPLATE)
+    return template.render(
+        logo_data_uri=get_vriddhi_logo_data_uri(),
+        group_logo_b64=group_logo_b64 or "",
+        analyst_name=analyst_name,
+        date_str=date_str,
+        date_str_file=date_str_file,
+        window_label=window_label,
+        coverage_window_start=coverage_window_start,
+        coverage_window_end=coverage_window_end,
+        topics_count=len(topic_groups),
+        total_articles=total_articles,
+        topic_groups=topic_groups,
+    )
+
+
+def generate_news_digest(analyst_id: str, analyst_name: str, digest_data: dict) -> tuple[Path, str]:
+    """Generate both an HTML digest and high-definition PDF for a client's assigned News tab topics."""
+    html_content = render_news_digest_html(analyst_name, analyst_id, digest_data)
+
+    html_filename = get_clean_news_digest_filename(analyst_name, ext=".html")
+    pdf_filename = get_clean_news_digest_filename(analyst_name, ext=".pdf")
+
+    html_file = DIGESTS_DIR / html_filename
+    html_file.write_text(html_content, encoding="utf-8")
+
+    pdf_file = DIGESTS_DIR / pdf_filename
+
+    # 1. Try native browser headless print-to-pdf
+    if generate_pdf_via_browser(html_file, pdf_file):
+        log.info("Compiled fresh News PDF via native browser: %s (size: %s bytes)", pdf_file, pdf_file.stat().st_size)
+        normalize_pdf_link_rects(pdf_file)
+        return pdf_file, html_content
+
+    # 2. Attempt WeasyPrint if available
+    try:
+        import weasyprint  # type: ignore[import-untyped]
+        weasyprint.HTML(string=html_content).write_pdf(str(pdf_file))
+        normalize_pdf_link_rects(pdf_file)
+        return pdf_file, html_content
+    except Exception as e:
+        log.info("WeasyPrint direct compilation fallback for News PDF (%s)", e)
+        return html_file, html_content
+
+

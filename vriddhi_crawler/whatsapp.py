@@ -569,3 +569,238 @@ def send_whatsapp_macro_digest(
         "message": helpful_msg,
     }
 
+
+def send_whatsapp_news_digest(
+    analyst_name: str,
+    analyst_phone: str,
+    digest_data: dict[str, Any],
+    pdf_path: Path | None = None,
+    public_pdf_url: str | None = None,
+    template_override: str | None = None,
+) -> dict[str, Any]:
+    """Dispatch a client's personalized News Tab PDF briefing via Interakt WhatsApp."""
+    import os
+    from dotenv import load_dotenv
+    from .config import PROJECT_ROOT
+    from .db import get_custom_news_schedule
+
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+
+    api_key = os.getenv("INTERAKT_API_KEY", "").strip()
+    sched = get_custom_news_schedule()
+    configured_tpl = (
+        (template_override or "").strip()
+        or str(sched.get("interakt_template") or "").strip()
+        or os.getenv("INTERAKT_NEWS_TEMPLATE", "").strip()
+        or "news_tab"
+    )
+    lang = os.getenv("INTERAKT_LANGUAGE", "en").strip()
+    doc_header = os.getenv("INTERAKT_DOCUMENT_HEADER", "yes").strip().lower() in ("yes", "true", "1")
+    is_test_mode = os.getenv("TEST_MODE", "no").strip().lower() in ("yes", "true", "1")
+    test_phone = os.getenv("TEST_WHATSAPP", "").strip()
+
+    today_str = datetime.now(IST).strftime("%d-%b-%Y")
+    first_name = analyst_name.split()[0] if analyst_name else "Client"
+
+    if is_test_mode and test_phone and test_phone not in ("9820000000", "9800000000", ""):
+        target_raw_phone = test_phone
+    else:
+        target_raw_phone = analyst_phone or test_phone
+
+    if target_raw_phone in ("9820000000", "9820000001", "9820000002", "9820000003", ""):
+        log.info("Skipping dummy placeholder phone number %s for %s", target_raw_phone, analyst_name)
+        return {
+            "status": "skipped",
+            "mode": "dummy_phone",
+            "recipient": target_raw_phone,
+            "message": f"Skipped News dispatch for {analyst_name} (dummy placeholder number {target_raw_phone})",
+        }
+
+    country_code, clean_phone = format_phone_number(target_raw_phone)
+
+    topic_groups = digest_data.get("topic_groups") or []
+    total_articles = int(digest_data.get("total_articles") or 0)
+    window_label = str(digest_data.get("window_label") or "Last 24 hrs")
+
+    # Build concise single-line highlight
+    highlight = f"No news from assigned topics ({window_label})"
+    for tg in topic_groups:
+        arts = tg.get("articles") or []
+        if arts:
+            highlight = f"{tg.get('topic_name', 'News')}: {arts[0].get('title', 'Update')}"
+            break
+    clean_highlight = sanitize_variable(highlight)
+    if len(clean_highlight) > 80:
+        clean_highlight = clean_highlight[:77] + "..."
+
+    raw_body_values = [
+        first_name,
+        today_str,
+        str(total_articles),
+        f"{len(topic_groups)} Topics",
+        window_label,
+        clean_highlight,
+    ]
+    body_values = [sanitize_variable(v) for v in raw_body_values]
+
+    if not api_key:
+        log.info(
+            "INTERAKT_API_KEY is not set in .env. Simulating News WhatsApp send for %s (%s%s).",
+            analyst_name,
+            country_code,
+            clean_phone,
+        )
+        return {
+            "status": "simulated",
+            "mode": "preview",
+            "recipient": f"{country_code} {clean_phone}",
+            "template": configured_tpl,
+            "variables": body_values,
+            "message": f"News PDF preview simulated for {analyst_name} ({country_code} {clean_phone}). Set INTERAKT_API_KEY in .env for live dispatch.",
+        }
+
+    try:
+        decoded = base64.b64decode(api_key).decode("utf-8")
+        if ":" in decoded or len(decoded) > 20:
+            auth_b64 = api_key
+        else:
+            auth_b64 = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
+    except Exception:
+        auth_b64 = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
+
+    pdf_filename = Path(pdf_path).name if pdf_path else f"{first_name}_News_{today_str}.pdf"
+
+    header_values = []
+    if doc_header:
+        base_url = (os.getenv("BASE_URL") or "https://35.244.60.224.sslip.io").rstrip("/")
+        fallback_server_url = f"{base_url}/api/digest/file/{pdf_filename}" if (base_url and pdf_filename) else None
+        candidate_url = public_pdf_url or fallback_server_url
+        doc_link = None
+        if candidate_url:
+            # Verify the public server actually hosts this PDF (prevents 404 when testing from localhost)
+            try:
+                head_req = urllib.request.Request(
+                    url=candidate_url,
+                    headers={"User-Agent": "VriddhiCrawler/1.0"},
+                    method="HEAD",
+                )
+                with urllib.request.urlopen(head_req, timeout=4) as head_resp:
+                    if head_resp.status == 200:
+                        doc_link = candidate_url
+            except Exception:
+                doc_link = None
+        if not doc_link:
+            doc_link = (
+                (upload_pdf_to_cdn(pdf_path) if pdf_path else None)
+                or candidate_url
+                or "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+            )
+        header_values.append(doc_link)
+
+    candidates = [configured_tpl]
+
+    last_error_code = 400
+    last_error_body = ""
+
+    for candidate in candidates:
+        template_obj: dict[str, Any] = {
+            "name": candidate,
+            "languageCode": lang,
+            "headerValues": header_values,
+            "bodyValues": body_values,
+        }
+        if doc_header and pdf_filename:
+            template_obj["fileName"] = pdf_filename
+
+        payload = {
+            "countryCode": country_code,
+            "phoneNumber": clean_phone,
+            "type": "Template",
+            "template": template_obj,
+        }
+
+        req = urllib.request.Request(
+            url="https://api.interakt.ai/v1/public/message/",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Basic {auth_b64}",
+                "User-Agent": "VriddhiCrawler/1.0",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp_data = json.loads(resp.read().decode("utf-8"))
+                log.info("Interakt WhatsApp News dispatch succeeded with template '%s': %s", candidate, resp_data)
+                return {
+                    "status": "sent",
+                    "mode": "live",
+                    "recipient": f"{country_code} {clean_phone}",
+                    "template": candidate,
+                    "data": resp_data,
+                    "message": f"Live WhatsApp News PDF dispatched to {country_code} {clean_phone} via Interakt!",
+                }
+        except urllib.error.HTTPError as e:
+            last_error_code = e.code
+            last_error_body = e.read().decode("utf-8", errors="replace")
+            log.warning("Interakt News candidate '%s' HTTP %s: %s", candidate, e.code, last_error_body)
+
+            if "fileName" in last_error_body and "fileName" in template_obj:
+                try:
+                    template_obj.pop("fileName", None)
+                    payload["template"] = template_obj
+                    req_retry = urllib.request.Request(
+                        url="https://api.interakt.ai/v1/public/message/",
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Basic {auth_b64}",
+                            "User-Agent": "VriddhiCrawler/1.0",
+                        },
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req_retry, timeout=15) as resp:
+                        resp_data = json.loads(resp.read().decode("utf-8"))
+                        return {
+                            "status": "sent",
+                            "mode": "live",
+                            "recipient": f"{country_code} {clean_phone}",
+                            "template": candidate,
+                            "data": resp_data,
+                            "message": f"Live WhatsApp News PDF dispatched to {country_code} {clean_phone} via Interakt!",
+                        }
+                except Exception as retry_err:
+                    log.warning("News retry without fileName failed: %s", retry_err)
+
+            if "No approved template found" not in last_error_body:
+                break
+
+        except urllib.error.URLError as e:
+            log.error("Failed to reach Interakt API: %s", e)
+            return {
+                "status": "error",
+                "recipient": f"{country_code} {clean_phone}",
+                "error": str(e),
+                "message": f"Failed to connect to Interakt: {e}",
+            }
+
+    if "re-sync on Interakt dashboard" in last_error_body:
+        helpful_msg = (
+            "Interakt Sync Required: Meta has approved your template, but Interakt's dispatch engine "
+            "requires a manual sync. In your Interakt dashboard (app.interakt.ai/templates), "
+            "click the green [Sync] button on the top right next to 'Last synced on', wait 10 seconds, then try again."
+        )
+    else:
+        helpful_msg = f"Interakt API Error ({last_error_code}): {last_error_body}"
+
+    return {
+        "status": "error",
+        "http_code": last_error_code,
+        "recipient": f"{country_code} {clean_phone}",
+        "error": last_error_body,
+        "message": helpful_msg,
+    }
+
+

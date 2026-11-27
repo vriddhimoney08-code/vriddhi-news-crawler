@@ -52,6 +52,7 @@ class Analyst:
     assigned_companies: list[str] = field(default_factory=list)
     assigned_folders: list[str] = field(default_factory=list)
     macro_sectors: list[str] = field(default_factory=lambda: ["ALL"])
+    assigned_news_topics: list[str] = field(default_factory=list)
     is_active: bool = True
     group_id: str = ""
     logo_path: str = ""

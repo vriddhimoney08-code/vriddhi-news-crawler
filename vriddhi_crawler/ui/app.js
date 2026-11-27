@@ -167,6 +167,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (targetId === "view-macro") {
         loadMacroDesk();
       }
+      if (targetId === "view-custom-news") {
+        loadCustomNews();
+      }
       if (targetId === "view-digest") {
         loadFullDigestFrame();
       }
@@ -240,7 +243,7 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) return arr.map(f => String(f).trim().toUpperCase()).filter(Boolean);
-      } catch (e) {}
+      } catch (e) { }
     }
     if (raw.includes(",")) {
       return raw.split(",").map(f => f.trim().toUpperCase()).filter(Boolean);
@@ -387,9 +390,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const email = (a.email || "").toLowerCase();
         const flds = (a.assigned_folders || []).map(f => f.toLowerCase());
         return name.includes(clientSearchQuery) ||
-               phone.includes(clientSearchQuery) ||
-               email.includes(clientSearchQuery) ||
-               flds.some(f => f.includes(clientSearchQuery));
+          phone.includes(clientSearchQuery) ||
+          email.includes(clientSearchQuery) ||
+          flds.some(f => f.includes(clientSearchQuery));
       });
     }
 
@@ -405,7 +408,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const msg = clientSearchQuery
         ? `No clients found matching "<strong>${clientSearchQuery}</strong>".`
         : `No clients registered yet. Click "+ Add Client" to add WhatsApp briefing recipients!`;
-      
+
       analystsTableBody.innerHTML = `
         <tr>
           <td colspan="4" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
@@ -421,7 +424,7 @@ document.addEventListener("DOMContentLoaded", () => {
     analystsTableBody.innerHTML = filtered.map(a => {
       const folders = a.assigned_folders || [];
       const stockCount = getAnalystCoveredStockCount(a);
-      
+
       // Initials for avatar
       const names = (a.name || "Client").trim().split(" ");
       const initials = names.length > 1
@@ -430,15 +433,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const foldersDisplay = folders.length > 0
         ? folders.map(f => {
-            const tagClass = getFolderClass(f);
-            return `<span class="folder-tag ${tagClass}">${f}</span>`;
-          }).join(" ")
+          const tagClass = getFolderClass(f);
+          return `<span class="folder-tag ${tagClass}">${f}</span>`;
+        }).join(" ")
         : `<span class="badge-unassigned" onclick="window.editAnalyst('${a.id}')" title="Click to assign portfolio baskets">+ Assign Baskets</span>`;
 
       const sectors = a.macro_sectors || ["ALL"];
       const sectorsDisplay = sectors.includes("ALL")
         ? `<span class="sector-tag sector-tag-all" onclick="window.editAnalyst('${a.id}')" title="Evening Briefing covers all macro sectors">🌐 All Macro Sectors</span>`
         : sectors.slice(0, 2).map(s => `<span class="sector-tag" onclick="window.editAnalyst('${a.id}')" title="Evening sector: ${s}">${s}</span>`).join(" ") + (sectors.length > 2 ? `<span class="sector-tag" style="background:rgba(255,255,255,0.06);color:var(--text-dim);border:none;" onclick="window.editAnalyst('${a.id}')">+${sectors.length - 2}</span>` : "");
+
+      const assignedNewsIds = a.assigned_news_topics || [];
+      const topicNameMap = new Map((savedCustomNewsTopics || []).map(t => [t.id, t.name]));
+      const assignedNewsNames = assignedNewsIds.map(tid => topicNameMap.get(tid) || tid);
+      const newsTopicsDisplay = assignedNewsNames.length > 0
+        ? assignedNewsNames.slice(0, 2).map(tn => `<span class="news-topic-client-tag" onclick="window.editAnalyst('${a.id}')" title="News PDF topic: ${escapeHtml(tn)}">📰 ${escapeHtml(tn)}</span>`).join(" ")
+        + (assignedNewsNames.length > 2 ? `<span class="news-topic-client-tag" style="opacity:0.8;" onclick="window.editAnalyst('${a.id}')">+${assignedNewsNames.length - 2}</span>` : "")
+        : `<span class="badge-unassigned" onclick="window.editAnalyst('${a.id}')" title="Click to assign News tab topics">+ Assign News</span>`;
 
       const isActive = a.is_active !== false;
       const statusPill = isActive
@@ -465,12 +476,12 @@ document.addEventListener("DOMContentLoaded", () => {
                   ${a.email ? `<span class="client-email-badge" title="Email: ${a.email}">✉️ ${a.email}</span>` : ''}
                 </div>
                 ${(() => {
-                  const belongingGroups = clientGroups.filter(g => (g.client_ids || []).includes(a.id));
-                  if (!belongingGroups.length) return '';
-                  return `<div class="client-groups-chips" style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+          const belongingGroups = clientGroups.filter(g => (g.client_ids || []).includes(a.id));
+          if (!belongingGroups.length) return '';
+          return `<div class="client-groups-chips" style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
                     ${belongingGroups.map(g => `<span class="group-badge-chip" onclick="window.selectClientGroup('${g.id}')" style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.68rem; background: rgba(99, 102, 241, 0.12); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.25); padding: 1px 6px; border-radius: 4px; cursor: pointer;" title="Group: ${escapeHtml(g.name)} (Click to filter)">📁 ${escapeHtml(g.name)}</span>`).join('')}
                   </div>`;
-                })()}
+        })()}
               </div>
             </div>
           </td>
@@ -482,6 +493,8 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="client-baskets-row">${foldersDisplay}</div>
               <div style="font-size: 0.66rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.3px; margin-top: 5px;">Evening Macro Sectors:</div>
               <div class="client-sectors-row">${sectorsDisplay}</div>
+              <div style="font-size: 0.66rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.3px; margin-top: 5px;">News Tab Topics:</div>
+              <div class="client-sectors-row">${newsTopicsDisplay}</div>
               <span class="client-stocks-count-badge" style="margin-top: 4px;">📊 ${stockCount} Stocks Tracked</span>
             </div>
           </td>
@@ -593,8 +606,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Edition label
     if (confirmEditionBadge) {
       if (edition === "evening") {
-        confirmEditionBadge.textContent = "🌙 Evening Macro Briefing (6:30 PM)";
+        confirmEditionBadge.textContent = "🌙 Evening Macro Briefing (5:15 PM)";
         confirmEditionBadge.className = "edition-badge edition-evening";
+      } else if (edition === "news") {
+        const newsLabel = customNewsSchedule?.dispatch_time_12h || "11:00 AM";
+        const winLbl = customNewsSchedule?.window_label || "Last 24 hrs";
+        confirmEditionBadge.textContent = `📰 News PDF Briefing (${newsLabel} • ${winLbl})`;
+        confirmEditionBadge.className = "edition-badge edition-morning";
       } else if (edition === "both") {
         confirmEditionBadge.textContent = "☀️ Morning (8:30 AM) & 🌙 Evening (6:30 PM)";
         confirmEditionBadge.className = "edition-badge edition-both";
@@ -788,6 +806,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAnalystFoldersCheckboxes(a.assigned_folders || []);
     renderAnalystCompaniesCheckboxes(a.assigned_companies || []);
     renderAnalystSectorsCheckboxes(a.macro_sectors || ["ALL"]);
+    renderAnalystNewsTopicsCheckboxes(a.assigned_news_topics || []);
     renderAnalystGroupsCheckboxes(a.id);
     renderAnalystGroupDropdown(a);
 
@@ -874,14 +893,14 @@ document.addEventListener("DOMContentLoaded", () => {
           } else {
             showToast("Error deleting client", true);
           }
-        } catch(err) {
+        } catch (err) {
           showToast("Error deleting client", true);
         }
       }
     });
   };
 
-  
+
   function renderAnalystGroupDropdown(client = null) {
     const sel = document.getElementById("input-analyst-group");
     if (!sel) return;
@@ -898,7 +917,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-function renderAnalystGroupsCheckboxes(clientId = null) {
+  function renderAnalystGroupsCheckboxes(clientId = null) {
     const container = document.getElementById("analyst-groups-checkboxes");
     if (!container) return;
 
@@ -1038,6 +1057,51 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
     }
   };
 
+  let savedCustomNewsTopics = [];
+  let customNewsSchedule = {
+    dispatch_time: "11:00",
+    dispatch_time_12h: "11:00 AM",
+    dispatch_active: true,
+    window_hours: 24,
+    window_label: "Last 24 hrs",
+    next_run_ist: "Today, 11:00 AM IST",
+    assigned_clients_count: 0,
+  };
+
+  function renderAnalystNewsTopicsCheckboxes(assigned = []) {
+    const container = document.getElementById("analyst-news-topics-checkboxes");
+    if (!container) return;
+    if (!savedCustomNewsTopics || !savedCustomNewsTopics.length) {
+      container.innerHTML = `<span style="font-size:0.78rem; color:var(--text-dim);">No saved names in the News tab yet. Add names in the News tab first.</span>`;
+      return;
+    }
+    const assignedSet = new Set(assigned || []);
+    container.innerHTML = savedCustomNewsTopics.map(t => {
+      const isChecked = assignedSet.has(t.id) ? "checked" : "";
+      return `
+        <label class="sector-checkbox-card">
+          <div class="sector-checkbox-left">
+            <input type="checkbox" name="assigned_news_topic" value="${escapeHtml(t.id)}" ${isChecked}>
+            <span style="font-size:0.78rem; font-weight:600; color:#e2e8f0;">📰 ${escapeHtml(t.name)}</span>
+          </div>
+        </label>
+      `;
+    }).join("");
+  }
+
+  const btnNewsTopicsSelectAll = document.getElementById("btn-news-topics-select-all");
+  const btnNewsTopicsClearAll = document.getElementById("btn-news-topics-clear-all");
+  if (btnNewsTopicsSelectAll) {
+    btnNewsTopicsSelectAll.addEventListener("click", () => {
+      document.querySelectorAll('input[name="assigned_news_topic"]').forEach(cb => { cb.checked = true; });
+    });
+  }
+  if (btnNewsTopicsClearAll) {
+    btnNewsTopicsClearAll.addEventListener("click", () => {
+      document.querySelectorAll('input[name="assigned_news_topic"]').forEach(cb => { cb.checked = false; });
+    });
+  }
+
   // Analyst Modal Logic
   const btnOpenAddAnalyst = document.getElementById("btn-open-add-analyst");
   const modalAddAnalyst = document.getElementById("modal-add-analyst");
@@ -1074,6 +1138,7 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
       renderAnalystFoldersCheckboxes([]);
       renderAnalystCompaniesCheckboxes([]);
       renderAnalystSectorsCheckboxes(["ALL"]);
+      renderAnalystNewsTopicsCheckboxes([]);
       renderAnalystGroupsCheckboxes(null);
       renderAnalystGroupDropdown(null);
       modalAddAnalyst.classList.add("open");
@@ -1112,6 +1177,9 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
       const checkedSectorBoxes = document.querySelectorAll('input[name="assigned_macro_sector"]:checked');
       const assignedSectors = Array.from(checkedSectorBoxes).map(cb => cb.value);
 
+      const checkedNewsTopicBoxes = document.querySelectorAll('input[name="assigned_news_topic"]:checked');
+      const assignedNewsTopics = Array.from(checkedNewsTopicBoxes).map(cb => cb.value);
+
       const selGroup = document.getElementById("input-analyst-group");
       const targetGroupId = selGroup ? selGroup.value.trim() : "";
 
@@ -1123,6 +1191,7 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
         assigned_companies: assignedCompanies,
         assigned_folders: assignedFolders,
         macro_sectors: assignedSectors.length ? assignedSectors : ["ALL"],
+        assigned_news_topics: assignedNewsTopics,
         is_active: is_active,
         group_id: targetGroupId
       };
@@ -1174,7 +1243,7 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
           await loadAnalysts();
           loadStats();
         }
-      } catch(err) {
+      } catch (err) {
         showToast("Failed to save client", true);
       }
     });
@@ -2182,7 +2251,7 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
     try {
       const res = await fetch(`/api/stories?mode=${currentFeedMode}&limit=120`);
       const all = await res.json();
-      
+
       // Filter for companies assigned to this analyst via folders or direct assignment
       const assignedFolders = (analyst.assigned_folders || []).map(f => f.toUpperCase());
       const assignedSet = new Set(analyst.assigned_companies || []);
@@ -2289,7 +2358,7 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
         for (const a of analystsList) {
           try {
             await fetch(`/api/digest/simulate-send/${a.id}`, { method: "POST" });
-          } catch (e) {}
+          } catch (e) { }
         }
 
         showToast("Morning digests sent to all clients! Sent ledger updated.");
@@ -2302,28 +2371,47 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
     });
   });
 
-  // 8. Full Daily Digest Desk & Interactive Workstation (Morning & Evening Editions)
-  let currentDigestEdition = "morning"; // 'morning' | 'evening'
+  // 8. Full Daily Digest Desk & Interactive Workstation (Morning, Evening & News Editions)
+  let currentDigestEdition = "morning"; // 'morning' | 'evening' | 'news'
 
   const btnEditionMorning = document.getElementById("btn-edition-morning");
   const btnEditionEvening = document.getElementById("btn-edition-evening");
+  const btnEditionNews = document.getElementById("btn-edition-news");
+  const btnEditionNewsLabel = document.getElementById("btn-edition-news-label");
 
-  if (btnEditionMorning && btnEditionEvening) {
+  function setActiveDigestEditionButton(edition) {
+    [btnEditionMorning, btnEditionEvening, btnEditionNews].forEach(b => {
+      if (b) b.classList.toggle("active", b.dataset.edition === edition);
+    });
+  }
+
+  if (btnEditionMorning) {
     btnEditionMorning.addEventListener("click", () => {
       if (currentDigestEdition === "morning") return;
       currentDigestEdition = "morning";
-      btnEditionMorning.classList.add("active");
-      btnEditionEvening.classList.remove("active");
-      showToast("Switched to ☀️ Morning Equity Research Digest (08:00 AM)");
+      setActiveDigestEditionButton("morning");
+      showToast("Switched to ☀️ Morning Equity Research Digest (08:30 AM)");
       loadFullDigestFrame();
     });
+  }
 
+  if (btnEditionEvening) {
     btnEditionEvening.addEventListener("click", () => {
       if (currentDigestEdition === "evening") return;
       currentDigestEdition = "evening";
-      btnEditionEvening.classList.add("active");
-      btnEditionMorning.classList.remove("active");
-      showToast("Switched to 🌙 Evening Post-Market Macro & Policy Briefing (06:30 PM)");
+      setActiveDigestEditionButton("evening");
+      showToast("Switched to 🌙 Evening Post-Market Macro & Policy Briefing (05:15 PM)");
+      loadFullDigestFrame();
+    });
+  }
+
+  if (btnEditionNews) {
+    btnEditionNews.addEventListener("click", () => {
+      if (currentDigestEdition === "news") return;
+      currentDigestEdition = "news";
+      setActiveDigestEditionButton("news");
+      const tLabel = customNewsSchedule?.dispatch_time_12h || "11:00 AM";
+      showToast(`Switched to 📰 News PDF Briefing (${tLabel})`);
       loadFullDigestFrame();
     });
   }
@@ -2338,12 +2426,17 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
     if (digestFrameLoader) digestFrameLoader.style.display = "flex";
 
     const isEvening = currentDigestEdition === "evening";
-    const previewUrl = isEvening
-      ? `/api/macro/digest/preview/${currentAnalystId}?t=${Date.now()}`
-      : `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
-    const metaUrl = isEvening
-      ? `/api/macro/digest/meta/${currentAnalystId}`
-      : `/api/digest/meta/${currentAnalystId}`;
+    const isNews = currentDigestEdition === "news";
+    const previewUrl = isNews
+      ? `/api/custom-news/digest/preview/${currentAnalystId}?t=${Date.now()}`
+      : isEvening
+        ? `/api/macro/digest/preview/${currentAnalystId}?t=${Date.now()}`
+        : `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+    const metaUrl = isNews
+      ? `/api/custom-news/digest/meta/${currentAnalystId}`
+      : isEvening
+        ? `/api/macro/digest/meta/${currentAnalystId}`
+        : `/api/digest/meta/${currentAnalystId}`;
 
     if (fullDigestIframe) {
       fullDigestIframe.onload = () => {
@@ -2362,7 +2455,12 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
         }
 
         if (digestClientBaskets) {
-          if (isEvening) {
+          if (isNews) {
+            const topics = meta.assigned_topics && meta.assigned_topics.length > 0
+              ? meta.assigned_topics.join(", ")
+              : "No News Topics Assigned";
+            digestClientBaskets.textContent = `News: ${topics}`;
+          } else if (isEvening) {
             const secs = meta.assigned_sectors && meta.assigned_sectors.length > 0
               ? meta.assigned_sectors.join(", ")
               : "All Sectors";
@@ -2376,19 +2474,23 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
         }
 
         if (digestStoriesCount) {
-          digestStoriesCount.textContent = isEvening
-            ? `${meta.total_stories || 0} Directives`
-            : `${meta.total_stories || 0} Stories`;
+          digestStoriesCount.textContent = isNews
+            ? `${meta.total_stories || 0} Articles`
+            : isEvening
+              ? `${meta.total_stories || 0} Directives`
+              : `${meta.total_stories || 0} Stories`;
         }
 
         if (digestFilingsCount) {
-          digestFilingsCount.textContent = isEvening
-            ? `${meta.tier1_count || 0} Tier-1 Sovereign`
-            : `${meta.total_filings || 0} Filings`;
+          digestFilingsCount.textContent = isNews
+            ? `${meta.topics_count || 0} Topics • ${meta.window_label || "Last 24 hrs"}`
+            : isEvening
+              ? `${meta.tier1_count || 0} Tier-1 Sovereign`
+              : `${meta.total_filings || 0} Filings`;
         }
 
         if (digestPdfName) {
-          digestPdfName.textContent = meta.pdf_name || (isEvening ? "Analyst_Macro_Evening.pdf" : "Client_Date.pdf");
+          digestPdfName.textContent = meta.pdf_name || (isNews ? "Client_News.pdf" : isEvening ? "Analyst_Macro_Evening.pdf" : "Client_Date.pdf");
         }
 
         if (digestSelectedAvatar) {
@@ -2403,9 +2505,11 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
 
   if (btnReloadDigestFrame) {
     btnReloadDigestFrame.addEventListener("click", () => {
-      showToast(currentDigestEdition === "evening"
-        ? "Recompiling fresh evening policy briefing preview..."
-        : "Recompiling fresh daily briefing preview...");
+      showToast(currentDigestEdition === "news"
+        ? "Recompiling fresh News PDF briefing preview..."
+        : currentDigestEdition === "evening"
+          ? "Recompiling fresh evening policy briefing preview..."
+          : "Recompiling fresh daily briefing preview...");
       loadFullDigestFrame();
     });
   }
@@ -2424,10 +2528,13 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
     btnDownloadDigestPdf.addEventListener("click", () => {
       const filename = digestPdfName ? digestPdfName.textContent.trim() : "";
       const isEvening = currentDigestEdition === "evening";
-      const downloadUrl = isEvening
-        ? `/api/macro/digest/download/${currentAnalystId}?t=${Date.now()}`
-        : `/api/digest/download/${currentAnalystId}?t=${Date.now()}`;
-      showToast(`Generating and downloading ${filename || (isEvening ? "Evening Macro PDF" : "PDF")}...`);
+      const isNews = currentDigestEdition === "news";
+      const downloadUrl = isNews
+        ? `/api/custom-news/digest/download/${currentAnalystId}?t=${Date.now()}`
+        : isEvening
+          ? `/api/macro/digest/download/${currentAnalystId}?t=${Date.now()}`
+          : `/api/digest/download/${currentAnalystId}?t=${Date.now()}`;
+      showToast(`Generating and downloading ${filename || (isNews ? "News Briefing PDF" : isEvening ? "Evening Macro PDF" : "PDF")}...`);
       triggerSilentDownload(downloadUrl, filename);
     });
   }
@@ -2435,9 +2542,12 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
   if (btnOpenDigestTab) {
     btnOpenDigestTab.addEventListener("click", () => {
       const isEvening = currentDigestEdition === "evening";
-      const openUrl = isEvening
-        ? `/api/macro/digest/preview/${currentAnalystId}?t=${Date.now()}`
-        : `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
+      const isNews = currentDigestEdition === "news";
+      const openUrl = isNews
+        ? `/api/custom-news/digest/preview/${currentAnalystId}?t=${Date.now()}`
+        : isEvening
+          ? `/api/macro/digest/preview/${currentAnalystId}?t=${Date.now()}`
+          : `/api/digest/preview/${currentAnalystId}?t=${Date.now()}`;
       window.open(openUrl, "_blank");
     });
   }
@@ -2445,31 +2555,36 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
   if (btnSendSingleWhatsapp) {
     btnSendSingleWhatsapp.addEventListener("click", () => {
       const isEvening = currentDigestEdition === "evening";
+      const isNews = currentDigestEdition === "news";
       showDispatchConfirmation({
         mode: "single",
-        edition: isEvening ? "evening" : "morning",
+        edition: isNews ? "news" : isEvening ? "evening" : "morning",
         analystIds: [currentAnalystId],
         execute: async () => {
           btnSendSingleWhatsapp.disabled = true;
           btnSendSingleWhatsapp.innerHTML = `<span class="btn-icon">⏳</span> Sending...`;
-          showToast(isEvening
-            ? `Dispatching 06:30 PM Evening Policy Briefing to client...`
-            : `Dispatching 8:00 AM briefing to client...`);
+          showToast(isNews
+            ? `Dispatching News PDF Briefing to client...`
+            : isEvening
+              ? `Dispatching 05:15 PM Evening Policy Briefing to client...`
+              : `Dispatching 8:30 AM briefing to client...`);
 
-          const sendEndpoint = isEvening
-            ? `/api/macro/digest/send/${currentAnalystId}`
-            : `/api/digest/simulate-send/${currentAnalystId}`;
+          const sendEndpoint = isNews
+            ? `/api/custom-news/digest/send/${currentAnalystId}`
+            : isEvening
+              ? `/api/macro/digest/send/${currentAnalystId}`
+              : `/api/digest/simulate-send/${currentAnalystId}`;
 
           try {
             const res = await fetch(sendEndpoint, { method: "POST" });
             const data = await res.json();
             if (data.status === "no_op") {
-              showToast(data.message || "No unsent stories for this client.", false);
+              showToast(data.message || "No assigned coverage for this client.", false);
             } else {
               showToast(`Briefing dispatched: ${data.message || 'Sent successfully'}`);
               loadStats();
               loadFullDigestFrame();
-              if (!isEvening) {
+              if (!isEvening && !isNews) {
                 loadAnalystStoriesPreview(currentAnalystId);
               }
             }
@@ -2835,10 +2950,10 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
         const cid = (c.id || "").toLowerCase();
         const aliases = (c.aliases || []).map(a => String(a).toLowerCase());
         return name.includes(watchlistSearchQuery) ||
-               nse.includes(watchlistSearchQuery) ||
-               bse.includes(watchlistSearchQuery) ||
-               cid.includes(watchlistSearchQuery) ||
-               aliases.some(a => a.includes(watchlistSearchQuery));
+          nse.includes(watchlistSearchQuery) ||
+          bse.includes(watchlistSearchQuery) ||
+          cid.includes(watchlistSearchQuery) ||
+          aliases.some(a => a.includes(watchlistSearchQuery));
       });
     }
     return filtered;
@@ -3126,7 +3241,7 @@ function renderAnalystGroupsCheckboxes(clientId = null) {
     btnImportSample.addEventListener("click", () => {
       if (!importCsvText) return;
       importCsvText.value =
-`Company Name, NSE Symbol, Basket
+        `Company Name, NSE Symbol, Basket
 Tata Motors Ltd, TATAMOTORS, GAME
 Reliance Industries, RELIANCE, SET
 HDFC Bank Ltd, HDFCBANK, MATCH
@@ -3339,7 +3454,7 @@ Infosys Ltd, INFY, JUNIOR`;
       const msg = watchlistSearchQuery
         ? `No stocks found matching "<strong>${watchlistSearchQuery}</strong>" in basket <strong>${currentWatchlistFolder}</strong>.`
         : `No stocks currently in <strong>${currentWatchlistFolder}</strong> basket. Click "+ Add Stock" or assign a stock using the + Basket button!`;
-      
+
       watchlistTableBody.innerHTML = `
         <tr>
           <td colspan="5" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
@@ -3404,7 +3519,7 @@ Infosys Ltd, INFY, JUNIOR`;
           return hasFolderOverlap || (a.assigned_companies || []).includes(c.id);
         })
         .map(a => `<span class="analyst-pill" title="Morning brief recipient">👤 ${a.name}</span>`);
-      
+
       const assignedDisplay = assigned.length > 0
         ? `<div class="analyst-pill-wrap">${assigned.join("")}</div>`
         : `<span class="badge-unassigned" onclick="window.openEditStockModal('${c.id}')" title="Click to assign clients">+ Assign Client</span>`;
@@ -3675,7 +3790,7 @@ Infosys Ltd, INFY, JUNIOR`;
       showToast("Please enter a company name.", true);
       return;
     }
-    
+
     // Checked baskets
     const checkedFolderBoxes = document.querySelectorAll('input[name="stock_folder"]:checked');
     const folders = Array.from(checkedFolderBoxes).map(cb => cb.value.trim().toUpperCase()).filter(Boolean);
@@ -4538,7 +4653,7 @@ Infosys Ltd, INFY, JUNIOR`;
           const res = await fetch("/api/stories?mode=live&limit=300");
           const stories = await res.json();
           currentItems = stories;
-          
+
           currentRenderFn = (items) => {
             countBadge.textContent = `${items.length} stories found`;
             if (!items.length) {
@@ -5001,6 +5116,8 @@ Infosys Ltd, INFY, JUNIOR`;
         runBadge = `<span class="badge-run-morning">☀️ MORNING EQUITY</span>`;
       } else if (typeLower.includes("evening")) {
         runBadge = `<span class="badge-run-evening">🌙 EVENING MACRO</span>`;
+      } else if (typeLower.includes("news")) {
+        runBadge = `<span class="badge-run-morning" style="background:rgba(16,185,129,0.15);color:#34d399;border-color:rgba(16,185,129,0.35);">📰 NEWS PDF</span>`;
       }
 
       const statusOk = (r.status || "").toUpperCase() === "COMPLETED";
@@ -5150,7 +5267,7 @@ Infosys Ltd, INFY, JUNIOR`;
       const res = await fetch("/api/macro/stats");
       const data = await res.json();
       const b = data.benchmarks || {};
-      
+
       const statMacro = document.getElementById("stat-macro");
       if (statMacro) {
         statMacro.textContent = `${data.total_today ?? 0} Directives`;
@@ -5443,7 +5560,7 @@ Infosys Ltd, INFY, JUNIOR`;
   function populateCompanySelect(selectElem, selectedId = "") {
     if (!selectElem) return;
     const sorted = [...companiesList].sort((a, b) => a.name.localeCompare(b.name));
-    selectElem.innerHTML = sorted.map(c => 
+    selectElem.innerHTML = sorted.map(c =>
       `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.name} (${c.id.toUpperCase()})</option>`
     ).join("");
   }
@@ -6060,6 +6177,8 @@ Infosys Ltd, INFY, JUNIOR`;
           runBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 0.72rem;">☀️ MORNING EQUITY</span>`;
         } else if (typeLower.includes("evening")) {
           runBadge = `<span style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.35); padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 0.72rem;">🌙 EVENING MACRO</span>`;
+        } else if (typeLower.includes("news")) {
+          runBadge = `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 0.72rem;">📰 NEWS PDF</span>`;
         }
 
         const statusOk = (r.status || "").toUpperCase() === "COMPLETED";
@@ -6307,6 +6426,669 @@ Infosys Ltd, INFY, JUNIOR`;
     });
   }
 
+  // =========================================================================
+  // Isolated Custom Web News Tracker ("News" Tab)
+  // =========================================================================
+  const formAddCustomNewsTopic = document.getElementById("form-add-custom-news-topic");
+  const inputCustomNewsNames = document.getElementById("input-custom-news-names");
+  const btnSaveCustomNewsNames = document.getElementById("btn-save-custom-news-names");
+  const btnFetchCustomNews = document.getElementById("btn-fetch-custom-news");
+  const customNewsFetchIcon = document.getElementById("custom-news-fetch-icon");
+  const customNewsFetchText = document.getElementById("custom-news-fetch-text");
+  const customNewsTotalPill = document.getElementById("custom-news-total-pill");
+  const customNewsTopicsCount = document.getElementById("custom-news-topics-count");
+  const customNewsTopicsChips = document.getElementById("custom-news-topics-chips");
+  const btnCustomNewsSelectAll = document.getElementById("btn-custom-news-select-all");
+  const btnCustomNewsClearSel = document.getElementById("btn-custom-news-clear-sel");
+  const customNewsSearchInput = document.getElementById("custom-news-search-input");
+  const btnClearCustomNewsSearch = document.getElementById("btn-clear-custom-news-search");
+  const customNewsLastFetched = document.getElementById("custom-news-last-fetched");
+  const customNewsShowingCount = document.getElementById("custom-news-showing-count");
+  const customNewsWiderBanner = document.getElementById("custom-news-wider-banner");
+  const customNewsWiderText = document.getElementById("custom-news-wider-text");
+  const btnFetchWiderWindow = document.getElementById("btn-fetch-wider-window");
+  const customNewsResultsContainer = document.getElementById("custom-news-results-container");
+  const customNewsTimeBtns = document.querySelectorAll(".custom-news-time-btn");
+  const customNewsScopeBtns = document.querySelectorAll(".custom-news-scope-btn");
+  const selectCustomNewsFrequency = document.getElementById("select-custom-news-frequency");
+  const wrapCustomNewsWeekday = document.getElementById("wrap-custom-news-weekday");
+  const selectCustomNewsWeekday = document.getElementById("select-custom-news-weekday");
+  const wrapCustomNewsMonthday = document.getElementById("wrap-custom-news-monthday");
+  const labelCustomNewsMonthday = document.getElementById("label-custom-news-monthday");
+  const selectCustomNewsMonthday = document.getElementById("select-custom-news-monthday");
+  const inputCustomNewsSendTime = document.getElementById("input-custom-news-send-time");
+  const selectCustomNewsDigestWindow = document.getElementById("select-custom-news-digest-window");
+  const inputCustomNewsSendActive = document.getElementById("input-custom-news-send-active");
+  const btnSaveCustomNewsSchedule = document.getElementById("btn-save-custom-news-schedule");
+  const btnTriggerCustomNewsBroadcast = document.getElementById("btn-trigger-custom-news-broadcast");
+  const customNewsScheduleNextBadge = document.getElementById("custom-news-schedule-next-badge");
+  const customNewsAssignedClientsBadge = document.getElementById("custom-news-assigned-clients-badge");
+
+  function syncCustomNewsFrequencyPickers() {
+    const freq = (selectCustomNewsFrequency?.value || "daily").toLowerCase();
+    if (wrapCustomNewsWeekday) {
+      wrapCustomNewsWeekday.style.display = freq === "weekly" ? "flex" : "none";
+    }
+    if (wrapCustomNewsMonthday) {
+      wrapCustomNewsMonthday.style.display = (freq === "monthly" || freq === "quarterly") ? "flex" : "none";
+    }
+    if (labelCustomNewsMonthday) {
+      labelCustomNewsMonthday.textContent = freq === "quarterly" ? "Day (Jan/Apr/Jul/Oct)" : "Day of Month";
+    }
+  }
+
+  if (selectCustomNewsFrequency) {
+    selectCustomNewsFrequency.addEventListener("change", syncCustomNewsFrequencyPickers);
+  }
+
+  async function loadCustomNewsSchedule() {
+    try {
+      const res = await fetch("/api/custom-news/schedule");
+      if (!res.ok) return;
+      customNewsSchedule = await res.json();
+      if (selectCustomNewsFrequency) selectCustomNewsFrequency.value = customNewsSchedule.frequency || "daily";
+      if (selectCustomNewsWeekday) selectCustomNewsWeekday.value = String(customNewsSchedule.day_of_week ?? 0);
+      if (selectCustomNewsMonthday) selectCustomNewsMonthday.value = String(customNewsSchedule.day_of_month ?? 1);
+      syncCustomNewsFrequencyPickers();
+      if (inputCustomNewsSendTime) inputCustomNewsSendTime.value = customNewsSchedule.dispatch_time || "11:00";
+      if (selectCustomNewsDigestWindow) selectCustomNewsDigestWindow.value = String(customNewsSchedule.window_hours || 24);
+      if (inputCustomNewsSendActive) inputCustomNewsSendActive.checked = !!customNewsSchedule.dispatch_active;
+      if (customNewsScheduleNextBadge) {
+        const freqPrefix = customNewsSchedule.dispatch_active && customNewsSchedule.frequency && customNewsSchedule.frequency !== "daily"
+          ? `${customNewsSchedule.frequency_label} • `
+          : "";
+        customNewsScheduleNextBadge.textContent = `Next: ${freqPrefix}${customNewsSchedule.next_run_ist || "Paused"}`;
+        customNewsScheduleNextBadge.classList.toggle("paused", !customNewsSchedule.dispatch_active);
+      }
+      if (customNewsAssignedClientsBadge) {
+        const cnt = customNewsSchedule.assigned_clients_count || 0;
+        customNewsAssignedClientsBadge.textContent = `${cnt} Client${cnt === 1 ? "" : "s"} Assigned`;
+      }
+      if (btnEditionNewsLabel) {
+        const freqTag = customNewsSchedule.frequency && customNewsSchedule.frequency !== "daily"
+          ? `${customNewsSchedule.frequency_label} • `
+          : "";
+        btnEditionNewsLabel.textContent = `📰 News Briefing (${freqTag}${customNewsSchedule.dispatch_time_12h || "11:00 AM"})`;
+      }
+    } catch (err) {
+      console.warn("Could not load custom news schedule:", err);
+    }
+  }
+
+  if (btnSaveCustomNewsSchedule) {
+    btnSaveCustomNewsSchedule.addEventListener("click", async () => {
+      btnSaveCustomNewsSchedule.disabled = true;
+      btnSaveCustomNewsSchedule.innerHTML = `<span>⏳ Saving...</span>`;
+      try {
+        const payload = {
+          dispatch_time: inputCustomNewsSendTime ? inputCustomNewsSendTime.value : "11:00",
+          dispatch_active: inputCustomNewsSendActive ? inputCustomNewsSendActive.checked : true,
+          window_hours: selectCustomNewsDigestWindow ? parseInt(selectCustomNewsDigestWindow.value, 10) : customNewsHours,
+          frequency: selectCustomNewsFrequency ? selectCustomNewsFrequency.value : "daily",
+          day_of_week: selectCustomNewsWeekday ? parseInt(selectCustomNewsWeekday.value, 10) : 0,
+          day_of_month: selectCustomNewsMonthday ? parseInt(selectCustomNewsMonthday.value, 10) : 1,
+        };
+        const res = await fetch("/api/custom-news/schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Failed to save News WhatsApp schedule");
+        customNewsSchedule = await res.json();
+        await loadCustomNewsSchedule();
+        showToast(
+          `Saved News WhatsApp schedule: ${customNewsSchedule.frequency_summary || "Daily"} at ${customNewsSchedule.dispatch_time_12h} IST (${customNewsSchedule.window_label})!`
+        );
+      } catch (err) {
+        showToast(err.message || "Error saving schedule", true);
+      } finally {
+        btnSaveCustomNewsSchedule.disabled = false;
+        btnSaveCustomNewsSchedule.innerHTML = `<span>💾 Save Schedule</span>`;
+      }
+    });
+  }
+
+  if (btnTriggerCustomNewsBroadcast) {
+    btnTriggerCustomNewsBroadcast.addEventListener("click", () => {
+      const assignedClients = (analystsList || []).filter(
+        a => a.is_active !== false && Array.isArray(a.assigned_news_topics) && a.assigned_news_topics.length > 0
+      );
+      if (!assignedClients.length) {
+        showToast("No active clients have News tab topics assigned yet. Go to Clients & Subscribers -> Edit first.", true);
+        return;
+      }
+      showDispatchConfirmation({
+        mode: assignedClients.length === 1 ? "single" : "multi",
+        edition: "news",
+        analystIds: assignedClients.map(a => a.id),
+        execute: async () => {
+          btnTriggerCustomNewsBroadcast.disabled = true;
+          btnTriggerCustomNewsBroadcast.innerHTML = `<span>⏳ Sending...</span>`;
+          showToast(`Dispatching News PDF (${customNewsSchedule.window_label || "Last 24 hrs"}) to ${assignedClients.length} client(s)...`);
+          try {
+            const res = await fetch("/api/scheduler/trigger-news?crawl=true", { method: "POST" });
+            const data = await res.json();
+            if (data.status === "paused") {
+              showToast(data.message || "News broadcast is paused.", true);
+            } else {
+              showToast(`News PDF broadcast complete: ${data.dispatched_count || 0}/${data.total_clients || 0} client(s) sent!`);
+            }
+            await loadCustomNews();
+          } catch (err) {
+            showToast("Failed to send News broadcast", true);
+          } finally {
+            btnTriggerCustomNewsBroadcast.disabled = false;
+            btnTriggerCustomNewsBroadcast.innerHTML = `<span>🚀 Send Now</span>`;
+          }
+        }
+      });
+    });
+  }
+
+  const VALID_CUSTOM_NEWS_HOURS = [24, 48, 720, 4320, 8760];
+  const rawSavedHours = parseInt(localStorage.getItem("vriddhi_custom_news_hours") || "24", 10);
+  const mappedSavedHours = rawSavedHours === 168 ? 720 : rawSavedHours === 2160 ? 4320 : rawSavedHours;
+  let customNewsHours = VALID_CUSTOM_NEWS_HOURS.includes(mappedSavedHours) ? mappedSavedHours : 24;
+  let customNewsScope = localStorage.getItem("vriddhi_custom_news_scope") === "financial" ? "financial" : "all";
+  let customNewsSearchQuery = "";
+  let customNewsState = { topics: [], groups: [], total_articles: 0, last_fetched_ist: "", needs_wider_fetch: false };
+  let isCustomNewsFetching = false;
+
+  function formatCustomNewsRelativeTime(isoStr) {
+    if (!isoStr) return "";
+    const dt = new Date(isoStr);
+    if (Number.isNaN(dt.getTime())) return "";
+    const diffSec = Math.floor((Date.now() - dt.getTime()) / 1000);
+    if (diffSec < 60) return "Just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDays = Math.floor(diffHr / 24);
+    if (diffDays < 30) return `${diffDays}d ago`;
+    const diffMonths = Math.floor(diffDays / 30);
+    return `${diffMonths}mo ago`;
+  }
+
+  function getCustomNewsWindowLabel(hours) {
+    if (hours === 48) return "Last 48 hrs";
+    if (hours === 720) return "Last 1M";
+    if (hours === 4320) return "Last 6M";
+    if (hours === 8760) return "Last 1 Year";
+    return "Last 24 hrs";
+  }
+
+  function sanitizeHttpUrl(url) {
+    const raw = String(url || "").trim();
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return "#";
+  }
+
+  function syncCustomNewsFilterButtons() {
+    customNewsTimeBtns.forEach(btn => {
+      const h = parseInt(btn.dataset.hours || "24", 10);
+      btn.classList.toggle("active", h === customNewsHours);
+    });
+    customNewsScopeBtns.forEach(btn => {
+      btn.classList.toggle("active", (btn.dataset.scope || "all") === customNewsScope);
+    });
+  }
+
+  function setCustomNewsFetchingState(loading, label = "Fetching News...") {
+    isCustomNewsFetching = loading;
+    if (btnFetchCustomNews) btnFetchCustomNews.disabled = loading;
+    if (btnFetchWiderWindow) btnFetchWiderWindow.disabled = loading;
+    if (customNewsFetchIcon) customNewsFetchIcon.textContent = loading ? "⏳" : "⚡";
+    if (customNewsFetchText) customNewsFetchText.textContent = loading ? label : "Fetch News";
+  }
+
+  async function loadCustomNews() {
+    syncCustomNewsFilterButtons();
+    try {
+      const params = new URLSearchParams({
+        hours: String(customNewsHours),
+        scope: customNewsScope,
+      });
+      const res = await fetch(`/api/custom-news?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to load saved news");
+      customNewsState = await res.json();
+      savedCustomNewsTopics = customNewsState.topics || [];
+      renderCustomNewsUI();
+      loadCustomNewsSchedule();
+      renderAnalystsTable();
+    } catch (err) {
+      console.error("Custom News load error:", err);
+      if (customNewsResultsContainer) {
+        customNewsResultsContainer.innerHTML = `
+          <div class="custom-news-empty-card">
+            <div class="custom-news-empty-icon">⚠️</div>
+            <div class="custom-news-empty-title">Could not load News tab</div>
+            <div class="custom-news-empty-sub">${escapeHtml(err.message || "Server error")}</div>
+          </div>
+        `;
+      }
+    }
+  }
+
+  async function fetchCustomNews(topicIds = null, label = "Fetching News...") {
+    if (isCustomNewsFetching) return;
+    const topics = customNewsState.topics || [];
+    if (!topics.length) {
+      showToast("Add at least one company or topic name first.", true);
+      if (inputCustomNewsNames) inputCustomNewsNames.focus();
+      return;
+    }
+
+    setCustomNewsFetchingState(true, label);
+    try {
+      const payload = {
+        hours: customNewsHours,
+        scope: customNewsScope,
+      };
+      if (Array.isArray(topicIds) && topicIds.length) {
+        payload.topic_ids = topicIds;
+      }
+
+      const res = await fetch("/api/custom-news/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "News fetch failed");
+      }
+      customNewsState = await res.json();
+      renderCustomNewsUI();
+
+      const summary = customNewsState.fetch_summary || {};
+      const dupCount = summary.duplicates_removed || 0;
+      const engMap = summary.engine_counts || {};
+      const activeEngines = Object.keys(engMap).length;
+      const dupHint = dupCount > 0 ? ` • ${dupCount} duplicate${dupCount === 1 ? "" : "s"} filtered` : "";
+      const engHint = activeEngines > 1 ? ` across ${activeEngines} engines` : "";
+      showToast(
+        `Fetched ${summary.total_found || 0} unique article${summary.total_found === 1 ? "" : "s"}${engHint} (${getCustomNewsWindowLabel(customNewsHours)})${dupHint}!`
+      );
+    } catch (err) {
+      console.error("Custom News fetch error:", err);
+      showToast(err.message || "Failed to fetch latest news", true);
+    } finally {
+      setCustomNewsFetchingState(false);
+    }
+  }
+
+  function renderCustomNewsUI() {
+    const topics = customNewsState.topics || [];
+    const groups = customNewsState.groups || [];
+    const q = customNewsSearchQuery.trim().toLowerCase();
+
+    // Update counts
+    if (customNewsTopicsCount) {
+      const selCount = topics.filter(t => t.is_selected).length;
+      customNewsTopicsCount.textContent = topics.length
+        ? `${topics.length} saved • ${selCount} selected`
+        : "0 saved";
+    }
+
+    // Render saved topic chips
+    if (customNewsTopicsChips) {
+      if (!topics.length) {
+        customNewsTopicsChips.innerHTML = `<span class="custom-news-hint-text">No names saved yet. Type any company, person, or topic above and click <strong>Save Name(s)</strong>.</span>`;
+      } else {
+        customNewsTopicsChips.innerHTML = topics.map(t => {
+          const isSel = !!t.is_selected;
+          const cnt = t.article_count || 0;
+          return `
+            <div class="custom-news-topic-chip ${isSel ? "selected" : ""}" data-topic-id="${escapeHtml(t.id)}" title="Click to toggle selection">
+              <span class="custom-news-chip-check">${isSel ? "✓" : ""}</span>
+              <span class="custom-news-chip-name">${escapeHtml(t.name)}</span>
+              <span class="custom-news-chip-count">${cnt}</span>
+              <button type="button" class="custom-news-chip-btn refresh" data-action="refresh" data-topic-id="${escapeHtml(t.id)}" title="Fetch latest news for ${escapeHtml(t.name)}">🔄</button>
+              <button type="button" class="custom-news-chip-btn delete" data-action="delete" data-topic-id="${escapeHtml(t.id)}" title="Remove ${escapeHtml(t.name)}">&times;</button>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    // Filter groups/articles by instant search query
+    let visibleArticleCount = 0;
+    const filteredGroups = groups.map(g => {
+      const arts = (g.articles || []).filter(a => {
+        if (!q) return true;
+        const hay = `${a.title || ""} ${a.summary || ""} ${a.publisher || ""} ${g.topic_name || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+      visibleArticleCount += arts.length;
+      return { ...g, filteredArticles: arts };
+    });
+
+    if (customNewsTotalPill) {
+      customNewsTotalPill.textContent = `${topics.length} Name${topics.length === 1 ? "" : "s"} • ${visibleArticleCount} Article${visibleArticleCount === 1 ? "" : "s"}`;
+    }
+
+    if (customNewsLastFetched) {
+      customNewsLastFetched.textContent = customNewsState.last_fetched_ist
+        ? `Last fetched: ${customNewsState.last_fetched_ist} (saved in SQLite)`
+        : "Not fetched yet — click Fetch News to pull latest articles";
+    }
+
+    if (customNewsShowingCount) {
+      const winLabel = getCustomNewsWindowLabel(customNewsHours);
+      const scopeLabel = customNewsScope === "financial" ? "Financial Only" : "All News";
+      customNewsShowingCount.textContent = `Showing ${visibleArticleCount} article${visibleArticleCount === 1 ? "" : "s"} • ${winLabel} • ${scopeLabel}`;
+    }
+
+    if (customNewsWiderBanner) {
+      if (topics.length > 0 && customNewsState.needs_wider_fetch) {
+        customNewsWiderBanner.style.display = "flex";
+        if (customNewsWiderText) {
+          customNewsWiderText.textContent = `Some saved names were last fetched for a shorter window. Fetch now to load full ${getCustomNewsWindowLabel(customNewsHours)} results.`;
+        }
+      } else {
+        customNewsWiderBanner.style.display = "none";
+      }
+    }
+
+    if (!customNewsResultsContainer) return;
+
+    // Empty states
+    if (!topics.length) {
+      customNewsResultsContainer.innerHTML = `
+        <div class="custom-news-empty-card">
+          <div class="custom-news-empty-icon">🗞️</div>
+          <div class="custom-news-empty-title">Start Tracking Any Name or Topic</div>
+          <div class="custom-news-empty-sub">
+            Add one or multiple company names, people, or keywords above (for example: <strong>Reliance Industries, Nvidia, RBI Repo Rate</strong>), save them permanently, pick <strong>Last 24 hrs</strong>, <strong>48 hrs</strong>, <strong>1M</strong>, <strong>6M</strong>, or <strong>1 Year</strong>, and click <strong>Fetch News</strong>.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const anyEverFetched = topics.some(t => !!t.last_fetched_at);
+    if (!anyEverFetched) {
+      customNewsResultsContainer.innerHTML = `
+        <div class="custom-news-empty-card">
+          <div class="custom-news-empty-icon">⚡</div>
+          <div class="custom-news-empty-title">${topics.length} Saved Name${topics.length === 1 ? "" : "s"} Ready</div>
+          <div class="custom-news-empty-sub">
+            Click <strong>Fetch News</strong> to pull the latest Google News articles for your saved names (${getCustomNewsWindowLabel(customNewsHours)}). Results will stay saved when you return.
+          </div>
+          <button type="button" class="terminal-action-btn" id="btn-empty-fetch-now" style="margin-top: 8px;">
+            <span>⚡</span> <span>Fetch News Now</span>
+          </button>
+        </div>
+      `;
+      const btnEmptyFetch = document.getElementById("btn-empty-fetch-now");
+      if (btnEmptyFetch) {
+        btnEmptyFetch.addEventListener("click", () => fetchCustomNews());
+      }
+      return;
+    }
+
+    // Render grouped company cards
+    customNewsResultsContainer.innerHTML = filteredGroups.map(g => {
+      const arts = g.filteredArticles || [];
+      const fetchedMeta = g.last_fetched_ist
+        ? `Updated ${g.last_fetched_ist}`
+        : "Not fetched yet";
+
+      const bodyHtml = arts.length > 0
+        ? `
+          <div class="custom-news-articles-grid">
+            ${arts.map(a => {
+          const safeUrl = sanitizeHttpUrl(a.url);
+          const relTime = formatCustomNewsRelativeTime(a.published_at);
+          const hasSnippet = !!(a.summary && a.summary.trim());
+          const eng = a.source_engine || "Google News";
+          const engClass = eng === "Bing News"
+            ? "eng-bing"
+            : eng === "Yahoo News"
+              ? "eng-yahoo"
+              : eng === "GDELT"
+                ? "eng-gdelt"
+                : eng === "Data Sources"
+                  ? "eng-rss"
+                  : "eng-google";
+          return `
+                <article class="custom-news-article-card">
+                  <div>
+                    <div class="custom-news-card-meta">
+                      <div class="custom-news-card-badges">
+                        <span class="custom-news-publisher-badge" title="${escapeHtml(a.publisher || "Google News")}">${escapeHtml(a.publisher || "Google News")}</span>
+                        <span class="custom-news-engine-badge ${engClass}" title="Found via ${escapeHtml(eng)}">${escapeHtml(eng)}</span>
+                      </div>
+                      <span class="custom-news-time-label">${escapeHtml(relTime)}</span>
+                    </div>
+                    <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="custom-news-headline-link" style="margin-top: 8px;">
+                      ${escapeHtml(a.title || "")}
+                    </a>
+                    ${hasSnippet ? `<p class="custom-news-snippet" style="margin-top: 6px;">${escapeHtml(a.summary)}</p>` : ""}
+                  </div>
+                  <div class="custom-news-card-footer">
+                    <span class="custom-news-ist-exact">${escapeHtml(a.published_ist || "")}</span>
+                    <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="custom-news-read-link">
+                      Read Article ↗
+                    </a>
+                  </div>
+                </article>
+              `;
+        }).join("")}
+          </div>
+        `
+        : `
+          <div class="custom-news-group-empty">
+            <span>
+              ${q
+          ? `No matching articles for "<strong>${escapeHtml(g.topic_name)}</strong>" with filter "${escapeHtml(customNewsSearchQuery)}".`
+          : g.last_fetched_at
+            ? `No articles found for <strong>${escapeHtml(g.topic_name)}</strong> in the ${getCustomNewsWindowLabel(customNewsHours)} window.`
+            : `<strong>${escapeHtml(g.topic_name)}</strong> hasn't been fetched yet.`}
+            </span>
+            <button type="button" class="btn-micro-action custom-news-group-refresh-btn" data-topic-id="${escapeHtml(g.topic_id)}">
+              🔄 Fetch ${escapeHtml(g.topic_name)}
+            </button>
+          </div>
+        `;
+
+      return `
+        <div class="custom-news-group-card">
+          <div class="custom-news-group-header">
+            <div class="custom-news-group-title-wrap">
+              <span class="custom-news-group-title">${escapeHtml(g.topic_name)}</span>
+              <span class="custom-news-group-count">${arts.length} article${arts.length === 1 ? "" : "s"}</span>
+            </div>
+            <div class="custom-news-group-right">
+              <span class="custom-news-group-ts">${escapeHtml(fetchedMeta)}</span>
+              <button type="button" class="btn-micro-action custom-news-group-refresh-btn" data-topic-id="${escapeHtml(g.topic_id)}" title="Fetch latest news for ${escapeHtml(g.topic_name)}">
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+          ${bodyHtml}
+        </div>
+      `;
+    }).join("");
+  }
+
+  // Event Listeners for Custom News Tab
+  if (formAddCustomNewsTopic) {
+    formAddCustomNewsTopic.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const raw = (inputCustomNewsNames?.value || "").trim();
+      if (!raw) {
+        showToast("Please type at least one company or topic name.", true);
+        return;
+      }
+      if (btnSaveCustomNewsNames) btnSaveCustomNewsNames.disabled = true;
+      try {
+        const res = await fetch("/api/custom-news/topics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ raw_input: raw }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Could not save name(s)");
+        }
+        const data = await res.json();
+        if (inputCustomNewsNames) inputCustomNewsNames.value = "";
+        const addedCount = (data.added || []).length;
+        const skippedCount = (data.skipped || []).length;
+        if (addedCount > 0 && skippedCount > 0) {
+          showToast(`Saved ${addedCount} name(s) (${skippedCount} already saved).`);
+        } else if (addedCount > 0) {
+          showToast(`Saved ${addedCount} name${addedCount === 1 ? "" : "s"}! Click Fetch News to load articles.`);
+        } else {
+          showToast("Those name(s) are already in your saved list.");
+        }
+        await loadCustomNews();
+      } catch (err) {
+        showToast(err.message || "Error saving name(s)", true);
+      } finally {
+        if (btnSaveCustomNewsNames) btnSaveCustomNewsNames.disabled = false;
+      }
+    });
+  }
+
+  if (customNewsTopicsChips) {
+    customNewsTopicsChips.addEventListener("click", async (e) => {
+      const actionBtn = e.target.closest(".custom-news-chip-btn");
+      if (actionBtn) {
+        e.stopPropagation();
+        const tid = actionBtn.dataset.topicId;
+        const action = actionBtn.dataset.action;
+        if (!tid) return;
+
+        if (action === "refresh") {
+          const topic = (customNewsState.topics || []).find(t => t.id === tid);
+          await fetchCustomNews([tid], `Fetching ${topic ? topic.name : "News"}...`);
+          return;
+        }
+        if (action === "delete") {
+          try {
+            const res = await fetch(`/api/custom-news/topics/${encodeURIComponent(tid)}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to remove topic");
+            showToast("Removed saved name.");
+            await loadCustomNews();
+          } catch (err) {
+            showToast(err.message || "Delete failed", true);
+          }
+          return;
+        }
+      }
+
+      const chip = e.target.closest(".custom-news-topic-chip");
+      if (!chip) return;
+      const tid = chip.dataset.topicId;
+      const topic = (customNewsState.topics || []).find(t => t.id === tid);
+      if (!topic) return;
+      const nextSelected = !topic.is_selected;
+      try {
+        await fetch(`/api/custom-news/topics/${encodeURIComponent(tid)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_selected: nextSelected }),
+        });
+        await loadCustomNews();
+      } catch (err) {
+        showToast("Failed to update selection", true);
+      }
+    });
+  }
+
+  if (customNewsResultsContainer) {
+    customNewsResultsContainer.addEventListener("click", async (e) => {
+      const refBtn = e.target.closest(".custom-news-group-refresh-btn");
+      if (!refBtn) return;
+      const tid = refBtn.dataset.topicId;
+      if (!tid) return;
+      const topic = (customNewsState.topics || []).find(t => t.id === tid);
+      await fetchCustomNews([tid], `Fetching ${topic ? topic.name : "News"}...`);
+    });
+  }
+
+  if (btnCustomNewsSelectAll) {
+    btnCustomNewsSelectAll.addEventListener("click", async () => {
+      try {
+        await fetch("/api/custom-news/topics/select-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_selected: true }),
+        });
+        await loadCustomNews();
+      } catch (err) {
+        showToast("Failed to select all", true);
+      }
+    });
+  }
+
+  if (btnCustomNewsClearSel) {
+    btnCustomNewsClearSel.addEventListener("click", async () => {
+      try {
+        await fetch("/api/custom-news/topics/select-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_selected: false }),
+        });
+        await loadCustomNews();
+      } catch (err) {
+        showToast("Failed to clear selection", true);
+      }
+    });
+  }
+
+  if (btnFetchCustomNews) {
+    btnFetchCustomNews.addEventListener("click", () => fetchCustomNews());
+  }
+
+  if (btnFetchWiderWindow) {
+    btnFetchWiderWindow.addEventListener("click", () => fetchCustomNews());
+  }
+
+  customNewsTimeBtns.forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const h = parseInt(btn.dataset.hours || "24", 10);
+      if (!VALID_CUSTOM_NEWS_HOURS.includes(h)) return;
+      customNewsHours = h;
+      localStorage.setItem("vriddhi_custom_news_hours", String(h));
+      syncCustomNewsFilterButtons();
+      await loadCustomNews();
+    });
+  });
+
+  customNewsScopeBtns.forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const sc = btn.dataset.scope === "financial" ? "financial" : "all";
+      customNewsScope = sc;
+      localStorage.setItem("vriddhi_custom_news_scope", sc);
+      syncCustomNewsFilterButtons();
+      await loadCustomNews();
+    });
+  });
+
+  if (customNewsSearchInput) {
+    customNewsSearchInput.addEventListener("input", (e) => {
+      customNewsSearchQuery = e.target.value || "";
+      if (btnClearCustomNewsSearch) {
+        btnClearCustomNewsSearch.style.display = customNewsSearchQuery.trim() ? "inline-flex" : "none";
+      }
+      renderCustomNewsUI();
+    });
+  }
+
+  if (btnClearCustomNewsSearch) {
+    btnClearCustomNewsSearch.addEventListener("click", () => {
+      customNewsSearchQuery = "";
+      if (customNewsSearchInput) customNewsSearchInput.value = "";
+      btnClearCustomNewsSearch.style.display = "none";
+      renderCustomNewsUI();
+      if (customNewsSearchInput) customNewsSearchInput.focus();
+    });
+  }
+
   // Initial Load
   async function initDashboard() {
 
@@ -6316,6 +7098,7 @@ Infosys Ltd, INFY, JUNIOR`;
     loadDeliveryMode();
     await loadFolders();
     await loadWatchlist();
+    await loadCustomNews();
     await loadAnalysts();
     loadSources();
     loadLogs();
